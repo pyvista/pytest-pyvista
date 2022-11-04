@@ -14,10 +14,10 @@ def read(fname):
 setup(
     name='pytest-pyvista',
     version='0.1.0',
-    author='PyAnsys',
+    author='The PyVista Developers',
     author_email='alex.fernandezluces@ansys.com',
-    maintainer='PyAnsys',
-    maintainer_email='alex.fernandezluces@ansys.com',
+    maintainer='The PyVista Developers',
+    maintainer_email='info@pyvista.org',
     license='MIT',
     url='https://github.com/pyvista/pytest-pyvista',
     description='Plugin to test PyVista plot outputs',
