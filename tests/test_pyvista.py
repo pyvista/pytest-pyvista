@@ -6,13 +6,13 @@ def test_bar_fixture(testdir):
 
     # create a temporary pytest test module
     testdir.makepyfile("""
-        def test_sth(bar):
-            assert bar == "europython2015"
+        def test_sth(verify_image_cache):
+            print("Verify test")
+            assert 1==1
     """)
 
     # run pytest with the following cmd args
     result = testdir.runpytest(
-        '--foo=europython2015',
         '-v'
     )
 

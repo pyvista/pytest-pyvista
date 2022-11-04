@@ -32,7 +32,21 @@ def pytest_addoption(parser):
         default='2022',
         help='Set the value for the fixture "bar".'
     )
-
+    group.addoption(
+        '--reset_image_cache',
+        action='store_true',
+        help='Reset the images in the PyVista cache.'
+    )
+    group.addoption(
+        '--ignore_image_cache',
+        action='store_true',
+        help='Ignores the image cache.'
+    )
+    group.addoption(
+        '--fail_extra_image_cache',
+        action='store_true',
+        help='Enables failure if image cache does not exist.'
+    )
     parser.addini('HELLO', 'Dummy pytest.ini setting')
 
 
@@ -111,6 +125,9 @@ def multicomp_poly():
 # this must be a session fixture to ensure this runs before any other test
 @pytest.fixture(scope="session", autouse=True)
 def get_cmd_opt(pytestconfig):
+    """
+    Gets the arguments from the pytest command line for PyVista
+    """
     VerifyImageCache.reset_image_cache = pytestconfig.getoption('reset_image_cache')
     VerifyImageCache.ignore_image_cache = pytestconfig.getoption('ignore_image_cache')
     VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption('fail_extra_image_cache')
@@ -233,6 +250,7 @@ class VerifyImageCache:
             
 @pytest.fixture(autouse=True)
 def verify_image_cache(request):
+    """Checks cached images against test images for PyVista"""
     verify_image_cache = VerifyImageCache(request.node.name)
     pyvista.global_theme.before_close_callback = verify_image_cache
     return verify_image_cache
