@@ -1,46 +1,31 @@
 # -*- coding: utf-8 -*-
 
-import io
 import os
 import pathlib
 import platform
-import re
-import time
 import warnings
 
-from PIL import Image
-import imageio
-import numpy as np
 import pytest
-import vtk
-
 import pyvista
-from pyvista import examples
 from pyvista._vtk import VTK9
-from pyvista.core.errors import DeprecationError
-from pyvista.plotting import system_supports_plotting
-from pyvista.plotting.plotting import SUPPORTED_FORMATS
-from pyvista.utilities.misc import can_create_mpl_figure
 
 
 def pytest_addoption(parser):
-    group = parser.getgroup('pyvista')
+    group = parser.getgroup("pyvista")
     group.addoption(
-        '--reset_image_cache',
-        action='store_true',
-        help='Reset the images in the PyVista cache.'
+        "--reset_image_cache",
+        action="store_true",
+        help="Reset the images in the PyVista cache.",
     )
     group.addoption(
-        '--ignore_image_cache',
-        action='store_true',
-        help='Ignores the image cache.'
+        "--ignore_image_cache", action="store_true", help="Ignores the image cache."
     )
     group.addoption(
-        '--fail_extra_image_cache',
-        action='store_true',
-        help='Enables failure if image cache does not exist.'
+        "--fail_extra_image_cache",
+        action="store_true",
+        help="Enables failure if image cache does not exist.",
     )
-    parser.addini('HELLO', 'Dummy pytest.ini setting')
+    parser.addini("HELLO", "Dummy pytest.ini setting")
 
 
 class VerifyImageCache:
@@ -62,9 +47,9 @@ class VerifyImageCache:
     reset_image_cache = False
     ignore_image_cache = False
     fail_extra_image_cache = False
-    
-    high_variance_tests = False,
-    windows_skip_image_cache = False,
+
+    high_variance_tests = (False,)
+    windows_skip_image_cache = (False,)
     macos_skip_image_cache = False
 
     def __init__(
@@ -76,14 +61,13 @@ class VerifyImageCache:
         warning_value=200,
         var_error_value=1000,
         var_warning_value=1000,
-
     ):
         self.test_name = test_name
 
         if cache_dir is None:
             # Reset image cache with new images
             this_path = pathlib.Path(__file__).parent.absolute()
-            self.cache_dir = os.path.join(this_path, 'image_cache')
+            self.cache_dir = os.path.join(this_path, "image_cache")
         else:
             self.cache_dir = cache_dir
 
@@ -92,9 +76,9 @@ class VerifyImageCache:
 
         self.error_value = error_value
         self.warning_value = warning_value
-        #self.high_variance_tests = high_variance_tests
-        #self.windows_skip_image_cache = windows_skip_image_cache
-        #self.macos_skip_image_cache = macos_skip_image_cache
+        # self.high_variance_tests = high_variance_tests
+        # self.windows_skip_image_cache = windows_skip_image_cache
+        # self.macos_skip_image_cache = macos_skip_image_cache
         self.var_error_value = var_error_value
         self.var_warning_value = var_warning_value
 
@@ -134,14 +118,14 @@ class VerifyImageCache:
             allowed_warning = self.warning_value
 
         # some tests fail when on Windows with OSMesa
-        if os.name == 'nt' and self.windows_skip_image_cache:
+        if os.name == "nt" and self.windows_skip_image_cache:
             return
         # high variation for MacOS
-        if platform.system() == 'Darwin' and self.macos_skip_image_cache:
+        if platform.system() == "Darwin" and self.macos_skip_image_cache:
             return
 
         # cached image name
-        image_filename = os.path.join(self.cache_dir, test_name[5:] + '.png')
+        image_filename = os.path.join(self.cache_dir, test_name[5:] + ".png")
 
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache:
             raise RuntimeError(f"{image_filename} does not exist in image cache")
@@ -154,26 +138,29 @@ class VerifyImageCache:
         error = pyvista.compare_images(image_filename, plotter)
         if error > allowed_error:
             raise RuntimeError(
-                f'{test_name} Exceeded image regression error of '
-                f'{allowed_error} with an image error of '
-                f'{error}'
+                f"{test_name} Exceeded image regression error of "
+                f"{allowed_error} with an image error of "
+                f"{error}"
             )
         if error > allowed_warning:
             warnings.warn(
-                f'{test_name} Exceeded image regression warning of '
-                f'{allowed_warning} with an image error of '
-                f'{error}'
+                f"{test_name} Exceeded image regression warning of "
+                f"{allowed_warning} with an image error of "
+                f"{error}"
             )
-            
+
+
 @pytest.fixture(autouse=True)
 def verify_image_cache(request, pytestconfig):
     """Checks cached images against test images for PyVista"""
-    
+
     # Set CMD options in class attributes
-    VerifyImageCache.reset_image_cache = pytestconfig.getoption('reset_image_cache')
-    VerifyImageCache.ignore_image_cache = pytestconfig.getoption('ignore_image_cache')
-    VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption('fail_extra_image_cache')
-    
+    VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
+    VerifyImageCache.ignore_image_cache = pytestconfig.getoption("ignore_image_cache")
+    VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption(
+        "fail_extra_image_cache"
+    )
+
     verify_image_cache = VerifyImageCache(request.node.name)
     pyvista.global_theme.before_close_callback = verify_image_cache
     return verify_image_cache
