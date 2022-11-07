@@ -26,13 +26,6 @@ from pyvista.utilities.misc import can_create_mpl_figure
 def pytest_addoption(parser):
     group = parser.getgroup('pyvista')
     group.addoption(
-        '--foo',
-        action='store',
-        dest='dest_foo',
-        default='2022',
-        help='Set the value for the fixture "bar".'
-    )
-    group.addoption(
         '--reset_image_cache',
         action='store_true',
         help='Reset the images in the PyVista cache.'
@@ -48,89 +41,6 @@ def pytest_addoption(parser):
         help='Enables failure if image cache does not exist.'
     )
     parser.addini('HELLO', 'Dummy pytest.ini setting')
-
-
-# Image regression warning/error thresholds for releases after 9.0.1
-# TODO: once we have a stable release for VTK, remove these.
-HIGH_VARIANCE_TESTS = {
-    'test_add_title',
-    'test_export_gltf',  # image cache created with 9.0.20210612.dev0
-    'test_import_gltf',  # image cache created with 9.0.20210612.dev0
-    'test_opacity_by_array_direct',  # VTK regression 9.0.1 --> 9.1.0
-    'test_opacity_by_array_user_transform',
-    'test_pbr',
-    'test_plot',
-    'test_set_environment_texture_cubemap',
-    'test_set_viewup',
-}
-
-# these images vary between Windows when using OSMesa and Linux/MacOS
-# and will not be verified
-WINDOWS_SKIP_IMAGE_CACHE = {
-    'test_array_volume_rendering',
-    'test_closing_and_mem_cleanup',
-    'test_cmap_list',
-    'test_collision_plot',
-    'test_enable_stereo_render',
-    'test_multi_block_plot',
-    'test_multi_plot_scalars',  # flaky
-    'test_plot',
-    'test_plot_add_scalar_bar',
-    'test_plot_cell_data',
-    'test_plot_complex_value',
-    'test_plot_composite_bool',
-    'test_plot_composite_lookup_table',
-    'test_plot_composite_poly_component_nested_multiblock',
-    'test_plot_composite_poly_scalars_cell',
-    'test_plot_composite_preference_cell',
-    'test_plot_helper_two_volumes',
-    'test_plot_helper_volume',
-    'test_plot_string_array',
-    'test_plotter_lookup_table',
-    'test_rectlinear_edge_case',
-    'test_scalars_by_name',
-    'test_user_annotations_scalar_bar_volume',
-    'test_volume_rendering_from_helper',
-}
-
-# these images vary between Linux/Windows and MacOS
-# and will not be verified for MacOS
-MACOS_SKIP_IMAGE_CACHE = {
-    'test_plot',
-    'test_plot_show_grid_with_mesh',
-    'test_property',
-}
-
-
-@pytest.fixture()
-def multicomp_poly():
-    """Create a dataset with vector values on points and cells."""
-    data = pyvista.Plane()
-
-    vector_values_points = np.empty((data.n_points, 3))
-    vector_values_points[:, 0] = np.arange(data.n_points)
-    vector_values_points[:, 1] = np.arange(data.n_points)[::-1]
-    vector_values_points[:, 2] = 0
-
-    vector_values_cells = np.empty((data.n_cells, 3))
-    vector_values_cells[:, 0] = np.arange(data.n_cells)
-    vector_values_cells[:, 1] = np.arange(data.n_cells)[::-1]
-    vector_values_cells[:, 2] = 0
-
-    data['vector_values_points'] = vector_values_points
-    data['vector_values_cells'] = vector_values_cells
-    return data
-
-
-# this must be a session fixture to ensure this runs before any other test
-@pytest.fixture(scope="session", autouse=True)
-def get_cmd_opt(pytestconfig):
-    """
-    Gets the arguments from the pytest command line for PyVista
-    """
-    VerifyImageCache.reset_image_cache = pytestconfig.getoption('reset_image_cache')
-    VerifyImageCache.ignore_image_cache = pytestconfig.getoption('ignore_image_cache')
-    VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption('fail_extra_image_cache')
 
 
 class VerifyImageCache:
@@ -152,6 +62,10 @@ class VerifyImageCache:
     reset_image_cache = False
     ignore_image_cache = False
     fail_extra_image_cache = False
+    
+    high_variance_tests = False,
+    windows_skip_image_cache = False,
+    macos_skip_image_cache = False
 
     def __init__(
         self,
@@ -162,6 +76,7 @@ class VerifyImageCache:
         warning_value=200,
         var_error_value=1000,
         var_warning_value=1000,
+
     ):
         self.test_name = test_name
 
@@ -177,7 +92,9 @@ class VerifyImageCache:
 
         self.error_value = error_value
         self.warning_value = warning_value
-
+        #self.high_variance_tests = high_variance_tests
+        #self.windows_skip_image_cache = windows_skip_image_cache
+        #self.macos_skip_image_cache = macos_skip_image_cache
         self.var_error_value = var_error_value
         self.var_warning_value = var_warning_value
 
@@ -209,7 +126,7 @@ class VerifyImageCache:
             test_name = self.test_name
         self.n_calls += 1
 
-        if self.test_name in HIGH_VARIANCE_TESTS:
+        if self.high_variance_tests:
             allowed_error = self.var_error_value
             allowed_warning = self.var_warning_value
         else:
@@ -217,10 +134,10 @@ class VerifyImageCache:
             allowed_warning = self.warning_value
 
         # some tests fail when on Windows with OSMesa
-        if os.name == 'nt' and self.test_name in WINDOWS_SKIP_IMAGE_CACHE:
+        if os.name == 'nt' and self.windows_skip_image_cache:
             return
         # high variation for MacOS
-        if platform.system() == 'Darwin' and self.test_name in MACOS_SKIP_IMAGE_CACHE:
+        if platform.system() == 'Darwin' and self.macos_skip_image_cache:
             return
 
         # cached image name
@@ -249,8 +166,14 @@ class VerifyImageCache:
             )
             
 @pytest.fixture(autouse=True)
-def verify_image_cache(request):
+def verify_image_cache(request, pytestconfig):
     """Checks cached images against test images for PyVista"""
+    
+    # Set CMD options in class attributes
+    VerifyImageCache.reset_image_cache = pytestconfig.getoption('reset_image_cache')
+    VerifyImageCache.ignore_image_cache = pytestconfig.getoption('ignore_image_cache')
+    VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption('fail_extra_image_cache')
+    
     verify_image_cache = VerifyImageCache(request.node.name)
     pyvista.global_theme.before_close_callback = verify_image_cache
     return verify_image_cache
