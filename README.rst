@@ -14,7 +14,7 @@ pytest-pyvista
     :target: https://ci.appveyor.com/project/pyvista/pytest-pyvista/branch/master
     :alt: See Build Status on AppVeyor
 
-Plugin to test PyVista plot outputs.
+Plugin to test PyVista plot outputs
 
 ----
 
