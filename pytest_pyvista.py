@@ -48,8 +48,8 @@ class VerifyImageCache:
     ignore_image_cache = False
     fail_extra_image_cache = False
 
-    high_variance_tests = (False,)
-    windows_skip_image_cache = (False,)
+    high_variance_tests = False
+    windows_skip_image_cache = False
     macos_skip_image_cache = False
 
     def __init__(
