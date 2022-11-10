@@ -38,3 +38,24 @@ def test_verify_image_cache(testdir):
     result = testdir.runpytest()
     print(result.stdout)
     result.stdout.fnmatch_lines("*Passed*")
+
+
+def test_skip(testdir):
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            verify_image_cache.skip = True
+            sphere = pv.Sphere()
+            pv.plot(sphere.points)
+            plotter = pv.Plotter()
+            plotter.add_points(sphere.points)
+            plotter.add_points(sphere.points + 1)
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest()
+    print(result.stdout)
+    result.stdout.fnmatch_lines("*Passed*")

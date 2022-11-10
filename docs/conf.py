@@ -46,8 +46,8 @@ master_doc = "index"
 
 # General information about the project.
 project = "pytest-pyvista"
-copyright = "2015, PyAnsys"
-author = "PyAnsys"
+copyright = "2022, PyVista"
+author = "The PyVista developers"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

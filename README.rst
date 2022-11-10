@@ -26,6 +26,36 @@ Features
 
 * TODO
 
+Global flags
+--------
+`--reset_image_cache` 
+
+Running ``--reset_image_cache`` creates a new image for each test in
+``tests/plotting/test_plotting.py`` and is not recommended except for
+testing or for potentially a major or minor release. 
+
+
+
+ignore_image_cache 
+
+You can use ``--ignore_image_cache`` if you’re running on Linux and want to
+temporarily ignore regression testing. Realize that regression testing
+will still occur on our CI testing.
+
+fail_extra_image_cache 
+
+Test specific flags
+--------
+These are attributes of `verify_image_cache`. You can set them as `True` if needed in the beginning of your test.
+
+- high_variance_tests:  If necessary, the threshold for determining if a test is passing or not is 
+incremented to another predetermined threshold. This is currently done due to the use of an unstable 
+version of VTK, in stable versions this shouldn't be necessary.
+
+- windows_skip_image_cache: For test where the plotting in Windows is different from MacOS/Linux.
+
+- macos_skip_image_cache: For test where the plotting in MacOS is different from Windows/Linux.
+
 
 Requirements
 ------------
