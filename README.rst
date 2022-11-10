@@ -47,26 +47,26 @@ You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
 Usage
 -----
 Once installed, you only need to have a `pl.show()` in your test, the plugin will automatically manage the cache generation if it does not exists,
-and the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading PyVista, so the `pl.show()` doesn't pop up any window while testing::
+and the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading PyVista, so the `pl.show()` doesn't pop up any window while testing_::
 
-import pyvista as pv
-pv.OFF_SCREEN = True
-def test_succeeds():
-    pl = pyvista.Plotter()
-    pl.add_mesh(pyvista.Sphere(), show_edges=True)
-    pl.show()
-
-
-If you need to use any flag inside the tests, you need to use the `verify_image_cache` fixture as a parameter to the test::
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+    def test_succeeds():
+        pl = pyvista.Plotter()
+        pl.add_mesh(pyvista.Sphere(), show_edges=True)
+        pl.show()
 
 
-import pyvista as pv
-pv.OFF_SCREEN = True
-def test_succeeds(verify_image_cache):
-    verify_image_cache.windows_skip_image_cache = True
-    pl = pyvista.Plotter()
-    pl.add_mesh(pyvista.Sphere(), show_edges=True)
-    pl.show()
+If you need to use any flag inside the tests, you need to use the `verify_image_cache` fixture as a parameter to the test_::
+
+
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+    def test_succeeds(verify_image_cache):
+        verify_image_cache.windows_skip_image_cache = True
+        pl = pyvista.Plotter()
+        pl.add_mesh(pyvista.Sphere(), show_edges=True)
+        pl.show()
 
 
 
