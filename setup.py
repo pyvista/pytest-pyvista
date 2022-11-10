@@ -24,7 +24,7 @@ setup(
     description="Plugin to test PyVista plot outputs",
     long_description=read("README.rst"),
     py_modules=["pytest_pyvista"],
-    python_requires=">=3.5",
+    python_requires=">=3.7",
     install_requires=["pytest>=3.5.0"],
     classifiers=[
         "Development Status :: 4 - Beta",
