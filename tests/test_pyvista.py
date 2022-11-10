@@ -37,7 +37,6 @@ def test_verify_image_cache(testdir):
     )
 
     result = testdir.runpytest()
-    print(result.stdout)
     result.stdout.fnmatch_lines("*Passed*")
 
 
@@ -59,5 +58,4 @@ def test_skip(testdir):
     )
 
     result = testdir.runpytest()
-    print(result.stdout)
     result.stdout.fnmatch_lines("*Passed*")
