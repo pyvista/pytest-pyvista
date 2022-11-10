@@ -14,7 +14,7 @@ pytest-pyvista
     :target: https://ci.appveyor.com/project/pyvista/pytest-pyvista/branch/master
     :alt: See Build Status on AppVeyor
 
-Plugin to test PyVista plot outputs
+Plugin to test PyVista plot outputs.
 
 ----
 
@@ -24,43 +24,16 @@ This `pytest`_ plugin was generated with `Cookiecutter`_ along with `@hackebrot`
 Features
 --------
 
-* TODO
-
-Global flags
---------
-`--reset_image_cache` 
-
-Running ``--reset_image_cache`` creates a new image for each test in
-``tests/plotting/test_plotting.py`` and is not recommended except for
-testing or for potentially a major or minor release. 
-
-
-
-ignore_image_cache 
-
-You can use ``--ignore_image_cache`` if you’re running on Linux and want to
-temporarily ignore regression testing. Realize that regression testing
-will still occur on our CI testing.
-
-fail_extra_image_cache 
-
-Test specific flags
---------
-These are attributes of `verify_image_cache`. You can set them as `True` if needed in the beginning of your test.
-
-- high_variance_tests:  If necessary, the threshold for determining if a test is passing or not is 
-incremented to another predetermined threshold. This is currently done due to the use of an unstable 
-version of VTK, in stable versions this shouldn't be necessary.
-
-- windows_skip_image_cache: For test where the plotting in Windows is different from MacOS/Linux.
-
-- macos_skip_image_cache: For test where the plotting in MacOS is different from Windows/Linux.
+This plugin facilitates the comparison of the images produced by `PyVista`. It generates a cache of images from the tests, using the `PyVista` 
+plotting function in its first execution. Then, further executions will compare its results against this cache, so if there are any changes
+in the code that break the image generation, the comparison against the cache will notice it. Note that there is an error tolerance in the 
+comparison, so minor differences won't fail.
 
 
 Requirements
 ------------
 
-* TODO
+You must have a Python version greater than 3.7, as well as PyVista installed in your environment.
 
 
 Installation
@@ -73,8 +46,61 @@ You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
 
 Usage
 -----
+Once installed, you only need to have a `pl.show()` in your test, the plugin will automatically manage the cache generation if it does not exists,
+and the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading PyVista, so the `pl.show()` doesn't pop up any window while testing:
 
-* TODO
+```
+import pyvista as pv
+pv.OFF_SCREEN = True
+def test_succeeds():
+    pl = pyvista.Plotter()
+    pl.add_mesh(pyvista.Sphere(), show_edges=True)
+    pl.show()
+```
+
+If you need to use any flag inside the tests, you need to use the `verify_image_cache` fixture as a parameter to the test:
+
+```
+import pyvista as pv
+pv.OFF_SCREEN = True
+def test_succeeds(verify_image_cache):
+    verify_image_cache.windows_skip_image_cache = True
+    pl = pyvista.Plotter()
+    pl.add_mesh(pyvista.Sphere(), show_edges=True)
+    pl.show()
+```
+
+
+Global flags
+------------
+These are the flags you can use when calling ```pytest`` in the command line:
+
+- ``--reset_image_cache`` creates a new image for each test in
+``tests/plotting/test_plotting.py`` and is not recommended except for
+testing or for potentially a major or minor release. 
+
+
+
+- You can use ``--ignore_image_cache`` if you are running on Linux and want to
+temporarily ignore regression testing. Realize that regression testing
+will still occur on our CI testing.
+
+- When using ``--fail_extra_image_cache`` if there is an extra image in the cache, it will report as an error.
+
+Test specific flags
+-------------------
+These are attributes of `verify_image_cache`. You can set them as `True` if needed in the beginning of your test function.
+
+- high_variance_tests:  If necessary, the threshold for determining if a test will pass or not is 
+incremented to another predetermined threshold. This is currently done due to the use of an unstable 
+version of VTK, in stable versions this shouldn't be necessary.
+
+- windows_skip_image_cache: For test where the plotting in Windows is different from MacOS/Linux.
+
+- macos_skip_image_cache: For test where the plotting in MacOS is different from Windows/Linux.
+
+
+
 
 Contributing
 ------------

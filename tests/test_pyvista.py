@@ -26,7 +26,7 @@ def test_verify_image_cache(testdir):
         """
         import pyvista as pv
         pv.OFF_SCREEN = True
-        def test_imcache(verify_image_cache):
+        def test_imcache():
             sphere = pv.Sphere()
             pv.plot(sphere.points)
             plotter = pv.Plotter()
