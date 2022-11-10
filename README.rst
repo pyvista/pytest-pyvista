@@ -98,6 +98,8 @@ version of VTK, in stable versions this shouldn't be necessary.
 
 - macos_skip_image_cache: For test where the plotting in MacOS is different from Windows/Linux.
 
+- skip: If you have a test that plots a figure, but you don't want to compare it's output against the cache,
+    you can skip it with this flag.
 
 
 
