@@ -21,6 +21,7 @@ def test_arguments(testdir):
 
 
 def test_verify_image_cache(testdir):
+    """Test regular usage of the `verify_image_cache` fixture"""
     testdir.makepyfile(
         """
         import pyvista as pv
@@ -41,6 +42,7 @@ def test_verify_image_cache(testdir):
 
 
 def test_skip(testdir):
+    """Test `skip` flag of `verify_image_cache`"""
     testdir.makepyfile(
         """
         import pyvista as pv

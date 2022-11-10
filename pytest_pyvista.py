@@ -11,6 +11,8 @@ from pyvista._vtk import VTK9
 
 
 def pytest_addoption(parser):
+    """Adds new flag options to the pyvista plugin."""
+
     group = parser.getgroup("pyvista")
     group.addoption(
         "--reset_image_cache",
