@@ -72,7 +72,7 @@ If you need to use any flag inside the tests, you need to use the `verify_image_
 
 Global flags
 ------------
-These are the flags you can use when calling ```pytest`` in the command line:
+These are the flags you can use when calling ``pytest`` in the command line:
 
 - ``--reset_image_cache`` creates a new image for each test in
 ``tests/plotting/test_plotting.py`` and is not recommended except for
