@@ -126,7 +126,8 @@ class VerifyImageCache:
         if platform.system() == "Darwin" and self.macos_skip_image_cache:
             return
 
-        # cached image name
+        # cached image name. We remove the first 5 characters of the function name
+        # "test_" to get the name for the image.
         image_filename = os.path.join(self.cache_dir, test_name[5:] + ".png")
 
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache:
