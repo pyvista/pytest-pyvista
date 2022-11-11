@@ -152,7 +152,7 @@ class VerifyImageCache:
             )
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()
 def verify_image_cache(request, pytestconfig):
     """Checks cached images against test images for PyVista."""
 
