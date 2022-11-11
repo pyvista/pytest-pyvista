@@ -27,7 +27,11 @@ def pytest_addoption(parser):
         action="store_true",
         help="Enables failure if image cache does not exist.",
     )
-    parser.addini("HELLO", "Dummy pytest.ini setting")
+    group.addoption(
+        "--image_cache_dir",
+        action="store",
+        help="Path to the image cache folder.",
+    )
 
 
 class VerifyImageCache:
@@ -43,9 +47,6 @@ class VerifyImageCache:
     ----------
     test_name : str
         Name of test to save.  It is used to define the name of image cache file.
-
-    cache_dir : str
-        Directory where to save the cache images.
 
     error_value : int
         Threshold value for determining if two images are not similar enough in a test.
@@ -68,11 +69,12 @@ class VerifyImageCache:
     windows_skip_image_cache = False
     macos_skip_image_cache = False
 
+    cache_dir = None
+
     def __init__(
         self,
         test_name,
         *,
-        cache_dir=None,
         error_value=500,
         warning_value=200,
         var_error_value=1000,
@@ -80,21 +82,19 @@ class VerifyImageCache:
     ):
         self.test_name = test_name
 
-        if cache_dir is None:
+        if self.cache_dir is None:
             # Reset image cache with new images
             this_path = pathlib.Path(__file__).parent.absolute()
             self.cache_dir = os.path.join(this_path, "image_cache")
-        else:
-            self.cache_dir = cache_dir
+
+            # not working with pytest-pyvista tests for some reason
+            # self.cache_dir = appdirs.user_cache_dir(appname="pytest-pyvista", appauthor="pyvista")
 
         if not os.path.isdir(self.cache_dir):
             os.mkdir(self.cache_dir)
 
         self.error_value = error_value
         self.warning_value = warning_value
-        # self.high_variance_tests = high_variance_tests
-        # self.windows_skip_image_cache = windows_skip_image_cache
-        # self.macos_skip_image_cache = macos_skip_image_cache
         self.var_error_value = var_error_value
         self.var_warning_value = var_warning_value
 
@@ -176,6 +176,7 @@ def verify_image_cache(request, pytestconfig):
     VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption(
         "fail_extra_image_cache"
     )
+    VerifyImageCache.cache_dir = pytestconfig.getoption("image_cache_dir")
 
     verify_image_cache = VerifyImageCache(request.node.name)
     pyvista.global_theme.before_close_callback = verify_image_cache
