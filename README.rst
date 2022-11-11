@@ -46,7 +46,7 @@ You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
 
 Usage
 -----
-Once installed, you only need to have a `pl.show()` in your test, the plugin will automatically manage the cache generation if it does not exists,
+Once installed, you only need to use the command `pl.show()` in your test. The plugin will automatically manage the cache generation if it does not exist,
 and the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading PyVista, so the `pl.show()` doesn't pop up any window while testing_::
 
     import pyvista as pv
@@ -98,7 +98,7 @@ version of VTK, in stable versions this shouldn't be necessary.
 
 - macos_skip_image_cache: For test where the plotting in MacOS is different from Windows/Linux.
 
-- skip: If you have a test that plots a figure, but you don't want to compare it's output against the cache,
+- skip: If you have a test that plots a figure, but you don't want to compare its output against the cache,
     you can skip it with this flag.
 
 

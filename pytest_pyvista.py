@@ -33,7 +33,7 @@ def pytest_addoption(parser):
 class VerifyImageCache:
     """Control image caching for testing.
 
-    Image cache files are names according to ``test_name``.
+    Image cache files are named according to ``test_name``.
     Multiple calls to an instance of this class will append
     `_X` to the name after the first one.  That is, files
     ``{test_name}``, ``{test_name}_1``, and ``{test_name}_2``
@@ -42,7 +42,7 @@ class VerifyImageCache:
     Parameters
     ----------
     test_name : str
-        Name of test to save.  Sets name of image cache file.
+        Name of test to save.  It is used to define the name of image cache file.
 
     """
 
@@ -141,8 +141,7 @@ class VerifyImageCache:
         if error > allowed_error:
             raise RuntimeError(
                 f"{test_name} Exceeded image regression error of "
-                f"{allowed_error} with an image error of "
-                f"{error}"
+                f"{allowed_error} with an image error equal to: {error}"
             )
         if error > allowed_warning:
             warnings.warn(
@@ -154,7 +153,7 @@ class VerifyImageCache:
 
 @pytest.fixture(autouse=True)
 def verify_image_cache(request, pytestconfig):
-    """Checks cached images against test images for PyVista"""
+    """Checks cached images against test images for PyVista."""
 
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
