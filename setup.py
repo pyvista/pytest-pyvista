@@ -14,7 +14,7 @@ def read(fname):
 
 setup(
     name="pytest-pyvista",
-    version="0.1.0",
+    version="0.1.dev0",
     author="The PyVista Developers",
     author_email="info@pyvista.org",
     maintainer="The PyVista Developers",
