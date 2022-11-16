@@ -1,0 +1,122 @@
+name: Unit Testing and Deployment
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    tags:
+      - "*"
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ALLOW_PLOTTING: true
+  SHELLOPTS: 'errexit:pipefail'
+
+jobs:
+  Linux:
+    name: Linux Unit Testing
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - python-version: '3.7'
+            vtk-version: '8.1.2'
+          - python-version: '3.8'
+            vtk-version: '9.0.3'
+          - python-version: '3.9'
+            vtk-version: '9.1'
+          - python-version: '3.10'
+            vtk-version: 'latest'
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: requirements_test.txt
+
+      - uses: actions/cache@v3
+        with:
+          path: ~/.local/share/pytest-pyvista/examples
+          key: Examples-1-${{ hashFiles('*') }}
+          restore-keys: |
+            Examples-1-
+
+      - name: Build wheel and install pytest-pyvista
+        run: |
+          pip install wheel
+          python setup.py bdist_wheel
+          pip install dist/pytest-pyvista*.whl
+
+      - name: Set up vtk
+        if: ${{ matrix.vtk-version != 'latest' }}
+        run: pip install vtk==${{ matrix.vtk-version }}
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1.1.2
+        with:
+          packages: libgl1-mesa-glx xvfb python-tk
+          version: 3.0
+
+      - name: Install Testing Requirements
+        run: pip install -r requirements_test.txt
+
+      - name: Software Report
+        run: |
+          xvfb-run python -c "import pyvista; print(pyvista.Report()); from pyvista import examples; print('User data path:', examples.USER_DATA_PATH)"
+          which python
+          pip list
+      - name: Unit Testing
+        run: xvfb-run pytest -v --cov pytest-pyvista --cov-report xml
+
+      - uses: codecov/codecov-action@v3
+        if: matrix.python-version == '3.9'
+        name: 'Upload coverage to CodeCov'
+
+  release:
+    name: Release
+    if: |
+      github.event_name == 'push' &&
+      contains(github.ref, 'refs/tags') && 
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+  
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.MAIN_PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip build twine
+
+      - name: Build artifacts
+        run: |
+          python -m build && python -m twine check dist/*
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          python -m twine upload --skip-existing ./**/*.whl
+          python -m twine upload --skip-existing ./**/*.tar.gz
+
+      - name: Publish to GitHub
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./**/*.whl
+            ./**/*.tar.gz
