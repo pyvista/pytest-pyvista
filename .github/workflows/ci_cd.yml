@@ -76,7 +76,7 @@ jobs:
           pip list
       - name: Unit Testing
         # run: xvfb-run pytest -v --cov pytest-pyvista --cov-report xml
-        run: xvfb-run coverage run -m --source=. --module pytest --verbose .
+        run: xvfb-run coverage run -m --source=. --module pytest --verbose . && coverage xml
       - uses: codecov/codecov-action@v3
         if: matrix.python-version == '3.9'
         name: 'Upload coverage to CodeCov'
