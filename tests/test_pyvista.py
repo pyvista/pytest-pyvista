@@ -15,7 +15,7 @@ def test_arguments(testdir):
     result = testdir.runpytest(
         "--reset_image_cache", "--ignore_image_cache", "--fail_extra_image_cache"
     )
-    result.stdout.fnmatch_lines("*Passed*")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
 def test_verify_image_cache(testdir):
