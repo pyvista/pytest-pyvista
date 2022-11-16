@@ -56,7 +56,7 @@ jobs:
           pip install wheel
           python setup.py bdist_wheel
           pip install dist/pytest_pyvista-0.1.dev0-py3-none-any.whl
-          
+
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
         run: pip install vtk==${{ matrix.vtk-version }}
@@ -75,7 +75,8 @@ jobs:
           which python
           pip list
       - name: Unit Testing
-        run: xvfb-run pytest -v --cov pytest-pyvista --cov-report xml
+        # run: xvfb-run pytest -v --cov pytest-pyvista --cov-report xml
+        run: coverage run -m --source=. --module pytest --verbose . && coverage xml
 
       - uses: codecov/codecov-action@v3
         if: matrix.python-version == '3.9'
