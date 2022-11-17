@@ -71,12 +71,11 @@ jobs:
 
       - name: Software Report
         run: |
-          xvfb-run python -c "import pyvista; print(pyvista.Report()); from pyvista import examples; print('User data path:', examples.USER_DATA_PATH)"
+          xvfb-run python -c "import pytest_pyvista; pytest_pyvista"
           which python
           pip list
 
       - name: Unit Testing
-        # run: xvfb-run pytest -v --cov pytest-pyvista --cov-report xml
         run: xvfb-run coverage run -m --source=pytest_pyvista --module pytest --verbose .
       - uses: codecov/codecov-action@v3
         if: matrix.python-version == '3.9'
