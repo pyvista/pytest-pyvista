@@ -41,7 +41,7 @@ setup(
     ],
     entry_points={
         "pytest11": [
-            "pyvista = pytest_pyvista",
+            "pyvista = pytest_pyvista.pytest_pyvista",
         ],
     },
 )
