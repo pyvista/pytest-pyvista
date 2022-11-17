@@ -74,9 +74,10 @@ jobs:
           xvfb-run python -c "import pyvista; print(pyvista.Report()); from pyvista import examples; print('User data path:', examples.USER_DATA_PATH)"
           which python
           pip list
+
       - name: Unit Testing
         # run: xvfb-run pytest -v --cov pytest-pyvista --cov-report xml
-        run: xvfb-run coverage run -m --source=. --module pytest --verbose . && coverage xml
+        run: xvfb-run coverage run -m --source=. --module pytest --verbose .
       - uses: codecov/codecov-action@v3
         if: matrix.python-version == '3.9'
         name: 'Upload coverage to CodeCov'
