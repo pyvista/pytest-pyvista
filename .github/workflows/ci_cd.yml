@@ -55,7 +55,7 @@ jobs:
         run: |
           pip install wheel
           python setup.py bdist_wheel
-          pip install dist/pytest_pyvista-0.1.dev0-py3-none-any.whl
+          pip install dist/pytest_pyvista*.whl
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
