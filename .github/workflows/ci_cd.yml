@@ -51,7 +51,7 @@ jobs:
           restore-keys: |
             Examples-1-
 
-      - name: Build wheel and install pytest-pyvista with test dependencies
+      - name: Install pytest-pyvista with test dependencies
         run: |
           pip install .[tests]
 
