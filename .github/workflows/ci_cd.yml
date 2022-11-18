@@ -54,7 +54,7 @@ jobs:
       - name: Build wheel and install pytest-pyvista with test dependencies
         run: |
           pip install flit
-          flit install --extras tests
+          pip install .[tests]
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
