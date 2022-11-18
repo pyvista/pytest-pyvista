@@ -37,4 +37,5 @@ tests = [
 ]
 
 [project.entry-points."pytest11"]
+# Location of the plugin module, in this case ./pytest_pyvista/pytest_pyvista.py
 pyvista = "pytest_pyvista.pytest_pyvista"
