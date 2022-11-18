@@ -80,8 +80,7 @@ jobs:
     name: Release
     if: |
       github.event_name == 'push' &&
-      contains(github.ref, 'refs/tags') && 
-      github.event.workflow_run.conclusion == 'success'
+      contains(github.ref, 'refs/tags')
     runs-on: ubuntu-latest
   
     steps:
