@@ -40,6 +40,7 @@ setup(
         "License :: OSI Approved :: MIT License",
     ],
     entry_points={
+        # Location of the plugin file, in this case ./pytest_pyvista/pytest_pyvista.py
         "pytest11": [
             "pyvista = pytest_pyvista.pytest_pyvista",
         ],
