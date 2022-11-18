@@ -51,10 +51,10 @@ jobs:
           restore-keys: |
             Examples-1-
 
-      - name: Build wheel and install pytest-pyvista
+      - name: Build wheel and install pytest-pyvista with test dependencies
         run: |
           pip install flit
-          flit install
+          flit install --extras tests
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
@@ -64,9 +64,6 @@ jobs:
         with:
           packages: libgl1-mesa-glx xvfb python-tk
           version: 3.0
-
-      - name: Install Testing Requirements
-        run: pip install -r requirements_test.txt
 
       - name: Software Report
         run: |
