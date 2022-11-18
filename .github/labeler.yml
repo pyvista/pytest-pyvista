@@ -1,0 +1,18 @@
+documentation:
+- doc/**/*
+- examples/**/*
+- ./*.md
+- ./*.rst
+maintenance:
+- .github/**/*
+- codecov.yml
+- .flake8
+- .coveragerc
+- .codecimate.yml
+- ignore_words.txt
+- mypy.ini
+- pyproject.toml
+- setup.py
+dependencies:
+- requirements*
+- environment.yml
