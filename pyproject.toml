@@ -1,0 +1,41 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "pytest_pyvista"
+authors = [{name = "The PyVista developers", email = "info@pyvista.org"}]
+readme = "README.rst"
+license = {file = "LICENSE"}
+dynamic = ["version", "description"]
+classifiers=[
+    "Development Status :: 4 - Beta",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies=["pytest>=3.5.0", "pyvista==0.37"]
+python_requires=">=3.7"
+
+[project.urls]
+Home = "https://github.com/pyvista/pytest-pyvista"
+
+
+[project.optional-dependencies]
+tests = [
+    "codecov<2.2.0",
+    "coverage==6.5",
+    "pytest>=3.5.0",
+    "pytest-cov==4.0.0",
+    "pyvista==0.37"
+]
+
+[project.entry-points."pytest11"]
+# Location of the plugin module, in this case ./pytest_pyvista/pytest_pyvista.py
+pyvista = "pytest_pyvista.pytest_pyvista"

@@ -42,7 +42,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-          cache-dependency-path: requirements_test.txt
+          cache-dependency-path: pyproject.toml
 
       - uses: actions/cache@v3
         with:
@@ -51,11 +51,9 @@ jobs:
           restore-keys: |
             Examples-1-
 
-      - name: Build wheel and install pytest-pyvista
+      - name: Install pytest-pyvista with test dependencies
         run: |
-          pip install wheel
-          python setup.py bdist_wheel
-          pip install dist/pytest_pyvista*.whl
+          pip install .[tests]
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
@@ -65,9 +63,6 @@ jobs:
         with:
           packages: libgl1-mesa-glx xvfb python-tk
           version: 3.0
-
-      - name: Install Testing Requirements
-        run: pip install -r requirements_test.txt
 
       - name: Software Report
         run: |
