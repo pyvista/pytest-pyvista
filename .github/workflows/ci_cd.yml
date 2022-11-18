@@ -42,7 +42,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-          cache-dependency-path: requirements_test.txt
+          # cache-dependency-path: requirements_test.txt
 
       - uses: actions/cache@v3
         with:
@@ -53,9 +53,8 @@ jobs:
 
       - name: Build wheel and install pytest-pyvista
         run: |
-          pip install wheel
-          python setup.py bdist_wheel
-          pip install dist/pytest_pyvista*.whl
+          pip install flit
+          flit install
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
