@@ -23,10 +23,10 @@ setup(
     url="https://github.com/pyvista/pytest-pyvista",
     description="Plugin to test PyVista plot outputs",
     long_description=read("README.rst"),
-    long_description_content_type='text/x-rst',
+    long_description_content_type="text/x-rst",
     py_modules=["pytest_pyvista"],
     python_requires=">=3.7",
-    install_requires=["pytest>=3.5.0", "pyvista"],
+    install_requires=["pytest>=3.5.0"],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Framework :: Pytest",
@@ -40,8 +40,9 @@ setup(
         "License :: OSI Approved :: MIT License",
     ],
     entry_points={
+        # Location of the plugin file, in this case ./pytest_pyvista/pytest_pyvista.py
         "pytest11": [
-            "pyvista = pytest_pyvista",
+            "pyvista = pytest_pyvista.pytest_pyvista",
         ],
     },
 )
