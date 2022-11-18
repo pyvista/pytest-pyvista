@@ -1,7 +1,6 @@
 documentation:
 - doc/**/*
 - examples/**/*
-- examples_flask/**/*
 - ./*.md
 - ./*.rst
 maintenance:
@@ -10,10 +9,10 @@ maintenance:
 - .flake8
 - .coveragerc
 - .codecimate.yml
-- Makefile
 - ignore_words.txt
 - mypy.ini
 - pyproject.toml
+- setup.py
 dependencies:
 - requirements*
 - environment.yml
