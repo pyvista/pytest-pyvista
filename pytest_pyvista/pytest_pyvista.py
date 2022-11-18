@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Pytest-pyvista package"""
 
-__version__ = "0.1.0"
 
 import os
 import pathlib
