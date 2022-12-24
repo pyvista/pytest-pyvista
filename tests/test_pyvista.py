@@ -24,6 +24,7 @@ def test_arguments(testdir):
 
 
 def make_cached_images(test_path, path="image_cache_dir"):
+    """Makes image cache in `test_path\path`."""
     d = os.path.join(test_path, path)
     os.mkdir(d)
     sphere = pv.Sphere()
@@ -52,7 +53,7 @@ def test_verify_image_cache(testdir):
 
 
 def test_verify_image_cache_fail_regression(testdir):
-   """Test regular usage of the `verify_image_cache` fixture"""
+   """Test regression of the `verify_image_cache` fixture"""
    make_cached_images(testdir.tmpdir)
    testdir.makepyfile(
        """
@@ -94,7 +95,7 @@ def test_skip(testdir):
 
 
 def test_image_cache_dir_commandline(testdir):
-    """Test regular usage of the `verify_image_cache` fixture"""
+    """Test setting image_cache_dir via CLI option."""
     make_cached_images(testdir.tmpdir, "newdir")
     testdir.makepyfile(
         """
@@ -113,7 +114,7 @@ def test_image_cache_dir_commandline(testdir):
 
 
 def test_image_cache_dir_ini(testdir):
-    """Test regular usage of the `verify_image_cache` fixture"""
+    """Test setting image_cache_dir via config."""
     make_cached_images(testdir.tmpdir, "newdir")
     testdir.makepyfile(
         """
