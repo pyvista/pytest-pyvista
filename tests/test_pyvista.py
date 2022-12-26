@@ -139,7 +139,7 @@ def test_image_cache_dir_ini(testdir):
 
 
 def test_generated_image_dir_commandline(testdir):
-    """Test setting image_cache_dir via CLI option."""
+    """Test setting generated_image_dir via CLI option."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
         """
@@ -156,4 +156,23 @@ def test_generated_image_dir_commandline(testdir):
     result = testdir.runpytest("--fail_extra_image_cache", "--generated_image_dir", "gen_dir")
     assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))
     assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+def test_gladd_missing_images_commandline(testdir):
+    """Test setting add_missing_images via CLI option."""
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--add_missing_images")
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "image_cache_dir", "imcache.png"))
     result.stdout.fnmatch_lines("*[Pp]assed*")

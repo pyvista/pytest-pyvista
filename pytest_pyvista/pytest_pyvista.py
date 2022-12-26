@@ -30,7 +30,12 @@ def pytest_addoption(parser):
     group.addoption(
         "--generated_image_dir",
         action="store",
-        help="Path grnerated io thse cache folder.",
+        help="Path to generated images folder.",
+    )
+    group.addoption(
+        "--add_missing_images",
+        action="store_true",
+        help="Adds images to cache if missing.",
     )
     group.addoption(
         "--image_cache_dir",
@@ -74,6 +79,7 @@ class VerifyImageCache:
     reset_image_cache = False
     ignore_image_cache = False
     fail_extra_image_cache = False
+    add_missing_images = False
 
     high_variance_tests = False
     windows_skip_image_cache = False
@@ -155,6 +161,10 @@ class VerifyImageCache:
         image_filename = os.path.join(self.cache_dir, test_name[5:] + ".png")
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache:
             raise RuntimeError(f"{image_filename} does not exist in image cache")
+
+        if self.add_missing_images and not os.path.isfile(image_filename):
+            plotter.screenshot(image_filename)
+
         if self.generated_image_dir is not None:
             gen_image_filename =os.path.join(self.generated_image_dir, test_name[5:] + ".png")
             plotter.screenshot(gen_image_filename)
@@ -182,6 +192,9 @@ def verify_image_cache(request, pytestconfig):
     VerifyImageCache.ignore_image_cache = pytestconfig.getoption("ignore_image_cache")
     VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption(
         "fail_extra_image_cache"
+    )
+    VerifyImageCache.add_missing_images = pytestconfig.getoption(
+        "add_missing_images"
     )
 
     cache_dir = pytestconfig.getoption("image_cache_dir")
