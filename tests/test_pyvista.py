@@ -23,14 +23,15 @@ def test_arguments(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def make_cached_images(test_path, path="image_cache_dir"):
+def make_cached_images(test_path, path="image_cache_dir", name="imcache.png"):
     """Makes image cache in `test_path\path`."""
     d = os.path.join(test_path, path)
-    os.mkdir(d)
+    if not os.path.isdir(d):
+        os.mkdir(d)
     sphere = pv.Sphere()
     plotter = pv.Plotter()
     plotter.add_mesh(sphere, color="red")
-    plotter.screenshot(os.path.join(d, "imcache.png"))
+    plotter.screenshot(os.path.join(d, name))
 
 
 def test_verify_image_cache(testdir):
@@ -134,4 +135,46 @@ def test_image_cache_dir_ini(testdir):
         """
     )
     result = testdir.runpytest("--fail_extra_image_cache")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+def test_high_variance_test(testdir):
+    """Test `skip` flag of `verify_image_cache`"""
+    make_cached_images(testdir.tmpdir)
+    make_cached_images(testdir.tmpdir, name="imcache_var.png")
+
+    # First make sure test fails with image regression error
+    testdir.makepyfile(test_file1=
+        """
+        import pytest
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color=[255, 5, 5])
+            plotter.show()
+        """
+    )
+    # Next mark as a high_variance_test and check that it passes
+    testdir.makepyfile(test_file2=
+        """
+        import pytest
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_imcache_var(verify_image_cache):
+            verify_image_cache.high_variance_test = True
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color=[255, 5, 5])
+            plotter.show()
+        """
+    )
+    result = testdir.runpytest("--fail_extra_image_cache", "test_file1.py")
+    result.stdout.fnmatch_lines("*[Ff]ailed*")
+    result.stdout.fnmatch_lines("*Exceeded image regression error*")
+
+    result = testdir.runpytest("--fail_extra_image_cache", "test_file2.py")
     result.stdout.fnmatch_lines("*[Pp]assed*")
