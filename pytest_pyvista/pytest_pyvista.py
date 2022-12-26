@@ -113,9 +113,8 @@ class VerifyImageCache:
         if self.skip:
             return
 
-        # Image cache is only valid for VTK9+
         if not VTK9:
-            return
+            raise RuntimeError("Image cache is only valid for VTK9+")
 
         if self.ignore_image_cache:
             return
