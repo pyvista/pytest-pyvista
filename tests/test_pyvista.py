@@ -6,6 +6,7 @@ import pyvista as pv
 
 pv.OFF_SCREEN = True
 
+
 def test_arguments(testdir):
     """Test pytest arguments"""
     testdir.makepyfile(
@@ -24,7 +25,7 @@ def test_arguments(testdir):
 
 
 def make_cached_images(test_path, path="image_cache_dir"):
-    """Makes image cache in `test_path\path`."""
+    """Makes image cache in `test_path/path`."""
     d = os.path.join(test_path, path)
     os.mkdir(d)
     sphere = pv.Sphere()
@@ -134,4 +135,25 @@ def test_image_cache_dir_ini(testdir):
         """
     )
     result = testdir.runpytest("--fail_extra_image_cache")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+def test_generated_image_dir_commandline(testdir):
+    """Test setting image_cache_dir via CLI option."""
+    make_cached_images(testdir.tmpdir)
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--fail_extra_image_cache", "--generated_image_dir", "gen_dir")
+    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))
     result.stdout.fnmatch_lines("*[Pp]assed*")
