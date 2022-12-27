@@ -30,10 +30,11 @@ Home = "https://github.com/pyvista/pytest-pyvista"
 [project.optional-dependencies]
 tests = [
     "codecov<2.2.0",
-    "coverage==6.5",
+    "coverage==7.0.1",
     "pytest>=3.5.0",
     "pytest-cov==4.0.0",
-    "pyvista>=0.37"
+    "pyvista>=0.37",
+    "numpy<1.24",
 ]
 
 [project.entry-points."pytest11"]
