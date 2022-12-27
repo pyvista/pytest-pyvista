@@ -71,10 +71,6 @@ class VerifyImageCache:
     ignore_image_cache = False
     fail_extra_image_cache = False
 
-    high_variance_tests = False
-    windows_skip_image_cache = False
-    macos_skip_image_cache = False
-
     def __init__(
         self,
         test_name,
@@ -97,6 +93,10 @@ class VerifyImageCache:
         self.warning_value = warning_value
         self.var_error_value = var_error_value
         self.var_warning_value = var_warning_value
+
+        self.high_variance_test = False
+        self.windows_skip_image_cache = False
+        self.macos_skip_image_cache = False
 
         self.skip = False
         self.n_calls = 0
@@ -125,7 +125,7 @@ class VerifyImageCache:
             test_name = self.test_name
         self.n_calls += 1
 
-        if self.high_variance_tests:
+        if self.high_variance_test:
             allowed_error = self.var_error_value
             allowed_warning = self.var_warning_value
         else:
