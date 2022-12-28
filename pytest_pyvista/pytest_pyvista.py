@@ -29,6 +29,11 @@ def pytest_addoption(parser):
         help="Enables failure if image cache does not exist.",
     )
     group.addoption(
+        "--skip_image_cache_vtk8",
+        action="store_true",
+        help="Skips image cache testing for vtk8.",
+    )
+    group.addoption(
         "--image_cache_dir",
         action="store",
         help="Path to the image cache folder.",
@@ -70,7 +75,7 @@ class VerifyImageCache:
     reset_image_cache = False
     ignore_image_cache = False
     fail_extra_image_cache = False
-
+    skip_image_cache_vtk8 = False
     def __init__(
         self,
         test_name,
@@ -114,7 +119,10 @@ class VerifyImageCache:
             return
 
         if not VTK9:
-            raise RuntimeError("Image cache is only valid for VTK9+")
+            if self.skip_image_cache_vtk8:
+                return
+            else:
+                raise RuntimeError("Image cache is only valid for VTK9+")
 
         if self.ignore_image_cache:
             return
@@ -175,6 +183,9 @@ def verify_image_cache(request, pytestconfig):
     VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption(
         "fail_extra_image_cache"
     )
+    VerifyImageCache.skip_image_cache_vtk8 = pytestconfig.getoption(
+        "skip_image_cache_vtk8"
+    )
 
     cache_dir = pytestconfig.getoption("image_cache_dir")
     if cache_dir is None:
@@ -182,4 +193,5 @@ def verify_image_cache(request, pytestconfig):
 
     verify_image_cache = VerifyImageCache(request.node.name, cache_dir)
     pyvista.global_theme.before_close_callback = verify_image_cache
+
     return verify_image_cache
