@@ -6,7 +6,7 @@ import pyvista as pv
 
 pv.OFF_SCREEN = True
 skip_vtk8 = pytest.mark.skipif(pv.vtk_version_info < (9,), reason="vtk8 not supported")
-
+skip_vtk9 = pytest.mark.skipif(pv.vtk_version_info >= (9,), reason="vtk8 only test")
 
 @skip_vtk8
 def test_arguments(testdir):
@@ -189,7 +189,7 @@ def test_high_variance_test(testdir):
     result = testdir.runpytest("--fail_extra_image_cache", "test_file2.py")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
-
+@skip_vtk9
 def test_skip_vtk8_commandline(testdir):
     """Test skip vtk8 via CLI option."""
     make_cached_images(testdir.tmpdir)
