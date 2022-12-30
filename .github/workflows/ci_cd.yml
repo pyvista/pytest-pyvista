@@ -27,7 +27,7 @@ jobs:
       matrix:
         include:
           - python-version: '3.7'
-            vtk-version: '9.0.3' # v8.x not supported
+            vtk-version: '8.1.2'
           - python-version: '3.8'
             vtk-version: '9.0.3'
           - python-version: '3.9'
