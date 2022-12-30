@@ -76,6 +76,7 @@ class VerifyImageCache:
     ignore_image_cache = False
     fail_extra_image_cache = False
     skip_image_cache_vtk8 = False
+
     def __init__(
         self,
         test_name,
