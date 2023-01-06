@@ -37,6 +37,7 @@ Requirements
 You must have a Python version greater than 3.7, as well as PyVista installed
 in your environment.
 
+pyvista version >=0.37.0 required.
 
 Installation
 ------------
