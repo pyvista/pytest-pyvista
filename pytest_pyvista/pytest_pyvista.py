@@ -30,7 +30,7 @@ def pytest_addoption(parser):
     group.addoption(
         "--generated_image_dir",
         action="store",
-        help="Path to generated images folder.",
+        help="Path to dump test images from the current run.",
     )
     group.addoption(
         "--add_missing_images",
