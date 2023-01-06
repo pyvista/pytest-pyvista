@@ -85,10 +85,6 @@ class VerifyImageCache:
     ignore_image_cache = False
     fail_extra_image_cache = False
     add_missing_images = False
-
-    high_variance_tests = False
-    windows_skip_image_cache = False
-    macos_skip_image_cache = False
     skip_image_cache_vtk8 = False
 
     def __init__(
