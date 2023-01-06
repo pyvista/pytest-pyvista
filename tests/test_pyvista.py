@@ -214,7 +214,7 @@ def test_generated_image_dir_commandline(testdir):
 
 
 @skip_vtk8
-def test_gladd_missing_images_commandline(testdir):
+def test_add_missing_images_commandline(testdir):
     """Test setting add_missing_images via CLI option."""
     testdir.makepyfile(
         """
