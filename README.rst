@@ -1,7 +1,6 @@
 ==============
 pytest-pyvista
 ==============
-
 .. image:: https://img.shields.io/pypi/v/pytest-pyvista.svg
     :target: https://pypi.org/project/pytest-pyvista
     :alt: PyPI version
@@ -10,9 +9,9 @@ pytest-pyvista
     :target: https://pypi.org/project/pytest-pyvista
     :alt: Python versions
 
-.. image:: https://ci.appveyor.com/api/projects/status/github/pyvista/pytest-pyvista?branch=master
-    :target: https://ci.appveyor.com/project/pyvista/pytest-pyvista/branch/master
-    :alt: See Build Status on AppVeyor
+.. image:: https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml/badge.svg
+    :target: https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml
+    :alt: GitHub Actions: Unit Testing and Deployment
 
 Plugin to test PyVista plot outputs.
 
@@ -24,7 +23,6 @@ This `pytest`_ plugin was generated with `Cookiecutter`_ along with
 
 Features
 --------
-
 This plugin facilitates the comparison of the images produced by `PyVista`. It
 generates a cache of images from the tests, using the `PyVista` plotting
 function in its first execution. Then, further executions will compare its
@@ -39,10 +37,10 @@ Requirements
 You must have a Python version greater than 3.7, as well as PyVista installed
 in your environment.
 
+pyvista version >=0.37.0 required.
 
 Installation
 ------------
-
 You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
 
     $ pip install pytest-pyvista
@@ -76,7 +74,6 @@ If you need to use any flag inside the tests, you need to use the
         pl.show()
 
 
-
 Global flags
 ------------
 These are the flags you can use when calling ``pytest`` in the command line:
@@ -94,22 +91,32 @@ These are the flags you can use when calling ``pytest`` in the command line:
 
 Test specific flags
 -------------------
-These are attributes of `verify_image_cache`. You can set them as `True` if needed in the beginning of your test function.
+These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
+in the beginning of your test function.
 
-* high_variance_tests: If necessary, the threshold for determining if a test
+* ``high_variance_tests``: If necessary, the threshold for determining if a test
   will pass or not is incremented to another predetermined threshold. This is
   currently done due to the use of an unstable version of VTK, in stable
   versions this shouldn't be necessary.
 
-* windows_skip_image_cache: For test where the plotting in Windows is different
+* ``windows_skip_image_cache``: For test where the plotting in Windows is different
   from MacOS/Linux.
 
-* macos_skip_image_cache: For test where the plotting in MacOS is different
+* ``macos_skip_image_cache``: For test where the plotting in MacOS is different
   from Windows/Linux.
 
-* skip: If you have a test that plots a figure, but you don't want to compare
+* ``skip``: If you have a test that plots a figure, but you don't want to compare
   its output against the cache, you can skip it with this flag.
 
+Configuration
+-------------
+If using ``pyproject.toml``, consider configuring your test directory location to
+avoid passing command line arguments when calling ``pytest``
+
+.. code::
+
+   [tool.pytest.ini_options]
+   addopts = '--image_cache_dir ./tests/plotting/image_cache'
 
 Contributing
 ------------
@@ -118,14 +125,12 @@ the coverage at least stays the same before you submit a pull request.
 
 License
 -------
-
 Distributed under the terms of the `MIT`_ license, ``pytest-pyvista`` is free
 and open source software.
 
 
 Issues
 ------
-
 If you encounter any problems, please `file an issue`_ along with a detailed
 description.
 
