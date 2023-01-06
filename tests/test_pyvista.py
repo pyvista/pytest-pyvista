@@ -8,6 +8,7 @@ pv.OFF_SCREEN = True
 skip_vtk8 = pytest.mark.skipif(pv.vtk_version_info < (9,), reason="vtk8 not supported")
 skip_vtk9 = pytest.mark.skipif(pv.vtk_version_info >= (9,), reason="vtk8 only test")
 
+
 @skip_vtk8
 def test_arguments(testdir):
     """Test pytest arguments"""
@@ -189,6 +190,49 @@ def test_high_variance_test(testdir):
     result = testdir.runpytest("--fail_extra_image_cache", "test_file2.py")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
+
+@skip_vtk8
+def test_generated_image_dir_commandline(testdir):
+    """Test setting generated_image_dir via CLI option."""
+    make_cached_images(testdir.tmpdir)
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--fail_extra_image_cache", "--generated_image_dir", "gen_dir")
+    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+@skip_vtk8
+def test_add_missing_images_commandline(testdir):
+    """Test setting add_missing_images via CLI option."""
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--add_missing_images")
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "image_cache_dir", "imcache.png"))
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
 @skip_vtk9
 def test_skip_vtk8_commandline(testdir):
     """Test skip vtk8 via CLI option."""
@@ -201,7 +245,6 @@ def test_skip_vtk8_commandline(testdir):
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
-
             plotter.show()
         """
     )
