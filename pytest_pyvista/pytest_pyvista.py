@@ -68,17 +68,23 @@ class VerifyImageCache:
     test_name : str
         Name of test to save.  It is used to define the name of image cache file.
 
-    error_value : int
+    cache_dir : str
+        Directory for image cache comparisons.
+
+    error_value : float, default: 500
         Threshold value for determining if two images are not similar enough in a test.
 
-    warning_value : int
+    warning_value : float, default: 200
         Threshold value to warn that two images are different but not enough to fail the test.
 
-    var_error_value : int
+    var_error_value : float, default: 1000
         Same as error_value but for high variance tests.
 
-    var_warning_value : int
-        same as warning_value but for high variance tests.
+    var_warning_value : float, default 1000
+        Same as warning_value but for high variance tests.
+        
+    generated_image_dir : str, optional
+        Directory to save generated images.  If not specified, no generated images are saved.
     """
 
     reset_image_cache = False
@@ -92,10 +98,10 @@ class VerifyImageCache:
         test_name,
         cache_dir,
         *,
-        error_value=500,
-        warning_value=200,
-        var_error_value=1000,
-        var_warning_value=1000,
+        error_value=500.,
+        warning_value=200.,
+        var_error_value=1000.,
+        var_warning_value=1000.,
         generated_image_dir=None,
     ):
         self.test_name = test_name
