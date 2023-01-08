@@ -35,7 +35,7 @@ tests = [
     "pytest>=3.5.0",
     "pytest-cov==4.0.0",
     "pyvista",
-    "numpy<1.24",
+    "numpy<1.25",
 ]
 docs = [
     "pydata-sphinx-theme==0.12.0",
