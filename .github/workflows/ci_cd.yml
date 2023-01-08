@@ -18,13 +18,13 @@ env:
   SHELLOPTS: 'errexit:pipefail'
 
 jobs:
-  Build-Docs
-    name: Build documentation
-    runs-on: ubuntu-latest
+  doc:
+    name: Build Documentation
+    runs-on: ubuntu-20.04
     steps:
-      -uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
