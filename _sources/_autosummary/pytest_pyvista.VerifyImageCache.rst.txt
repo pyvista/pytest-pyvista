@@ -1,0 +1,32 @@
+﻿pytest\_pyvista.VerifyImageCache
+================================
+
+.. currentmodule:: pytest_pyvista
+
+.. autoclass:: VerifyImageCache
+
+   
+   .. automethod:: __init__
+
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+   
+      ~VerifyImageCache.__init__
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~VerifyImageCache.add_missing_images
+      ~VerifyImageCache.fail_extra_image_cache
+      ~VerifyImageCache.ignore_image_cache
+      ~VerifyImageCache.reset_image_cache
+      ~VerifyImageCache.skip_image_cache_vtk8
+   
+   
