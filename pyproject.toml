@@ -17,6 +17,7 @@ classifiers=[
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Operating System :: OS Independent",
     "License :: OSI Approved :: MIT License",
 ]
@@ -36,7 +37,24 @@ tests = [
     "pyvista",
     "numpy<1.24",
 ]
+docs = [
+    "pydata-sphinx-theme==0.12.0",
+    "sphinx_copybutton==0.5.1",
+    "sphinx-notfound-page==0.8.3",
+]
 
 [project.entry-points."pytest11"]
 # Location of the plugin module, in this case ./pytest_pyvista/pytest_pyvista.py
 pyvista = "pytest_pyvista.pytest_pyvista"
+
+[tool.isort]
+profile = 'black'
+line_length = 100
+# Sort by name, don't cluster "from" vs "import"
+force_sort_within_sections = true
+# Combines "as" imports on the same line
+combine_as_imports = true
+skip_glob = 'pytest-pyvista/__init__.py'
+
+[tool.mypy]
+ignore_missing_imports = true
