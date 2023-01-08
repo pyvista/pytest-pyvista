@@ -49,8 +49,6 @@ jobs:
       - name: Deploy on release
         uses: peaceiris/actions-gh-pages@v3
         with:
-          external_repository: pyvista/pyvista-docs
-          personal_token: ${{ secrets.PYVISTA_BOT_TOKEN }}
           publish_dir: doc/_build/html/
 
   Linux:
