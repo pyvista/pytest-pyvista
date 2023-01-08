@@ -44,9 +44,8 @@ jobs:
           make -C doc html
           touch doc/_build/html/.nojekyll
 
-      # todo: add next line back in
-      #  if: startsWith(github.ref, 'refs/tags/v')
       - name: Deploy on release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
