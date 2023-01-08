@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+"""pytest-pyvista module."""
 
 import os
 import pathlib
@@ -66,16 +66,19 @@ class VerifyImageCache:
     Parameters
     ----------
     test_name : str
-        Name of test to save.  It is used to define the name of image cache file.
+        Name of test to save.  It is used to define the name of image cache
+        file.
 
     cache_dir : str
         Directory for image cache comparisons.
 
     error_value : float, default: 500
-        Threshold value for determining if two images are not similar enough in a test.
+        Threshold value for determining if two images are not similar enough in
+        a test.
 
     warning_value : float, default: 200
-        Threshold value to warn that two images are different but not enough to fail the test.
+        Threshold value to warn that two images are different but not enough to
+        fail the test.
 
     var_error_value : float, default: 1000
         Same as error_value but for high variance tests.
@@ -84,7 +87,23 @@ class VerifyImageCache:
         Same as warning_value but for high variance tests.
         
     generated_image_dir : str, optional
-        Directory to save generated images.  If not specified, no generated images are saved.
+        Directory to save generated images.  If not specified, no generated
+        images are saved.
+
+    Examples
+    --------
+    Create an image cache directory named image_cache and check a simple
+    plotter against it. Since ``image_cache`` doesn't exist, it will be created
+    and basic.png will be added to it. Subsequent calls to ``verif`` will
+    compare the plotter against the cached image.
+
+    >>> import pyvista as pv
+    >>> from pytest_pyvista import VerifyImageCache
+    >>> pl = pv.Plotter(off_screen=True)
+    >>> pl.add_mesh(pv.Sphere())
+    >>> verif = VerifyImageCache('test_basic', 'image_cache')
+    >>> verif(pl)
+
     """
 
     reset_image_cache = False

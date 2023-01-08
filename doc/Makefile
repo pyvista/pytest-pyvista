@@ -50,6 +50,7 @@ help:
 
 clean:
 	rm -rf $(BUILDDIR)/*
+	find . -type d -name "_autosummary" -exec rm -rf {} +
 
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
