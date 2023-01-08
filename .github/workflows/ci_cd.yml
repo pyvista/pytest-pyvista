@@ -40,7 +40,7 @@ jobs:
           version: 3.0
 
       - name: Build Documentation
-        run:
+        run: |
           make -C doc html
           touch doc/_build/html/.nojekyll
 
