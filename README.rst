@@ -1,7 +1,6 @@
 ==============
 pytest-pyvista
 ==============
-
 .. image:: https://img.shields.io/pypi/v/pytest-pyvista.svg
     :target: https://pypi.org/project/pytest-pyvista
     :alt: PyPI version
@@ -10,9 +9,9 @@ pytest-pyvista
     :target: https://pypi.org/project/pytest-pyvista
     :alt: Python versions
 
-.. image:: https://ci.appveyor.com/api/projects/status/github/pyvista/pytest-pyvista?branch=master
-    :target: https://ci.appveyor.com/project/pyvista/pytest-pyvista/branch/master
-    :alt: See Build Status on AppVeyor
+.. image:: https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml/badge.svg
+    :target: https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml
+    :alt: GitHub Actions: Unit Testing and Deployment
 
 Plugin to test PyVista plot outputs.
 
@@ -24,7 +23,6 @@ This `pytest`_ plugin was generated with `Cookiecutter`_ along with
 
 Features
 --------
-
 This plugin facilitates the comparison of the images produced by `PyVista`. It
 generates a cache of images from the tests, using the `PyVista` plotting
 function in its first execution. Then, further executions will compare its
@@ -39,10 +37,10 @@ Requirements
 You must have a Python version greater than 3.7, as well as PyVista installed
 in your environment.
 
+pyvista version >=0.37.0 required.
 
 Installation
 ------------
-
 You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
 
     $ pip install pytest-pyvista
@@ -53,18 +51,27 @@ Usage
 Once installed, you only need to use the command `pl.show()` in your test. The
 plugin will automatically manage the cache generation if it does not exist, and
 the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading
-PyVista, so the `pl.show()` doesn't pop up any window while testing::
+PyVista, so the `pl.show()` doesn't pop up any window while testing.  By default,
+the verify_image_cache fixture should be used for each test for image comparison::
 
     import pyvista as pv
     pv.OFF_SCREEN = True
-    def test_succeeds():
+    def test_succeeds(verify_image_cache):
         pl = pyvista.Plotter()
         pl.add_mesh(pyvista.Sphere(), show_edges=True)
         pl.show()
 
 
-If you need to use any flag inside the tests, you need to use the
-`verify_image_cache` fixture as a parameter to the test::
+If most tests utilize this functionality, possibly restricted to a module,
+a wrapped version could be used::
+
+    @pytest.fixture(autouse=True)
+    def wrapped_verify_image_cache(verify_image_cache):
+        return verify_image_cache
+
+
+If you need to use any flag inside the tests, you can modify the
+`verify_image_cache` object in the test::
 
 
     import pyvista as pv
@@ -76,7 +83,6 @@ If you need to use any flag inside the tests, you need to use the
         pl.show()
 
 
-
 Global flags
 ------------
 These are the flags you can use when calling ``pytest`` in the command line:
@@ -85,31 +91,53 @@ These are the flags you can use when calling ``pytest`` in the command line:
   ``tests/plotting/test_plotting.py`` and is not recommended except for
   testing or for potentially a major or minor release. 
 
-* You can use ``--ignore_image_cache`` if you are running on Linux and want to
-  temporarily ignore regression testing. Realize that regression testing will
-  still occur on our CI testing.
+* You can use ``--ignore_image_cache`` if you want to
+  temporarily ignore regression testing, e.g. on a particular CI action.
 
 * When using ``--fail_extra_image_cache`` if there is an extra image in the
   cache, it will report as an error.
+  
+* ``--generated_image_dir <DIR>`` dumps all generated test images into <DIR>.
+
+* ``--add_missing_image`` adds any missing images from the test run to the cache.
+
+* ``--skip_image_cache_vtk8`` allows for skipping all tests if vtk==8.x is being used.
+  Otherwise, an error is raised by default.
+  
+* ``--image_cache_dir <DIR>`` sets the image cache dir.  This will override any
+  configuration, see below.
 
 Test specific flags
 -------------------
-These are attributes of `verify_image_cache`. You can set them as `True` if needed in the beginning of your test function.
+These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
+in the beginning of your test function.
 
-* high_variance_tests: If necessary, the threshold for determining if a test
+* ``high_variance_test``: If necessary, the threshold for determining if a test
   will pass or not is incremented to another predetermined threshold. This is
   currently done due to the use of an unstable version of VTK, in stable
   versions this shouldn't be necessary.
 
-* windows_skip_image_cache: For test where the plotting in Windows is different
+* ``windows_skip_image_cache``: For test where the plotting in Windows is different
   from MacOS/Linux.
 
-* macos_skip_image_cache: For test where the plotting in MacOS is different
+* ``macos_skip_image_cache``: For test where the plotting in MacOS is different
   from Windows/Linux.
 
-* skip: If you have a test that plots a figure, but you don't want to compare
+* ``skip``: If you have a test that plots a figure, but you don't want to compare
   its output against the cache, you can skip it with this flag.
 
+Configuration
+-------------
+If using ``pyproject.toml`` or any other 
+`pytest configuration <https://docs.pytest.org/en/latest/reference/customize.html>`_
+section, consider configuring your test directory location to
+avoid passing command line arguments when calling ``pytest``, for example in
+``pyproject.toml``
+
+.. code::
+
+   [tool.pytest.ini_options]
+   image_cache_dir = "tests/plotting/image_cache"
 
 Contributing
 ------------
@@ -118,14 +146,12 @@ the coverage at least stays the same before you submit a pull request.
 
 License
 -------
-
 Distributed under the terms of the `MIT`_ license, ``pytest-pyvista`` is free
 and open source software.
 
 
 Issues
 ------
-
 If you encounter any problems, please `file an issue`_ along with a detailed
 description.
 
