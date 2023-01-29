@@ -265,6 +265,7 @@ def test_skip_vtk8_commandline(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
+@skip_vtk8
 def test_reset_image_cache(testdir):
     """Test skip vtk8 via CLI option."""
     filename = make_cached_images(testdir.tmpdir)
