@@ -99,7 +99,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
   
 * ``--generated_image_dir <DIR>`` dumps all generated test images into <DIR>.
 
-* ``--add_missing_image`` adds any missing images from the test run to the cache.
+* ``--add_missing_images`` adds any missing images from the test run to the cache.
 
 * ``--skip_image_cache_vtk8`` allows for skipping all tests if vtk==8.x is being used.
   Otherwise, an error is raised by default.
