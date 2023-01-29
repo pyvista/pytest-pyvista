@@ -197,10 +197,18 @@ class VerifyImageCache:
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
         image_filename = os.path.join(self.cache_dir, test_name[5:] + ".png")
-        if not os.path.isfile(image_filename) and self.fail_extra_image_cache:
+        if (
+            not os.path.isfile(image_filename)
+            and self.fail_extra_image_cache
+            and not self.reset_image_cache
+        ):
             raise RuntimeError(f"{image_filename} does not exist in image cache")
 
-        if self.add_missing_images and not os.path.isfile(image_filename):
+        if (
+            self.add_missing_images
+            and not os.path.isfile(image_filename)
+            or self.reset_image_cache
+        ):
             plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:

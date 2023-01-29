@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import filecmp
 import os
 
 import pytest
@@ -36,7 +37,9 @@ def make_cached_images(test_path, path="image_cache_dir", name="imcache.png"):
     sphere = pv.Sphere()
     plotter = pv.Plotter()
     plotter.add_mesh(sphere, color="red")
-    plotter.screenshot(os.path.join(d, name))
+    filename = os.path.join(d, name)
+    plotter.screenshot(filename)
+    return filename
 
 
 @skip_vtk8
@@ -259,4 +262,29 @@ def test_skip_vtk8_commandline(testdir):
     result.stdout.fnmatch_lines("*Image cache is only valid for VTK9+*")
 
     result = testdir.runpytest("--fail_extra_image_cache", "--skip_image_cache_vtk8")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+@skip_vtk8
+def test_reset_image_cache(testdir):
+    """Test skip vtk8 via CLI option."""
+    filename = make_cached_images(testdir.tmpdir)
+    filename_original = make_cached_images(testdir.tmpdir, name="original.png")
+    assert filecmp.cmp(filename, filename_original, shallow=False)
+
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="blue")
+            plotter.show()
+        """
+    )
+    result = testdir.runpytest("--fail_extra_image_cache", "--reset_image_cache")
+    # file was overwritten
+    assert not filecmp.cmp(filename, filename_original, shallow=False)
+    # should pass even if image doesn't match
     result.stdout.fnmatch_lines("*[Pp]assed*")
