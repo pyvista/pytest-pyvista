@@ -101,9 +101,6 @@ These are the flags you can use when calling ``pytest`` in the command line:
 
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 
-* ``--skip_image_cache_vtk8`` allows for skipping all tests if vtk==8.x is being used.
-  Otherwise, an error is raised by default.
-  
 * ``--image_cache_dir <DIR>`` sets the image cache dir.  This will override any
   configuration, see below.
 
