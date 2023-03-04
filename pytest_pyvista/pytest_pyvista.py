@@ -6,7 +6,6 @@ import warnings
 
 import pytest
 import pyvista
-from pyvista._vtk import VTK9
 
 
 def pytest_addoption(parser):
@@ -35,11 +34,6 @@ def pytest_addoption(parser):
         "--add_missing_images",
         action="store_true",
         help="Adds images to cache if missing.",
-    )
-    group.addoption(
-        "--skip_image_cache_vtk8",
-        action="store_true",
-        help="Skips image cache testing for vtk8.",
     )
     group.addoption(
         "--image_cache_dir",
@@ -109,7 +103,6 @@ class VerifyImageCache:
     ignore_image_cache = False
     fail_extra_image_cache = False
     add_missing_images = False
-    skip_image_cache_vtk8 = False
 
     def __init__(
         self,
@@ -164,12 +157,6 @@ class VerifyImageCache:
         """
         if self.skip:
             return
-
-        if not VTK9:
-            if self.skip_image_cache_vtk8:
-                return
-            else:
-                raise RuntimeError("Image cache is only valid for VTK9+")
 
         if self.ignore_image_cache:
             return
@@ -242,9 +229,6 @@ def verify_image_cache(request, pytestconfig):
         "fail_extra_image_cache"
     )
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
-    VerifyImageCache.skip_image_cache_vtk8 = pytestconfig.getoption(
-        "skip_image_cache_vtk8"
-    )
 
     cache_dir = pytestconfig.getoption("image_cache_dir")
     if cache_dir is None:
