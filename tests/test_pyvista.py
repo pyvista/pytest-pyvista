@@ -2,15 +2,11 @@
 import filecmp
 import os
 
-import pytest
 import pyvista as pv
 
 pv.OFF_SCREEN = True
-skip_vtk8 = pytest.mark.skipif(pv.vtk_version_info < (9,), reason="vtk8 not supported")
-skip_vtk9 = pytest.mark.skipif(pv.vtk_version_info >= (9,), reason="vtk8 only test")
 
 
-@skip_vtk8
 def test_arguments(testdir):
     """Test pytest arguments"""
     testdir.makepyfile(
@@ -28,7 +24,6 @@ def test_arguments(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk8
 def make_cached_images(test_path, path="image_cache_dir", name="imcache.png"):
     """Makes image cache in `test_path/path`."""
     d = os.path.join(test_path, path)
@@ -42,7 +37,6 @@ def make_cached_images(test_path, path="image_cache_dir", name="imcache.png"):
     return filename
 
 
-@skip_vtk8
 def test_verify_image_cache(testdir):
     """Test regular usage of the `verify_image_cache` fixture"""
     make_cached_images(testdir.tmpdir)
@@ -62,7 +56,6 @@ def test_verify_image_cache(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk8
 def test_verify_image_cache_fail_regression(testdir):
     """Test regression of the `verify_image_cache` fixture"""
     make_cached_images(testdir.tmpdir)
@@ -84,7 +77,6 @@ def test_verify_image_cache_fail_regression(testdir):
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
 
 
-@skip_vtk8
 def test_skip(testdir):
     """Test `skip` flag of `verify_image_cache`"""
     make_cached_images(testdir.tmpdir)
@@ -106,7 +98,6 @@ def test_skip(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk8
 def test_image_cache_dir_commandline(testdir):
     """Test setting image_cache_dir via CLI option."""
     make_cached_images(testdir.tmpdir, "newdir")
@@ -128,7 +119,6 @@ def test_image_cache_dir_commandline(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk8
 def test_image_cache_dir_ini(testdir):
     """Test setting image_cache_dir via config."""
     make_cached_images(testdir.tmpdir, "newdir")
@@ -153,7 +143,6 @@ def test_image_cache_dir_ini(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk8
 def test_high_variance_test(testdir):
     """Test `skip` flag of `verify_image_cache`"""
     make_cached_images(testdir.tmpdir)
@@ -196,7 +185,6 @@ def test_high_variance_test(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk8
 def test_generated_image_dir_commandline(testdir):
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(testdir.tmpdir)
@@ -220,7 +208,6 @@ def test_generated_image_dir_commandline(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk8
 def test_add_missing_images_commandline(testdir):
     """Test setting add_missing_images via CLI option."""
     testdir.makepyfile(
@@ -242,32 +229,8 @@ def test_add_missing_images_commandline(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-@skip_vtk9
-def test_skip_vtk8_commandline(testdir):
-    """Test skip vtk8 via CLI option."""
-    make_cached_images(testdir.tmpdir)
-    testdir.makepyfile(
-        """
-        import pyvista as pv
-        pv.OFF_SCREEN = True
-        def test_imcache(verify_image_cache):
-            sphere = pv.Sphere()
-            plotter = pv.Plotter()
-            plotter.add_mesh(sphere, color="red")
-            plotter.show()
-        """
-    )
-    result = testdir.runpytest("--fail_extra_image_cache")
-    result.stdout.fnmatch_lines("*[Ff]ailed*")
-    result.stdout.fnmatch_lines("*Image cache is only valid for VTK9+*")
-
-    result = testdir.runpytest("--fail_extra_image_cache", "--skip_image_cache_vtk8")
-    result.stdout.fnmatch_lines("*[Pp]assed*")
-
-
-@skip_vtk8
 def test_reset_image_cache(testdir):
-    """Test skip vtk8 via CLI option."""
+    """Test reset_image_cache  via CLI option."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
     assert filecmp.cmp(filename, filename_original, shallow=False)
