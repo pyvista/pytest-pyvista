@@ -6,7 +6,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
-    <title>pytest-pyvista &#8212; pytest-pyvista 0.1.6 documentation</title>
+    <title>pytest-pyvista &#8212; pytest-pyvista 0.1.7 documentation</title>
   
   
   
@@ -361,7 +361,7 @@ fail.</p>
 <h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this heading">#</a></h2>
 <p>You must have a Python version greater than 3.7, as well as PyVista installed
 in your environment.</p>
-<p>pyvista version &gt;=0.37.0 required.</p>
+<p>pyvista version &gt;=0.37.0 and vtk version &gt;=9.0.0 required.</p>
 </section>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">#</a></h2>
@@ -417,8 +417,6 @@ temporarily ignore regression testing, e.g. on a particular CI action.</p></li>
 cache, it will report as an error.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--generated_image_dir</span> <span class="pre">&lt;DIR&gt;</span></code> dumps all generated test images into &lt;DIR&gt;.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--add_missing_images</span></code> adds any missing images from the test run to the cache.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--skip_image_cache_vtk8</span></code> allows for skipping all tests if vtk==8.x is being used.
-Otherwise, an error is raised by default.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--image_cache_dir</span> <span class="pre">&lt;DIR&gt;</span></code> sets the image cache dir.  This will override any
 configuration, see below.</p></li>
 </ul>
