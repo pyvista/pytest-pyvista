@@ -164,6 +164,14 @@ jobs:
         run: pip install -v -r requirements_test.txt
         working-directory: pyvista
   
+      - name: Software Report
+        run: |
+          xvfb-run python -c "import pyvista; print(pyvista.Report()); from pyvista import examples; print('User data path:', examples.USER_DATA_PATH)"
+          which python
+          pip list
+        working-directory: pyvista
+  
       - name: Unit Testing
         run: xvfb-run python -m pytest --cov=pyvista --fail_extra_image_cache --cov-report=xml -v
+        working-directory: pyvista
     
