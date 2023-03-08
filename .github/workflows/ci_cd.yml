@@ -142,3 +142,28 @@ jobs:
           files: |
             ./**/*.whl
             ./**/*.tar.gz
+
+  downstream:
+    name: Downstream tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch
+
+      - name: Install pytest-pyvista
+        run: pip install -ve .
+  
+      - name: Install pyvista
+        run: pip install -ve .
+        working-directory: pyvista
+      - name: Install pyvista test requirements
+        run: pip install -v requirements_test.txt
+        working-directory: pyvista
+  
+      - name: Unit Testing
+        run: xvfb-run python -m pytest --cov=pyvista --fail_extra_image_cache --cov-report=xml -v
+    
