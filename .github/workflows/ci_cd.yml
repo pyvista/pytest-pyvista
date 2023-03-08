@@ -161,7 +161,7 @@ jobs:
         run: pip install -ve .
         working-directory: pyvista
       - name: Install pyvista test requirements
-        run: pip install -v requirements_test.txt
+        run: pip install -v -r requirements_test.txt
         working-directory: pyvista
   
       - name: Unit Testing
