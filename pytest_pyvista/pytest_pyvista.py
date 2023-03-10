@@ -246,7 +246,6 @@ def verify_image_cache(request, pytestconfig):
     pyvista.global_theme.before_close_callback = verify_image_cache
 
     def reset():
-
         pyvista.global_theme.before_close_callback = None
 
     request.addfinalizer(reset)
