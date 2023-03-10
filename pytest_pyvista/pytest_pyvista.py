@@ -189,6 +189,8 @@ class VerifyImageCache:
             and self.fail_extra_image_cache
             and not self.reset_image_cache
         ):
+            # Make sure this doesn't get called again if this plotter doesn't close properly
+            plotter._before_close_callback = None
             raise RuntimeError(f"{image_filename} does not exist in image cache")
 
         if (
@@ -206,6 +208,8 @@ class VerifyImageCache:
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
+            # Make sure this doesn't get called again if this plotter doesn't close properly
+            plotter._before_close_callback = None
             raise RuntimeError(
                 f"{test_name} Exceeded image regression error of "
                 f"{allowed_error} with an image error equal to: {error}"
