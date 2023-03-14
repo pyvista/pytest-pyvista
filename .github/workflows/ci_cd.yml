@@ -145,7 +145,7 @@ jobs:
 
   downstream:
     name: Downstream tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04  # matching pyvista
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
