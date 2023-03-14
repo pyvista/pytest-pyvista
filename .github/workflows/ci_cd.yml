@@ -145,12 +145,12 @@ jobs:
 
   downstream:
     name: Downstream tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04  # matching pyvista
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch maint/try-yielding-verify-image-cache --single-branch
   
@@ -170,6 +170,12 @@ jobs:
         working-directory: pyvista
   
       - name: Unit Testing
-        run: xvfb-run python -m pytest --fail_extra_image_cache -v tests/plotting/test_plotting.py
+        run: xvfb-run python -m pytest --fail_extra_image_cache -v --generated_image_dir gen_dir tests/plotting/test_plotting.py
         working-directory: pyvista
-    
+        
+      - name: Upload generated image artifact
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: generated_images
+          path: pyvista/gen_dir
