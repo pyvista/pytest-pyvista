@@ -152,7 +152,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch maint/try-yielding-verify-image-cache --single-branch
+      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch
   
       - name: Install pyvista
         run: pip install -ve .
