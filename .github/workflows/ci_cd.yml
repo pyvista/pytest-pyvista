@@ -173,7 +173,9 @@ jobs:
         run: xvfb-run python -m pytest --fail_extra_image_cache -v --generated_image_dir gen_dir tests/plotting/test_plotting.py
         working-directory: pyvista
         
-      - uses: actions/upload-artifact@v3
+      - name: Upload generated image artifact
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v3
         with:
           name: generated_images
           path: pyvista/gen_dir
