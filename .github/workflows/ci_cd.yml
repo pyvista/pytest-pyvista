@@ -142,3 +142,40 @@ jobs:
           files: |
             ./**/*.whl
             ./**/*.tar.gz
+
+  downstream:
+    name: Downstream tests
+    runs-on: ubuntu-20.04  # matching pyvista
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch
+  
+      - name: Install pyvista
+        run: pip install -ve .
+        working-directory: pyvista
+      - name: Install pyvista test requirements
+        run: pip install -v -r requirements_test.txt
+        working-directory: pyvista
+      - name: Install pytest-pyvista
+        run: pip install -ve .
+      - name: Software Report
+        run: |
+          xvfb-run python -c "import pyvista; print(pyvista.Report()); from pyvista import examples; print('User data path:', examples.USER_DATA_PATH)"
+          which python
+          pip list
+        working-directory: pyvista
+  
+      - name: Unit Testing
+        run: xvfb-run python -m pytest --fail_extra_image_cache -v --generated_image_dir gen_dir tests/plotting/test_plotting.py
+        working-directory: pyvista
+        
+      - name: Upload generated image artifact
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: generated_images
+          path: pyvista/gen_dir
