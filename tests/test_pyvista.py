@@ -251,3 +251,33 @@ def test_reset_image_cache(testdir):
     assert not filecmp.cmp(filename, filename_original, shallow=False)
     # should pass even if image doesn't match
     result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+def test_cleanup(testdir):
+    """Test cleanup of the `verify_image_cache` fixture."""
+    make_cached_images(testdir.tmpdir)
+    testdir.makepyfile(
+        """
+       import pytest
+       import pyvista as pv
+       pv.OFF_SCREEN = True
+
+       @pytest.fixture()
+       def cleanup_tester():
+           yield
+           assert pv.global_theme.before_close_callback is None
+
+       def test_imcache(cleanup_tester, verify_image_cache):
+           sphere = pv.Sphere()
+           plotter = pv.Plotter()
+           plotter.add_mesh(sphere, color="blue")
+           try:
+               plotter.show()
+           except RuntimeError:
+               # continue so the cleanup is tested
+               pass
+       """
+    )
+
+    result = testdir.runpytest("--fail_extra_image_cache")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
