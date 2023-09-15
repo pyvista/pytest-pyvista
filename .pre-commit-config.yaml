@@ -1,3 +1,7 @@
+ci:
+  autofix_prs: false
+  autoupdate_schedule: monthly
+
 repos:
 - repo: https://github.com/psf/black
   rev: 23.9.1
