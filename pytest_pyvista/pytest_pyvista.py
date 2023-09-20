@@ -7,14 +7,17 @@ import warnings
 import pytest
 import pyvista
 
+
 class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria"""
+
     def __init__(self, msg):
         super().__init__(self, msg)
 
 
 class RegressionFileNotFound(FileNotFoundError):
     """Error when regression file is not found"""
+
     def __init__(self, msg):
         super().__init__(self, msg)
 
@@ -202,7 +205,9 @@ class VerifyImageCache:
         ):
             # Make sure this doesn't get called again if this plotter doesn't close properly
             plotter._before_close_callback = None
-            raise RegressionFileNotFound(f"{image_filename} does not exist in image cache")
+            raise RegressionFileNotFound(
+                f"{image_filename} does not exist in image cache"
+            )
 
         if (
             self.add_missing_images
