@@ -45,6 +45,11 @@ def pytest_addoption(parser):
         default="image_cache_dir",
         help="Path to the image cache folder.",
     )
+    group.addoption(
+        "--reset_only_failed",
+        action="store_true",
+        help="Reset only the failed images in the PyVista cache.",
+    )
 
 
 class VerifyImageCache:
