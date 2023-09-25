@@ -119,7 +119,7 @@ class VerifyImageCache:
         var_error_value=1000.0,
         var_warning_value=1000.0,
         generated_image_dir=None,
-        reset_only_failed=False
+        reset_only_failed=False,
     ):
         self.test_name = test_name
 
@@ -202,13 +202,10 @@ class VerifyImageCache:
             raise RuntimeError(f"{image_filename} does not exist in image cache")
 
         if (
-            (
-                self.add_missing_images
-                and not os.path.isfile(image_filename)
-                or self.reset_image_cache
-            )
-            and not self.reset_only_failed
-        ):
+            self.add_missing_images
+            and not os.path.isfile(image_filename)
+            or self.reset_image_cache
+        ) and not self.reset_only_failed:
             plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:
