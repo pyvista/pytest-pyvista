@@ -114,6 +114,7 @@ class VerifyImageCache:
         var_error_value=1000.0,
         var_warning_value=1000.0,
         generated_image_dir=None,
+        reset_only_failed=False
     ):
         self.test_name = test_name
 
@@ -129,6 +130,7 @@ class VerifyImageCache:
         self.warning_value = warning_value
         self.var_error_value = var_error_value
         self.var_warning_value = var_warning_value
+        self.reset_only_failed = reset_only_failed
 
         self.generated_image_dir = generated_image_dir
         if self.generated_image_dir is not None and not os.path.isdir(
@@ -183,7 +185,8 @@ class VerifyImageCache:
 
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
-        image_filename = os.path.join(self.cache_dir, test_name[5:] + ".png")
+        image_name = test_name[5:] + ".png"
+        image_filename = os.path.join(self.cache_dir, image_name)
         if (
             not os.path.isfile(image_filename)
             and self.fail_extra_image_cache
@@ -194,9 +197,12 @@ class VerifyImageCache:
             raise RuntimeError(f"{image_filename} does not exist in image cache")
 
         if (
-            self.add_missing_images
-            and not os.path.isfile(image_filename)
-            or self.reset_image_cache
+            (
+                self.add_missing_images
+                and not os.path.isfile(image_filename)
+                or self.reset_image_cache
+            )
+            and not self.reset_only_failed
         ):
             plotter.screenshot(image_filename)
 
@@ -205,15 +211,19 @@ class VerifyImageCache:
                 self.generated_image_dir, test_name[5:] + ".png"
             )
             plotter.screenshot(gen_image_filename)
+
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
-            # Make sure this doesn't get called again if this plotter doesn't close properly
-            plotter._before_close_callback = None
-            raise RuntimeError(
-                f"{test_name} Exceeded image regression error of "
-                f"{allowed_error} with an image error equal to: {error}"
-            )
+            if self.reset_only_failed:
+                plotter.screenshot(image_filename)
+            else:
+                # Make sure this doesn't get called again if this plotter doesn't close properly
+                plotter._before_close_callback = None
+                raise RuntimeError(
+                    f"{test_name} Exceeded image regression error of "
+                    f"{allowed_error} with an image error equal to: {error}"
+                )
         if error > allowed_warning:
             warnings.warn(
                 f"{test_name} Exceeded image regression warning of "
