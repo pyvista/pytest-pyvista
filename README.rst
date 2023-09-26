@@ -13,6 +13,10 @@ pytest-pyvista
     :target: https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml
     :alt: GitHub Actions: Unit Testing and Deployment
 
+.. image:: https://raster.shields.io/badge/follows-NEP29-orange.png
+    :target: https://numpy.org/neps/nep-0029-deprecation_policy.html
+    :alt: NEP29 Compliance
+
 Plugin to test PyVista plot outputs.
 
 ----
