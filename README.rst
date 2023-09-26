@@ -34,7 +34,7 @@ fail.
 
 Requirements
 ------------
-You must have a Python version >= 3.8, as well as PyVista installed
+You must have a Python version >= 3.9, as well as PyVista installed
 in your environment.
 
 pyvista version >=0.37.0 and vtk version >=9.0.0 required.
