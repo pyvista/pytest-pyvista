@@ -217,7 +217,6 @@ class VerifyImageCache:
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
-            print("self.reset_only_failed", self.reset_only_failed)
             if self.reset_only_failed:
                 warnings.warn(
                     f"{test_name} Exceeded image regression error of "
