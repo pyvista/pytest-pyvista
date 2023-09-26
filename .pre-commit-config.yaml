@@ -63,3 +63,9 @@ repos:
   rev: 0.26.3
   hooks:
     - id: check-github-workflows
+
+- repo: https://github.com/abravalheri/validate-pyproject
+  rev: "v0.14"
+  hooks:
+    - id: validate-pyproject
+
