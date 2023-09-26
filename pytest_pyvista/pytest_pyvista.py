@@ -119,7 +119,7 @@ class VerifyImageCache:
         warning_value=200.0,
         var_error_value=1000.0,
         var_warning_value=1000.0,
-        generated_image_dir=None
+        generated_image_dir=None,
     ):
         self.test_name = test_name
 
@@ -191,7 +191,7 @@ class VerifyImageCache:
         # "test_" to get the name for the image.
         image_name = test_name[5:] + ".png"
         image_filename = os.path.join(self.cache_dir, image_name)
-        
+
         if (
             not os.path.isfile(image_filename)
             and self.fail_extra_image_cache
@@ -222,7 +222,8 @@ class VerifyImageCache:
                 warnings.warn(
                     f"{test_name} Exceeded image regression error of "
                     f"{allowed_error} with an image error equal to: {error}"
-                    f"\nThis image will be reset in the cache.")
+                    f"\nThis image will be reset in the cache."
+                )
                 plotter.screenshot(image_filename)
             else:
                 # Make sure this doesn't get called again if this plotter doesn't close properly

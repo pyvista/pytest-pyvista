@@ -282,6 +282,7 @@ def test_cleanup(testdir):
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
+
 def test_reset_only_failed(testdir):
     """Test usage of the `reset_only_failed` flag."""
     make_cached_images(testdir.tmpdir)
