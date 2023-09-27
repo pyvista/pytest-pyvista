@@ -285,7 +285,10 @@ def test_cleanup(testdir):
 
 def test_reset_only_failed(testdir):
     """Test usage of the `reset_only_failed` flag."""
-    make_cached_images(testdir.tmpdir)
+    filename = make_cached_images(testdir.tmpdir)
+    filename_original = make_cached_images(testdir.tmpdir, name="original.png")
+    assert filecmp.cmp(filename, filename_original, shallow=False)
+
     testdir.makepyfile(
         """
         import pyvista as pv
@@ -301,3 +304,5 @@ def test_reset_only_failed(testdir):
     result = testdir.runpytest("--reset_only_failed")
     result.stdout.fnmatch_lines("*[Pp]assed*")
     result.stdout.fnmatch_lines("*This image will be reset in the cache.")
+    # file was overwritten
+    assert not filecmp.cmp(filename, filename_original, shallow=False)
