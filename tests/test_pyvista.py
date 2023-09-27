@@ -281,3 +281,28 @@ def test_cleanup(testdir):
 
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+def test_reset_only_failed(testdir):
+    """Test usage of the `reset_only_failed` flag."""
+    filename = make_cached_images(testdir.tmpdir)
+    filename_original = make_cached_images(testdir.tmpdir, name="original.png")
+    assert filecmp.cmp(filename, filename_original, shallow=False)
+
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Box()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="blue")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--reset_only_failed")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.stdout.fnmatch_lines("*This image will be reset in the cache.")
+    # file was overwritten
+    assert not filecmp.cmp(filename, filename_original, shallow=False)
