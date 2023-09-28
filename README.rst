@@ -17,6 +17,10 @@ pytest-pyvista
     :target: https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml
     :alt: GitHub Actions: Unit Testing and Deployment
 
+.. image:: https://raster.shields.io/badge/follows-NEP29-orange.png
+    :target: https://numpy.org/neps/nep-0029-deprecation_policy.html
+    :alt: NEP29 Compliance
+
 Plugin to test PyVista plot outputs.
 
 ----
@@ -38,7 +42,7 @@ fail.
 
 Requirements
 ------------
-You must have a Python version >= 3.8, as well as PyVista installed
+You must have a Python version >= 3.9, as well as PyVista installed
 in your environment.
 
 pyvista version >=0.37.0 and vtk version >=9.0.0 required.
