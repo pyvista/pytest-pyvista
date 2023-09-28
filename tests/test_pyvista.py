@@ -75,7 +75,8 @@ def test_verify_image_cache_fail_regression(testdir):
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*[Ff]ailed*")
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
-    result.stdout.fnmatch_lines("pytest_pyvista.pytest_pyvista.RegressionError:")
+    result.stdout.fnmatch_lines("*pytest_pyvista.pytest_pyvista.RegressionError:*")
+    result.stdout.fnmatch_lines("*Exceeded image regression error of*")
 
 
 def test_skip(testdir):
