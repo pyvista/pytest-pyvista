@@ -104,6 +104,8 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * ``--image_cache_dir <DIR>`` sets the image cache dir.  This will override any
   configuration, see below.
 
+* ``--reset_only_failed`` reset the image cache of the failed tests only.
+
 Test specific flags
 -------------------
 These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
