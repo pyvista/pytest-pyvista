@@ -10,16 +10,12 @@ import pyvista
 
 class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria"""
-
-    def __init__(self, msg):
-        super().__init__(self, msg)
+    pass
 
 
 class RegressionFileNotFound(FileNotFoundError):
     """Error when regression file is not found"""
-
-    def __init__(self, msg):
-        super().__init__(self, msg)
+    pass
 
 
 def pytest_addoption(parser):
