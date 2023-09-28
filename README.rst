@@ -6,7 +6,7 @@ pytest-pyvista
     :alt: PyPI version
 
 .. image:: https://img.shields.io/conda/vn/conda-forge/pytest-pyvista?color=orange&label=conda-forge&logo=conda-forge&logoColor=white
-    :target: https://anaconda.org/conda-forge/geovista
+    :target: https://anaconda.org/conda-forge/pytest-pyvista
     :alt: conda-forge version
 
 .. image:: https://img.shields.io/pypi/pyversions/pytest-pyvista.svg?color=orange&logo=python&label=python&logoColor=white
