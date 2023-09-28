@@ -1,11 +1,15 @@
 ==============
 pytest-pyvista
 ==============
-.. image:: https://img.shields.io/pypi/v/pytest-pyvista.svg
+.. image:: https://img.shields.io/pypi/v/pytest-pyvista.svg?color=orange&label=pypi&logo=python&logoColor=white
     :target: https://pypi.org/project/pytest-pyvista
     :alt: PyPI version
 
-.. image:: https://img.shields.io/pypi/pyversions/pytest-pyvista.svg
+.. image:: https://img.shields.io/conda/vn/conda-forge/pytest-pyvista?color=orange&label=conda-forge&logo=conda-forge&logoColor=white
+    :target: https://anaconda.org/conda-forge/geovista
+    :alt: conda-forge version
+
+.. image:: https://img.shields.io/pypi/pyversions/pytest-pyvista.svg?color=orange&logo=python&label=python&logoColor=white
     :target: https://pypi.org/project/pytest-pyvista
     :alt: Python versions
 
@@ -45,6 +49,9 @@ You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
 
     $ pip install pytest-pyvista
 
+Alternatively, you can also install via `conda`_ or `mamba`_ from `conda-forge`_::
+
+    $ mamba install -c conda-forge pytest-pyvista
 
 Usage
 -----
@@ -164,3 +171,6 @@ description.
 .. _`tox`: https://tox.readthedocs.io/en/latest/
 .. _`pip`: https://pypi.org/project/pip/
 .. _`PyPI`: https://pypi.org/project
+.. _`conda`: https://github.com/conda/conda
+.. _`mamba`: https://github.com/mamba-org/mamba
+.. _`conda-forge`: https://anaconda.org/conda-forge/pytest-pyvista
