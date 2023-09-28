@@ -8,6 +8,18 @@ import pytest
 import pyvista
 
 
+class RegressionError(RuntimeError):
+    """Error when regression does not meet the criteria"""
+
+    pass
+
+
+class RegressionFileNotFound(FileNotFoundError):
+    """Error when regression file is not found"""
+
+    pass
+
+
 def pytest_addoption(parser):
     """Adds new flag options to the pyvista plugin."""
 
@@ -199,7 +211,9 @@ class VerifyImageCache:
         ):
             # Make sure this doesn't get called again if this plotter doesn't close properly
             plotter._before_close_callback = None
-            raise RuntimeError(f"{image_filename} does not exist in image cache")
+            raise RegressionFileNotFound(
+                f"{image_filename} does not exist in image cache"
+            )
 
         if (
             self.add_missing_images
@@ -227,7 +241,7 @@ class VerifyImageCache:
             else:
                 # Make sure this doesn't get called again if this plotter doesn't close properly
                 plotter._before_close_callback = None
-                raise RuntimeError(
+                raise RegressionError(
                     f"{test_name} Exceeded image regression error of "
                     f"{allowed_error} with an image error equal to: {error}"
                 )
