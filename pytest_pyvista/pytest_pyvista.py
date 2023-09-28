@@ -10,11 +10,13 @@ import pyvista
 
 class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria"""
+
     pass
 
 
 class RegressionFileNotFound(FileNotFoundError):
     """Error when regression file is not found"""
+
     pass
 
 
