@@ -122,6 +122,7 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
 
+
     def __init__(
         self,
         test_name,
