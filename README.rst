@@ -1,11 +1,15 @@
 ==============
 pytest-pyvista
 ==============
-.. image:: https://img.shields.io/pypi/v/pytest-pyvista.svg
+.. image:: https://img.shields.io/pypi/v/pytest-pyvista.svg?color=orange&label=pypi&logo=python&logoColor=white
     :target: https://pypi.org/project/pytest-pyvista
     :alt: PyPI version
 
-.. image:: https://img.shields.io/pypi/pyversions/pytest-pyvista.svg
+.. image:: https://img.shields.io/conda/vn/conda-forge/pytest-pyvista?color=orange&label=conda-forge&logo=conda-forge&logoColor=white
+    :target: https://anaconda.org/conda-forge/pytest-pyvista
+    :alt: conda-forge version
+
+.. image:: https://img.shields.io/pypi/pyversions/pytest-pyvista.svg?color=orange&logo=python&label=python&logoColor=white
     :target: https://pypi.org/project/pytest-pyvista
     :alt: Python versions
 
@@ -34,7 +38,7 @@ fail.
 
 Requirements
 ------------
-You must have a Python version greater than 3.7, as well as PyVista installed
+You must have a Python version >= 3.8, as well as PyVista installed
 in your environment.
 
 pyvista version >=0.37.0 and vtk version >=9.0.0 required.
@@ -45,6 +49,9 @@ You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
 
     $ pip install pytest-pyvista
 
+Alternatively, you can also install via `conda`_ or `mamba`_ from `conda-forge`_::
+
+    $ mamba install -c conda-forge pytest-pyvista
 
 Usage
 -----
@@ -103,6 +110,8 @@ These are the flags you can use when calling ``pytest`` in the command line:
 
 * ``--image_cache_dir <DIR>`` sets the image cache dir.  This will override any
   configuration, see below.
+
+* ``--reset_only_failed`` reset the image cache of the failed tests only.
 
 Test specific flags
 -------------------
@@ -164,3 +173,6 @@ description.
 .. _`tox`: https://tox.readthedocs.io/en/latest/
 .. _`pip`: https://pypi.org/project/pip/
 .. _`PyPI`: https://pypi.org/project
+.. _`conda`: https://github.com/conda/conda
+.. _`mamba`: https://github.com/mamba-org/mamba
+.. _`conda-forge`: https://anaconda.org/conda-forge/pytest-pyvista

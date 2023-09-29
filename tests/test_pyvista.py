@@ -75,6 +75,8 @@ def test_verify_image_cache_fail_regression(testdir):
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*[Ff]ailed*")
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
+    result.stdout.fnmatch_lines("*pytest_pyvista.pytest_pyvista.RegressionError:*")
+    result.stdout.fnmatch_lines("*Exceeded image regression error of*")
 
 
 def test_skip(testdir):
@@ -281,3 +283,47 @@ def test_cleanup(testdir):
 
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
+def test_reset_only_failed(testdir):
+    """Test usage of the `reset_only_failed` flag."""
+    filename = make_cached_images(testdir.tmpdir)
+    filename_original = make_cached_images(testdir.tmpdir, name="original.png")
+    assert filecmp.cmp(filename, filename_original, shallow=False)
+
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Box()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="blue")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--reset_only_failed")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.stdout.fnmatch_lines("*This image will be reset in the cache.")
+    # file was overwritten
+    assert not filecmp.cmp(filename, filename_original, shallow=False)
+
+
+def test_file_not_found(testdir):
+    """Test RegressionFileNotFound is correctly raised."""
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache_num2(verify_image_cache):
+            sphere = pv.Box()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="blue")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--fail_extra_image_cache")
+    result.stdout.fnmatch_lines("*RegressionFileNotFound*")
+    result.stdout.fnmatch_lines("*does not exist in image cache*")
