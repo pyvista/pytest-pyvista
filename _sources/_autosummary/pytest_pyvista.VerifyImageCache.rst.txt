@@ -27,5 +27,6 @@
       ~VerifyImageCache.fail_extra_image_cache
       ~VerifyImageCache.ignore_image_cache
       ~VerifyImageCache.reset_image_cache
+      ~VerifyImageCache.reset_only_failed
    
    
