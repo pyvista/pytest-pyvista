@@ -101,7 +101,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * You can use ``--ignore_image_cache`` if you want to
   temporarily ignore regression testing, e.g. on a particular CI action.
 
-* When using ``--fail_extra_image_cache`` if there is an extra image in the
+* When using ``--fail_if_missing_image_cache`` if there is an extra image in the
   cache, it will report as an error.
   
 * ``--generated_image_dir <DIR>`` dumps all generated test images into <DIR>.
