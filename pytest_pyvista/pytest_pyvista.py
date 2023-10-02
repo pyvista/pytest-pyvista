@@ -33,7 +33,7 @@ def pytest_addoption(parser):
         "--ignore_image_cache", action="store_true", help="Ignores the image cache."
     )
     group.addoption(
-        "--fail_extra_image_cache",
+        "--fail_if_missing_image_cache",
         action="store_true",
         help="Enables failure if image cache does not exist.",
     )
@@ -118,7 +118,7 @@ class VerifyImageCache:
 
     reset_image_cache = False
     ignore_image_cache = False
-    fail_extra_image_cache = False
+    fail_if_missing_image_cache = False
     add_missing_images = False
     reset_only_failed = False
 
@@ -206,7 +206,7 @@ class VerifyImageCache:
 
         if (
             not os.path.isfile(image_filename)
-            and self.fail_extra_image_cache
+            and self.fail_if_missing_image_cache
             and not self.reset_image_cache
         ):
             # Make sure this doesn't get called again if this plotter doesn't close properly
@@ -260,8 +260,8 @@ def verify_image_cache(request, pytestconfig):
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
     VerifyImageCache.ignore_image_cache = pytestconfig.getoption("ignore_image_cache")
-    VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption(
-        "fail_extra_image_cache"
+    VerifyImageCache.fail_if_missing_image_cache = pytestconfig.getoption(
+        "fail_if_missing_image_cache"
     )
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
