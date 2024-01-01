@@ -42,6 +42,11 @@ def pytest_addoption(parser):
         action="store",
         help="Path to dump test images from the current run.",
     )
+    parser.addini(
+        "generated_image_dir",
+        default="generated_image_dir",
+        help="Path to dump test images from the current run.",
+    )
     group.addoption(
         "--add_missing_images",
         action="store_true",
@@ -271,6 +276,8 @@ def verify_image_cache(request, pytestconfig):
         cache_dir = pytestconfig.getini("image_cache_dir")
 
     gen_dir = pytestconfig.getoption("generated_image_dir")
+    if gen_dir is None:
+        gen_dir = pytestconfig.getini("generated_image_dir")
 
     verify_image_cache = VerifyImageCache(
         request.node.name, cache_dir, generated_image_dir=gen_dir

@@ -210,6 +210,32 @@ def test_generated_image_dir_commandline(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
+def test_generated_image_dir_ini(testdir):
+    """Test setting generated_image_dir via config."""
+    make_cached_images(testdir.tmpdir)
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+    testdir.makepyprojecttoml(
+        """
+        [tool.pytest.ini_options]
+        generated_image_dir = "gen_dir"
+        """
+    )
+    result = testdir.runpytest("--fail_extra_image_cache")
+    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+
 def test_add_missing_images_commandline(testdir):
     """Test setting add_missing_images via CLI option."""
     testdir.makepyfile(
