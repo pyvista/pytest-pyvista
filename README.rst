@@ -104,11 +104,12 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * When using ``--fail_extra_image_cache`` if there is an extra image in the
   cache, it will report as an error.
   
-* ``--generated_image_dir <DIR>`` dumps all generated test images into <DIR>.
+* ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
+  directory.  This will override any configuration, see below.
 
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 
-* ``--image_cache_dir <DIR>`` sets the image cache dir.  This will override any
+* ``--image_cache_dir <DIR>`` sets the image cache directory.  This will override any
   configuration, see below.
 
 * ``--reset_only_failed`` reset the image cache of the failed tests only.
@@ -138,12 +139,20 @@ If using ``pyproject.toml`` or any other
 `pytest configuration <https://docs.pytest.org/en/latest/reference/customize.html>`_
 section, consider configuring your test directory location to
 avoid passing command line arguments when calling ``pytest``, for example in
-``pyproject.toml``
+``pyproject.toml``:
 
 .. code::
 
    [tool.pytest.ini_options]
    image_cache_dir = "tests/plotting/image_cache"
+
+Additionally, to configure the directory that will contain the generated test images:
+
+.. code::
+
+   [tool.pytest.ini_options]
+   generated_image_dir = "generated_images"
+
 
 Contributing
 ------------
