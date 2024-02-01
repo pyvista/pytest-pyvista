@@ -102,7 +102,7 @@ jobs:
 
       - name: Unit Testing
         run: xvfb-run coverage run -m --source=pytest_pyvista --module pytest --verbose .
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v4
         if: matrix.python-version == '3.9'
         name: 'Upload coverage to CodeCov'
 
