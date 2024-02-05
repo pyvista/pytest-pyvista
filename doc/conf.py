@@ -1,4 +1,5 @@
 """pyvista-pytest documentation configuration."""
+
 from datetime import datetime
 
 from pytest_pyvista import __version__
