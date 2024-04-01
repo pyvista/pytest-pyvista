@@ -4,7 +4,7 @@ ci:
 
 repos:
 - repo: https://github.com/psf/black
-  rev: 24.1.1
+  rev: 24.3.0
   hooks:
   - id: black
 
@@ -39,7 +39,7 @@ repos:
     exclude: ^pytest-pyvista/ext/
 
 - repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.8.0
+  rev: v1.9.0
   hooks:
   - id: mypy
     exclude: ^(doc/|tests/|examples/|pytest-pyvista/ext/|examples_flask/)
@@ -60,6 +60,6 @@ repos:
 
 # this validates our github workflow files
 - repo: https://github.com/python-jsonschema/check-jsonschema
-  rev: 0.27.4
+  rev: 0.28.1
   hooks:
     - id: check-github-workflows
