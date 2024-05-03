@@ -67,6 +67,8 @@ jobs:
             vtk-version: '9.2.2'
           - python-version: '3.11'
             vtk-version: 'latest'
+          - python-version: '3.12'
+            vtk-version: 'latest'
     steps:
       - uses: actions/checkout@v4
 
