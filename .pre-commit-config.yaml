@@ -4,7 +4,7 @@ ci:
 
 repos:
 - repo: https://github.com/psf/black
-  rev: 24.3.0
+  rev: 24.4.2
   hooks:
   - id: black
 
@@ -39,7 +39,7 @@ repos:
     exclude: ^pytest-pyvista/ext/
 
 - repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.9.0
+  rev: v1.10.0
   hooks:
   - id: mypy
     exclude: ^(doc/|tests/|examples/|pytest-pyvista/ext/|examples_flask/)
@@ -50,7 +50,7 @@ repos:
   ]
 
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.5.0
+  rev: v4.6.0
   hooks:
   - id: check-merge-conflict
   - id: debug-statements
@@ -60,6 +60,6 @@ repos:
 
 # this validates our github workflow files
 - repo: https://github.com/python-jsonschema/check-jsonschema
-  rev: 0.28.1
+  rev: 0.28.2
   hooks:
     - id: check-github-workflows
