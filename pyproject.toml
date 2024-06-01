@@ -36,7 +36,7 @@ tests = [
     "numpy<1.27",
 ]
 docs = [
-    "pydata-sphinx-theme==0.15.2",
+    "pydata-sphinx-theme==0.15.3",
     "sphinx==7.3.7",
     "sphinx_copybutton==0.5.2",
     "sphinx-notfound-page==1.0.2",
