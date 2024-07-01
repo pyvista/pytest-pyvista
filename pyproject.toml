@@ -33,7 +33,7 @@ tests = [
     "coverage==7.5.0",
     "pytest>=3.5.0",
     "pytest-cov==5.0.0",
-    "numpy<1.27",
+    "numpy<2.1",
 ]
 docs = [
     "pydata-sphinx-theme==0.15.4",
