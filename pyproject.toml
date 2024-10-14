@@ -30,16 +30,16 @@ Home = "https://github.com/pyvista/pytest-pyvista"
 [project.optional-dependencies]
 tests = [
     "codecov<2.2.0",
-    "coverage==7.4.3",
+    "coverage==7.5.0",
     "pytest>=3.5.0",
-    "pytest-cov==4.1.0",
-    "numpy<1.27",
+    "pytest-cov==5.0.0",
+    "numpy<2.2",
 ]
 docs = [
-    "pydata-sphinx-theme==0.15.2",
-    "sphinx==7.2.6",
+    "pydata-sphinx-theme==0.15.4",
+    "sphinx==8.0.2",
     "sphinx_copybutton==0.5.2",
-    "sphinx-notfound-page==1.0.0",
+    "sphinx-notfound-page==1.0.4",
 ]
 
 [project.entry-points."pytest11"]
