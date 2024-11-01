@@ -1,4 +1,5 @@
-# -*- coding: utf-8 -*-
+from __future__ import annotations  # noqa: D100
+
 import filecmp
 import os
 
@@ -7,8 +8,8 @@ import pyvista as pv
 pv.OFF_SCREEN = True
 
 
-def test_arguments(testdir):
-    """Test pytest arguments"""
+def test_arguments(testdir) -> None:
+    """Test pytest arguments."""
     testdir.makepyfile(
         """
         def test_args(verify_image_cache):
@@ -18,27 +19,25 @@ def test_arguments(testdir):
 
         """
     )
-    result = testdir.runpytest(
-        "--reset_image_cache", "--ignore_image_cache", "--fail_extra_image_cache"
-    )
+    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def make_cached_images(test_path, path="image_cache_dir", name="imcache.png"):
-    """Makes image cache in `test_path/path`."""
-    d = os.path.join(test_path, path)
-    if not os.path.isdir(d):
-        os.mkdir(d)
+def make_cached_images(test_path, path="image_cache_dir", name="imcache.png"):  # noqa: ANN201
+    """Makes image cache in `test_path/path`."""  # noqa: D401
+    d = os.path.join(test_path, path)  # noqa: PTH118
+    if not os.path.isdir(d):  # noqa: PTH112
+        os.mkdir(d)  # noqa: PTH102
     sphere = pv.Sphere()
     plotter = pv.Plotter()
     plotter.add_mesh(sphere, color="red")
-    filename = os.path.join(d, name)
+    filename = os.path.join(d, name)  # noqa: PTH118
     plotter.screenshot(filename)
     return filename
 
 
-def test_verify_image_cache(testdir):
-    """Test regular usage of the `verify_image_cache` fixture"""
+def test_verify_image_cache(testdir) -> None:
+    """Test regular usage of the `verify_image_cache` fixture."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
         """
@@ -56,8 +55,8 @@ def test_verify_image_cache(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_verify_image_cache_fail_regression(testdir):
-    """Test regression of the `verify_image_cache` fixture"""
+def test_verify_image_cache_fail_regression(testdir) -> None:
+    """Test regression of the `verify_image_cache` fixture."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
         """
@@ -79,8 +78,8 @@ def test_verify_image_cache_fail_regression(testdir):
     result.stdout.fnmatch_lines("*Exceeded image regression error of*")
 
 
-def test_skip(testdir):
-    """Test `skip` flag of `verify_image_cache`"""
+def test_skip(testdir) -> None:
+    """Test `skip` flag of `verify_image_cache`."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
         """
@@ -100,7 +99,7 @@ def test_skip(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_image_cache_dir_commandline(testdir):
+def test_image_cache_dir_commandline(testdir) -> None:
     """Test setting image_cache_dir via CLI option."""
     make_cached_images(testdir.tmpdir, "newdir")
     testdir.makepyfile(
@@ -115,13 +114,11 @@ def test_image_cache_dir_commandline(testdir):
         """
     )
 
-    result = testdir.runpytest(
-        "--fail_extra_image_cache", "--image_cache_dir", "newdir"
-    )
+    result = testdir.runpytest("--fail_extra_image_cache", "--image_cache_dir", "newdir")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_image_cache_dir_ini(testdir):
+def test_image_cache_dir_ini(testdir) -> None:
     """Test setting image_cache_dir via config."""
     make_cached_images(testdir.tmpdir, "newdir")
     testdir.makepyfile(
@@ -145,8 +142,8 @@ def test_image_cache_dir_ini(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_high_variance_test(testdir):
-    """Test `skip` flag of `verify_image_cache`"""
+def test_high_variance_test(testdir) -> None:
+    """Test `skip` flag of `verify_image_cache`."""
     make_cached_images(testdir.tmpdir)
     make_cached_images(testdir.tmpdir, name="imcache_var.png")
 
@@ -187,7 +184,7 @@ def test_high_variance_test(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_generated_image_dir_commandline(testdir):
+def test_generated_image_dir_commandline(testdir) -> None:
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -202,15 +199,13 @@ def test_generated_image_dir_commandline(testdir):
         """
     )
 
-    result = testdir.runpytest(
-        "--fail_extra_image_cache", "--generated_image_dir", "gen_dir"
-    )
-    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))
-    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))
+    result = testdir.runpytest("--fail_extra_image_cache", "--generated_image_dir", "gen_dir")
+    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_generated_image_dir_ini(testdir):
+def test_generated_image_dir_ini(testdir) -> None:
     """Test setting generated_image_dir via config."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -231,12 +226,12 @@ def test_generated_image_dir_ini(testdir):
         """
     )
     result = testdir.runpytest("--fail_extra_image_cache")
-    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))
-    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))
+    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_add_missing_images_commandline(testdir):
+def test_add_missing_images_commandline(testdir) -> None:
     """Test setting add_missing_images via CLI option."""
     testdir.makepyfile(
         """
@@ -251,13 +246,11 @@ def test_add_missing_images_commandline(testdir):
     )
 
     result = testdir.runpytest("--add_missing_images")
-    assert os.path.isfile(
-        os.path.join(testdir.tmpdir, "image_cache_dir", "imcache.png")
-    )
+    assert os.path.isfile(os.path.join(testdir.tmpdir, "image_cache_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_reset_image_cache(testdir):
+def test_reset_image_cache(testdir) -> None:
     """Test reset_image_cache  via CLI option."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
@@ -281,7 +274,7 @@ def test_reset_image_cache(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_cleanup(testdir):
+def test_cleanup(testdir) -> None:
     """Test cleanup of the `verify_image_cache` fixture."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -311,7 +304,7 @@ def test_cleanup(testdir):
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_reset_only_failed(testdir):
+def test_reset_only_failed(testdir) -> None:
     """Test usage of the `reset_only_failed` flag."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
@@ -336,7 +329,7 @@ def test_reset_only_failed(testdir):
     assert not filecmp.cmp(filename, filename_original, shallow=False)
 
 
-def test_file_not_found(testdir):
+def test_file_not_found(testdir) -> None:
     """Test RegressionFileNotFound is correctly raised."""
     testdir.makepyfile(
         """
