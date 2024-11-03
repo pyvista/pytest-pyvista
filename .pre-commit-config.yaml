@@ -3,31 +3,14 @@ ci:
   autoupdate_schedule: monthly
 
 repos:
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.1.1
-    hooks:
-      - id: flake8
-        additional_dependencies: ["flake8-quotes==3.3.2"]
-
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.3.0
-    hooks:
-      - id: codespell
-        args:
-          [
-            "doc examples examples_flask pytest-pyvista tests",
-            "*.py *.rst *.md",
-          ]
+- repo: https://github.com/codespell-project/codespell
+  rev: v2.3.0
+  hooks:
+  - id: codespell
+    args: [
+      "doc examples examples_flask pytest-pyvista tests",
+      "*.py *.rst *.md",
+    ]
 
   - repo: https://github.com/pycqa/pydocstyle
     rev: 6.3.0
@@ -58,11 +41,18 @@ repos:
         args: [--branch, main]
       - id: requirements-txt-fixer
 
-  # this validates our github workflow files
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.29.3
-    hooks:
-      - id: check-github-workflows
+# this validates our github workflow files
+- repo: https://github.com/python-jsonschema/check-jsonschema
+  rev: 0.29.3
+  hooks:
+    - id: check-github-workflows
+
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.6.9
+  hooks:
+  - id: ruff
+    args: [--fix, --show-fixes]
+  - id: ruff-format
 
   - repo: https://github.com/rbubley/mirrors-prettier
     rev: v3.3.3
