@@ -3,52 +3,60 @@ ci:
   autoupdate_schedule: monthly
 
 repos:
-- repo: https://github.com/codespell-project/codespell
-  rev: v2.3.0
-  hooks:
-  - id: codespell
-    args: [
-      "doc examples examples_flask pytest-pyvista tests",
-      "*.py *.rst *.md",
-    ]
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        args:
+          [
+            "doc examples examples_flask pytest-pyvista tests",
+            "*.py *.rst *.md",
+          ]
 
-- repo: https://github.com/pycqa/pydocstyle
-  rev: 6.3.0
-  hooks:
-  - id: pydocstyle
-    additional_dependencies: [toml==0.10.2]
-    files: ^(pytest-pyvista/|other/)
-    exclude: ^pytest-pyvista/ext/
+  - repo: https://github.com/pycqa/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        additional_dependencies: [toml==0.10.2]
+        files: ^(pytest-pyvista/|other/)
+        exclude: ^pytest-pyvista/ext/
 
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.11.2
-  hooks:
-  - id: mypy
-    exclude: ^(doc/|tests/|examples/|pytest-pyvista/ext/|examples_flask/)
-    additional_dependencies: [
-    "mypy-extensions==1.0.0",
-    "toml==0.10.2",
-    "typing-extensions==4.12.2",
-  ]
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        exclude: ^(doc/|tests/|examples/|pytest-pyvista/ext/|examples_flask/)
+        additional_dependencies:
+          [
+            "mypy-extensions==1.0.0",
+            "toml==0.10.2",
+            "typing-extensions==4.12.2",
+          ]
 
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v5.0.0
-  hooks:
-  - id: check-merge-conflict
-  - id: debug-statements
-  - id: no-commit-to-branch
-    args: [--branch, main]
-  - id: requirements-txt-fixer
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: no-commit-to-branch
+        args: [--branch, main]
+      - id: requirements-txt-fixer
 
-# this validates our github workflow files
-- repo: https://github.com/python-jsonschema/check-jsonschema
-  rev: 0.29.3
-  hooks:
-    - id: check-github-workflows
+  # this validates our github workflow files
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.29.3
+    hooks:
+      - id: check-github-workflows
 
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.6.9
-  hooks:
-  - id: ruff
-    args: [--fix, --show-fixes]
-  - id: ruff-format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix, --show-fixes]
+      - id: ruff-format
+
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.3.3
+    hooks:
+      - id: prettier
+        types_or: [yaml, markdown, html, css, scss, javascript, json]
