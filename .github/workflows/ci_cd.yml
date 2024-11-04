@@ -104,7 +104,7 @@ jobs:
         run: xvfb-run coverage run -m --source=pytest_pyvista --module pytest --verbose .
       - uses: codecov/codecov-action@v4
         if: matrix.python-version == '3.9'
-        name: 'Upload coverage to CodeCov'
+        name: "Upload coverage to CodeCov"
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
