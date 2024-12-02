@@ -203,7 +203,7 @@ class VerifyImageCache:
             msg = f"{image_filename} does not exist in image cache"
             raise RegressionFileNotFound(msg)
 
-        if (self.add_missing_images and not os.path.isfile(image_filename) or self.reset_image_cache) and not self.reset_only_failed:  # noqa: PTH113
+        if ((self.add_missing_images and not os.path.isfile(image_filename)) or self.reset_image_cache) and not self.reset_only_failed:  # noqa: PTH113
             plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:
