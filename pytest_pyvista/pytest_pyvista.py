@@ -223,10 +223,10 @@ class VerifyImageCache:
             else:
                 # Make sure this doesn't get called again if this plotter doesn't close properly
                 plotter._before_close_callback = None  # noqa: SLF001
-                msg = f"{test_name} Exceeded image regression error of " f"{allowed_error} with an image error equal to: {error}"
+                msg = f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error}"
                 raise RegressionError(msg)
         if error > allowed_warning:
-            warnings.warn(f"{test_name} Exceeded image regression warning of " f"{allowed_warning} with an image error of " f"{error}")  # noqa: B028
+            warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
 
 
 @pytest.fixture
