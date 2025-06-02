@@ -22,7 +22,7 @@ repos:
         exclude: ^pytest-pyvista/ext/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.15.0
+    rev: v1.16.0
     hooks:
       - id: mypy
         exclude: ^(doc/|tests/|examples/|pytest-pyvista/ext/|examples_flask/)
@@ -44,12 +44,12 @@ repos:
 
   # this validates our github workflow files
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.32.1
+    rev: 0.33.0
     hooks:
       - id: check-github-workflows
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.4
+    rev: v0.11.12
     hooks:
       - id: ruff
         args: [--fix, --show-fixes]
