@@ -1,18 +1,24 @@
 documentation:
-- doc/**/*
-- examples/**/*
-- ./*.md
-- ./*.rst
+  - any:
+      - changed-files:
+          - any-glob-to-any-file: "doc/**/*"
+          - any-glob-to-any-file: "examples/**/*"
+          - any-glob-to-any-file: "./*.md"
+          - any-glob-to-any-file: "./*.rst"
 maintenance:
-- .github/**/*
-- codecov.yml
-- .flake8
-- .coveragerc
-- .codecimate.yml
-- ignore_words.txt
-- mypy.ini
-- pyproject.toml
-- setup.py
+  - any:
+      - changed-files:
+          - any-glob-to-any-file: ".github/**/*"
+          - any-glob-to-any-file: "codecov.yml"
+          - any-glob-to-any-file: ".flake8"
+          - any-glob-to-any-file: ".coveragerc"
+          - any-glob-to-any-file: ".codecimate.yml"
+          - any-glob-to-any-file: "ignore_words.txt"
+          - any-glob-to-any-file: "mypy.ini"
+          - any-glob-to-any-file: "pyproject.toml"
+          - any-glob-to-any-file: "setup.py"
 dependencies:
-- requirements*
-- environment.yml
+  - any:
+      - changed-files:
+          - any-glob-to-any-file: "requirements*"
+          - any-glob-to-any-file: "environment.yml"
