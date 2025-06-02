@@ -19,9 +19,7 @@ def test_arguments(testdir) -> None:
 
         """
     )
-    result = testdir.runpytest(
-        "--reset_image_cache", "--ignore_image_cache", "--fail_if_missing_image_cache"
-    )
+    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -116,9 +114,7 @@ def test_image_cache_dir_commandline(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest(
-        "--fail_if_missing_image_cache", "--image_cache_dir", "newdir"
-    )
+    result = testdir.runpytest("--fail_if_missing_image_cache", "--image_cache_dir", "newdir")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -203,9 +199,7 @@ def test_generated_image_dir_commandline(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest(
-        "--fail_if_missing_image_cache", "--generated_image_dir", "gen_dir"
-    )
+    result = testdir.runpytest("--fail_if_missing_image_cache", "--generated_image_dir", "gen_dir")
     assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
     assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")

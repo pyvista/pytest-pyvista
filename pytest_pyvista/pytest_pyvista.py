@@ -239,9 +239,7 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
     VerifyImageCache.ignore_image_cache = pytestconfig.getoption("ignore_image_cache")
-    VerifyImageCache.fail_if_missing_image_cache = pytestconfig.getoption(
-        "fail_if_missing_image_cache"
-    )
+    VerifyImageCache.fail_if_missing_image_cache = pytestconfig.getoption("fail_if_missing_image_cache")
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
 
