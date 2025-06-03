@@ -15,11 +15,11 @@ def test_arguments(testdir) -> None:
         def test_args(verify_image_cache):
             assert verify_image_cache.reset_image_cache
             assert verify_image_cache.ignore_image_cache
-            assert verify_image_cache.fail_extra_image_cache
+            assert verify_image_cache.fail_if_missing_image_cache
 
         """
     )
-    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--fail_extra_image_cache")
+    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -51,7 +51,7 @@ def test_verify_image_cache(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -71,7 +71,7 @@ def test_verify_image_cache_fail_regression(testdir) -> None:
        """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*[Ff]ailed*")
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
     result.stdout.fnmatch_lines("*pytest_pyvista.pytest_pyvista.RegressionError:*")
@@ -95,7 +95,7 @@ def test_skip(testdir) -> None:
          """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -114,7 +114,7 @@ def test_image_cache_dir_commandline(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache", "--image_cache_dir", "newdir")
+    result = testdir.runpytest("--fail_if_missing_image_cache", "--image_cache_dir", "newdir")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -138,7 +138,7 @@ def test_image_cache_dir_ini(testdir) -> None:
         image_cache_dir = "newdir"
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -176,11 +176,11 @@ def test_high_variance_test(testdir) -> None:
             plotter.show()
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache", "test_file1.py")
+    result = testdir.runpytest("--fail_if_missing_image_cache", "test_file1.py")
     result.stdout.fnmatch_lines("*[Ff]ailed*")
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
 
-    result = testdir.runpytest("--fail_extra_image_cache", "test_file2.py")
+    result = testdir.runpytest("--fail_if_missing_image_cache", "test_file2.py")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -199,7 +199,7 @@ def test_generated_image_dir_commandline(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache", "--generated_image_dir", "gen_dir")
+    result = testdir.runpytest("--fail_if_missing_image_cache", "--generated_image_dir", "gen_dir")
     assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
     assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
@@ -225,7 +225,7 @@ def test_generated_image_dir_ini(testdir) -> None:
         generated_image_dir = "gen_dir"
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
     assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
@@ -267,7 +267,7 @@ def test_reset_image_cache(testdir) -> None:
             plotter.show()
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache", "--reset_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache", "--reset_image_cache")
     # file was overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
     # should pass even if image doesn't match
@@ -300,7 +300,7 @@ def test_cleanup(testdir) -> None:
        """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -343,6 +343,6 @@ def test_file_not_found(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     result.stdout.fnmatch_lines("*RegressionFileNotFound*")
     result.stdout.fnmatch_lines("*does not exist in image cache*")
