@@ -225,7 +225,7 @@ def test_generated_image_dir_ini(testdir) -> None:
         generated_image_dir = "gen_dir"
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest("--fail_if_missing_image_cache")
     assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
     assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
