@@ -20,7 +20,7 @@ env:
 jobs:
   doc:
     name: Build Documentation
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -148,7 +148,7 @@ jobs:
 
   downstream:
     name: Downstream tests
-    runs-on: ubuntu-20.04 # matching pyvista
+    runs-on: ubuntu-22.04 # matching pyvista
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
