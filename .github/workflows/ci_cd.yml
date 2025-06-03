@@ -20,7 +20,7 @@ env:
 jobs:
   doc:
     name: Build Documentation
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -66,6 +66,8 @@ jobs:
           - python-version: "3.11"
             vtk-version: "latest"
           - python-version: "3.12"
+            vtk-version: "latest"
+          - python-version: "3.13"
             vtk-version: "latest"
     steps:
       - uses: actions/checkout@v4
@@ -148,23 +150,22 @@ jobs:
 
   downstream:
     name: Downstream tests
-    runs-on: ubuntu-20.04 # matching pyvista
+    runs-on: ubuntu-22.04 # matching pyvista
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch
 
-      - name: Install pyvista
-        run: pip install -ve .
-        working-directory: pyvista
-      - name: Install pyvista test requirements
-        run: pip install -v pyvista[test]
+      - name: upgrade pip
+        run: pip install --upgrade pip
+      - name: Install pyvista with testing requirements
+        run: pip install -ve . --group test
         working-directory: pyvista
       - name: Install pytest-pyvista
-        run: pip install -ve .
+        run: pip install -ve .  --upgrade
       - name: Software Report
         run: |
           xvfb-run python -c "import pyvista; print(pyvista.Report()); from pyvista import examples; print('User data path:', examples.USER_DATA_PATH)"
