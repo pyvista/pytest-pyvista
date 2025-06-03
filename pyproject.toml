@@ -37,7 +37,7 @@ docs = [
 ]
 tests = [
   "codecov<2.2.0",
-  "coverage==7.8.0",
+  "coverage==7.8.2",
   "numpy<2.3",
   "pytest-cov==6.1.1",
   "pytest>=3.5.0",
