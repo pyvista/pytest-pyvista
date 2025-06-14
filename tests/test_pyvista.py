@@ -426,7 +426,6 @@ def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, st
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="{color}")
             plotter.show()
-            plotter.close()
         """
     )
 

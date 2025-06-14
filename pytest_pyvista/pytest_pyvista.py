@@ -258,6 +258,22 @@ def _image_name_from_test_name(test_name: str) -> str:
     return test_name[5:] + ".png"
 
 
+def _test_name_from_image_name(image_name: str) -> str:
+    def remove_suffix(s: str) -> str:
+        """Remove integer and png suffix."""
+        no_png_ext = s[:-4]
+        parts = no_png_ext.split("_")
+        if len(parts) > 1:
+            try:
+                int(parts[-1])
+                parts = parts[:-1]  # Remove the integer suffix
+            except ValueError:
+                pass  # Last part is not an integer; do nothing
+        return "_".join(parts)
+
+    return "test_" + remove_suffix(image_name)
+
+
 class _ResultTuple(NamedTuple):
     outcome: Outcome
     cached_filename: str
@@ -310,11 +326,20 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
         cached_files = {f.name for f in cache_path.glob("*.png")}
         tested_files = {result.cached_filename for result in RESULTS.values()}
         unused = cached_files - tested_files
-        if unused:
+
+        # Exclude images from skipped tests where multiple images are generated
+        unused_skipped = unused.copy()
+        for image_name in unused:
+            test_name = _test_name_from_image_name(image_name)
+            result = RESULTS.get(test_name)
+            if result and result.outcome == Outcome.SKIPPED:
+                unused.remove(image_name)
+
+        if unused_skipped:
             msg = (
-                f"Unused cached image files detected ({len(unused)}).\n"
+                f"Unused cached image files detected ({len(unused_skipped)}).\n"
                 f"The following cached images were not generated or skipped by any of the tests:\n"
-                f"{sorted(unused)}"
+                f"{sorted(unused_skipped)}"
             )
             raise RuntimeError(msg)
 
