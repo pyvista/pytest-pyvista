@@ -115,7 +115,8 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * ``--reset_only_failed`` reset the image cache of the failed tests only.
 
 * ``--check_useless_fixture`` fail any tests that use the `verify_image_cache`
-  fixture but don't generated any images."
+  fixture but don't generated any images. See also the ``expect_plot``
+  flag below.
 
 Test specific flags
 -------------------
@@ -135,6 +136,12 @@ in the beginning of your test function.
 
 * ``skip``: If you have a test that plots a figure, but you don't want to compare
   its output against the cache, you can skip it with this flag.
+
+* ``expect_plot``: For tests where the ``verify_image_cache`` fixture is used
+  but no images are expected to be generated (e.g. does not call ``Plotter.show()``).
+  This is only useful when ``--check_useless_fixture`` is enabled to prevent an error
+  from being raised when no images are generated. This flag is ``True`` by default,
+  set it to ``False`` if no plots are expected.
 
 Configuration
 -------------

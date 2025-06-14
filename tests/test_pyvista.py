@@ -379,6 +379,64 @@ def test_check_useless_fixture(testdir, call_show, check_useless_fixture) -> Non
             [
                 "*ERROR at teardown of test_imcache*",
                 "*Failed: Fixture `verify_image_cache` is used but no images were generated.",
-                "*Did you forget to call `show` or `plot`, or set `verify_image_cache.skip = True`?.",
+                "*Did you forget to call `show` or `plot`, or set `verify_image_cache.expect_plot=False`?.",
             ]
         )
+
+
+@pytest.mark.parametrize("expect_plot", [True, False])
+def test_check_useless_fixture_expect_plot(testdir, expect_plot) -> None:
+    """Test error is raised (or not) if a plot is expected (or not)."""
+    testdir.makepyfile(
+        f"""
+        def test_imcache(verify_image_cache):
+            verify_image_cache.expect_plot = {expect_plot}
+        """
+    )
+
+    result = testdir.runpytest("--check_useless_fixture")
+
+    expected_code = pytest.ExitCode.TESTS_FAILED if expect_plot else pytest.ExitCode.OK
+    assert result.ret == expected_code
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+    if expect_plot:
+        result.stdout.fnmatch_lines(
+            [
+                "*ERROR at teardown of test_imcache*",
+                "*Failed: Fixture `verify_image_cache` is used but no images were generated.",
+                "*Did you forget to call `show` or `plot`, or set `verify_image_cache.expect_plot=False`?.",
+            ]
+        )
+    else:
+        assert "ERROR" not in result.stdout.str()
+
+
+def test_check_useless_fixture_expect_plot_false(testdir) -> None:
+    """Test error is raised if image is generated when none was expected."""
+    make_cached_images(testdir.tmpdir)
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            verify_image_cache.expect_plot = False
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--check_useless_fixture")
+
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+
+    result.stdout.fnmatch_lines(
+        [
+            "*ERROR at teardown of test_imcache*",
+            "*Failed: Fixture `verify_image_cache` has value `expect_plot=False`, but 1 plot(s) were generated.",
+            "*Either remove any calls to `show` or `plot`, or set `verify_image_cache.expect_plot=True`.",
+        ]
+    )
