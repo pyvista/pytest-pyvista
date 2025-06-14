@@ -311,7 +311,11 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
         tested_files = {result.cached_filename for result in RESULTS.values()}
         unused = cached_files - tested_files
         if unused:
-            msg = f"Unused cached image files detected. The following images were not used by any of the tests:\n{sorted(unused)}"
+            msg = (
+                f"Unused cached image files detected ({len(unused)}).\n"
+                f"The following cached images were not generated or skipped by any of the tests:\n"
+                f"{sorted(unused)}"
+            )
             raise RuntimeError(msg)
 
     RESULTS.clear()

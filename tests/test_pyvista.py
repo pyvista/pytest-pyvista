@@ -381,7 +381,10 @@ class HasUnusedCache(Enum):  # noqa: D101
         return self.value
 
 
-RUNTIME_ERROR_MSG = "RuntimeError: Unused cached image files detected. The following images were not used by any of the tests:"
+RUNTIME_ERROR_LINES = [
+    "RuntimeError: Unused cached image files detected (1).",
+    "The following cached images were not generated or skipped by any of the tests:",
+]
 
 
 # fmt: off
@@ -395,9 +398,9 @@ RUNTIME_ERROR_MSG = "RuntimeError: Unused cached image files detected. The follo
         (PytestMark.NONE, SkipVerify.IGNORE, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
         (PytestMark.NONE, SkipVerify.SKIP, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.FALSE),
-        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE), # noqa: E501
-        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
-        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
+        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE), # noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
     ],
 )
 # fmt: on
