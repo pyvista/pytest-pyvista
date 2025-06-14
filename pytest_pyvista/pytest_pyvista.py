@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from enum import Enum
 import os
+from pathlib import Path
 import platform
+from typing import TYPE_CHECKING
+from typing import NamedTuple
 import warnings
 
 import pytest
 import pyvista
+
+if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Generator
 
 
 class RegressionError(RuntimeError):
@@ -16,6 +23,15 @@ class RegressionError(RuntimeError):
 
 class RegressionFileNotFound(FileNotFoundError):  # noqa: N818
     """Error when regression file is not found."""
+
+
+class Outcome(Enum):
+    """Outcome of the image verification."""
+
+    SUCCESS = "success"
+    SKIPPED = "skipped"
+    ERROR = "error"
+    WARNING = "warning"
 
 
 def pytest_addoption(parser) -> None:  # noqa: ANN001
@@ -61,6 +77,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
+    )
+    group.addoption(
+        "--fail_unused_cache",
+        action="store_true",
+        help="Enables failure if there are any images in the cache which were not compared during the test.",
     )
 
 
@@ -159,7 +180,7 @@ class VerifyImageCache:
         self.skip = False
         self.n_calls = 0
 
-    def __call__(self, plotter):  # noqa: ANN001, ANN204, C901, PLR0912
+    def __call__(self, plotter):  # noqa: ANN001, ANN204
         """
         Either store or validate an image.
 
@@ -169,12 +190,6 @@ class VerifyImageCache:
             The Plotter object that is being closed.
 
         """
-        if self.skip:
-            return
-
-        if self.ignore_image_cache:
-            return
-
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
@@ -185,17 +200,23 @@ class VerifyImageCache:
             allowed_error = self.error_value
             allowed_warning = self.warning_value
 
-        # some tests fail when on Windows with OSMesa
-        if os.name == "nt" and self.windows_skip_image_cache:
-            return
-        # high variation for MacOS
-        if platform.system() == "Darwin" and self.macos_skip_image_cache:
-            return
-
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
-        image_name = test_name[5:] + ".png"
+        image_name = _image_name_from_test_name(test_name)
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
+        gen_image_filename = None
+
+        skip_windows = os.name == "nt" and self.windows_skip_image_cache
+        skip_macos = platform.system() == "Darwin" and self.macos_skip_image_cache
+        if self.skip or self.ignore_image_cache or skip_windows or skip_macos:
+            # Log result as skipped
+            _store_result(
+                test_name=test_name,
+                outcome=Outcome.SKIPPED,
+                cached_filename=image_name,
+                generated_filename=gen_image_filename,
+            )
+            return
 
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache and not self.reset_image_cache:  # noqa: PTH113
             # Make sure this doesn't get called again if this plotter doesn't close properly
@@ -213,6 +234,7 @@ class VerifyImageCache:
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
+            _store_result(test_name=test_name, outcome=Outcome.ERROR, cached_filename=image_filename, generated_filename=gen_image_filename)
             if self.reset_only_failed:
                 warnings.warn(  # noqa: B028
                     f"{test_name} Exceeded image regression error of "
@@ -226,7 +248,73 @@ class VerifyImageCache:
                 msg = f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error}"
                 raise RegressionError(msg)
         if error > allowed_warning:
+            _store_result(test_name=test_name, outcome=Outcome.WARNING, cached_filename=image_filename, generated_filename=gen_image_filename)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
+        else:
+            _store_result(test_name=test_name, outcome=Outcome.SUCCESS, cached_filename=image_filename, generated_filename=gen_image_filename)
+
+
+def _image_name_from_test_name(test_name: str) -> str:
+    return test_name[5:] + ".png"
+
+
+class _ResultTuple(NamedTuple):
+    outcome: Outcome
+    cached_filename: str
+    generated_filename: str | None
+
+
+RESULTS = {}
+
+
+def _store_result(*, test_name: str, outcome: Outcome, cached_filename: str, generated_filename: str | None = None) -> None:
+    result = _ResultTuple(
+        outcome=outcome,
+        cached_filename=str(Path(cached_filename).name),
+        generated_filename=str(Path(generated_filename).name) if generated_filename else None,
+    )
+    RESULTS[test_name] = result
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
+    """Store test results for skipped tests."""
+    outcome = yield
+    if outcome:
+        rep = outcome.get_result()
+
+        # Log if test was skipped
+        if rep.when in ["call", "setup"] and rep.skipped:
+            test_name = item.name
+            _store_result(
+                test_name=test_name,
+                outcome=Outcome.SKIPPED,
+                cached_filename=_image_name_from_test_name(test_name),
+                generated_filename=None,
+            )
+
+
+@pytest.hookimpl
+def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
+    """Execute after the whole test run completes."""
+    config = session.config
+
+    image_cache_dir = config.getoption("image_cache_dir")
+    fail_unused_cache = config.getoption("fail_unused_cache")
+
+    if image_cache_dir is None:
+        image_cache_dir = config.getini("image_cache_dir")
+
+    if image_cache_dir and fail_unused_cache:
+        cache_path = Path(image_cache_dir)
+        cached_files = {f.name for f in cache_path.glob("*.png")}
+        tested_files = {result.cached_filename for result in RESULTS.values()}
+        unused = cached_files - tested_files
+        if unused:
+            msg = f"Unused cached image files detected. The following images were not used by any of the tests:\n{sorted(unused)}"
+            raise RuntimeError(msg)
+
+    RESULTS.clear()
 
 
 @pytest.fixture
