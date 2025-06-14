@@ -5,11 +5,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import platform
+from typing import TYPE_CHECKING
 from typing import NamedTuple
 import warnings
 
 import pytest
 import pyvista
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 class RegressionError(RuntimeError):
@@ -265,20 +269,21 @@ def _store_result(*, test_name: str, outcome: str, cached_filename: str, generat
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call) -> None:  # noqa: ANN001, ARG001
+def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for skipped tests."""
     outcome = yield
-    rep = outcome.get_result()
+    if outcome:
+        rep = outcome.get_result()
 
-    # Log if test was skipped
-    if rep.when in ["call", "setup"] and rep.skipped:
-        test_name = item.name
-        _store_result(
-            test_name=test_name,
-            outcome="skipped",
-            cached_filename=_image_name_from_test_name(test_name),
-            generated_filename=None,
-        )
+        # Log if test was skipped
+        if rep.when in ["call", "setup"] and rep.skipped:
+            test_name = item.name
+            _store_result(
+                test_name=test_name,
+                outcome="skipped",
+                cached_filename=_image_name_from_test_name(test_name),
+                generated_filename=None,
+            )
 
 
 @pytest.hookimpl
@@ -300,6 +305,8 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
         if unused:
             msg = f"Unused cached image files detected. The following images were not used by any of the tests:\n{sorted(unused)}"
             raise RuntimeError(msg)
+
+    RESULTS.clear()
 
 
 @pytest.fixture
