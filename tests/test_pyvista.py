@@ -398,9 +398,9 @@ RUNTIME_ERROR_LINES = [
         (PytestMark.NONE, SkipVerify.IGNORE, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
         (PytestMark.NONE, SkipVerify.SKIP, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.FALSE),
-        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE), # noqa: E501
-        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
-        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
+        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),  # noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),  # noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [*RUNTIME_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),  # noqa: E501
     ],
 )
 # fmt: on
@@ -434,3 +434,24 @@ def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, st
     assert result.ret == exit_code
     result.stderr.fnmatch_lines(stderr_lines)
     result.stdout.fnmatch_lines(stdout_lines)
+
+
+def test_fail_unused_cache_skip_multiple_images(testdir) -> None:
+    """Test skips when there are multiple calls to show() in a test."""
+    make_cached_images(testdir.tmpdir, name="imcache.png")
+    make_cached_images(testdir.tmpdir, name="imcache_2.png")
+    testdir.makepyfile(
+        """
+        import pytest
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        @pytest.mark.skip
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            sphere.plot()
+            sphere.plot()
+        """
+    )
+
+    result = testdir.runpytest("--fail_unused_cache")
+    result.stdout.fnmatch_lines("*skipped*")

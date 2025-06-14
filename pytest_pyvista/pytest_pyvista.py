@@ -333,7 +333,7 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
             test_name = _test_name_from_image_name(image_name)
             result = RESULTS.get(test_name)
             if result and result.outcome == Outcome.SKIPPED:
-                unused.remove(image_name)
+                unused_skipped.remove(image_name)
 
         if unused_skipped:
             msg = (
