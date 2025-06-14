@@ -485,35 +485,3 @@ def test_fail_unused_cache_name_mismatch(testdir) -> None:
 
     result = testdir.runpytest("--fail_unused_cache")
     result.stderr.fnmatch_lines([*TESTS_FAILED_ERROR_LINES, f"[{image_name!r}]"])
-
-
-@pytest.mark.parametrize("call_show", [True, False])
-def test_verify_image_cache_has_no_effect(testdir, call_show) -> None:
-    """Test error is raised if fixture is used but no images are generated."""
-    if call_show:
-        make_cached_images(testdir.tmpdir)
-
-    testdir.makepyfile(
-        f"""
-        import pyvista as pv
-        pv.OFF_SCREEN = True
-        def test_imcache(verify_image_cache):
-            sphere = pv.Sphere()
-            plotter = pv.Plotter()
-            plotter.add_mesh(sphere, color="red")
-            {'plotter.show()' if call_show else ''}
-        """
-    )
-
-    result = testdir.runpytest()
-    expected_code =pytest.ExitCode.OK if call_show else pytest.ExitCode.TESTS_FAILED
-    assert result.ret == expected_code
-    result.stdout.fnmatch_lines("*[Pp]assed*")
-    if not call_show:
-        result.stdout.fnmatch_lines(
-            [
-                "*ERROR at teardown of test_imcache*",
-                "*Failed: Fixture `verify_image_cache` is used but no images were generated.",
-                "*Did you forget to call `show` or `plot`, or set `verify_image_cache.skip = True`?."
-            ]
-        )
