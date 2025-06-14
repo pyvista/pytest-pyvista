@@ -170,7 +170,7 @@ class VerifyImageCache:
         self.skip = False
         self.n_calls = 0
 
-    def __call__(self, plotter):  # noqa: ANN001, ANN204, C901, PLR0912
+    def __call__(self, plotter):  # noqa: ANN001, ANN204
         """
         Either store or validate an image.
 
@@ -180,12 +180,6 @@ class VerifyImageCache:
             The Plotter object that is being closed.
 
         """
-        if self.skip:
-            return
-
-        if self.ignore_image_cache:
-            return
-
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
@@ -196,17 +190,23 @@ class VerifyImageCache:
             allowed_error = self.error_value
             allowed_warning = self.warning_value
 
-        # some tests fail when on Windows with OSMesa
-        if os.name == "nt" and self.windows_skip_image_cache:
-            return
-        # high variation for MacOS
-        if platform.system() == "Darwin" and self.macos_skip_image_cache:
-            return
-
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
         image_name = _image_name_from_test_name(test_name)
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
+        gen_image_filename = None
+
+        skip_windows = os.name == "nt" and self.windows_skip_image_cache
+        skip_macos = platform.system() == "Darwin" and self.macos_skip_image_cache
+        if self.skip or self.ignore_image_cache or skip_windows or skip_macos:
+            # Log result as skipped
+            _store_result(
+                test_name=test_name,
+                outcome="skipped",
+                cached_filename=image_name,
+                generated_filename=gen_image_filename,
+            )
+            return
 
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache and not self.reset_image_cache:  # noqa: PTH113
             # Make sure this doesn't get called again if this plotter doesn't close properly
@@ -217,7 +217,6 @@ class VerifyImageCache:
         if ((self.add_missing_images and not os.path.isfile(image_filename)) or self.reset_image_cache) and not self.reset_only_failed:  # noqa: PTH113
             plotter.screenshot(image_filename)
 
-        gen_image_filename = None
         if self.generated_image_dir is not None:
             gen_image_filename = os.path.join(self.generated_image_dir, test_name[5:] + ".png")  # noqa: PTH118
             plotter.screenshot(gen_image_filename)
