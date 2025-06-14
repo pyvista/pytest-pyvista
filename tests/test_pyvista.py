@@ -3,6 +3,7 @@ from __future__ import annotations  # noqa: D100
 import filecmp
 import os
 
+import pytest
 import pyvista as pv
 
 pv.OFF_SCREEN = True
@@ -346,3 +347,49 @@ def test_file_not_found(testdir) -> None:
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*RegressionFileNotFound*")
     result.stdout.fnmatch_lines("*does not exist in image cache*")
+
+
+RUNTIME_ERROR_MSG = "RuntimeError: Unused cached image files detected. The following images were not used by any of the tests:"
+
+
+@pytest.mark.parametrize(
+    ("marker", "color", "stdout_lines", "stderr_lines", "exit_code", "unused_cache"),
+    [
+        ("@pytest.mark.skip", "red", ["*skipped*"], [], pytest.ExitCode.OK, False),
+        ("", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
+        ("", "blue", ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, False),
+        ("@pytest.mark.skip", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
+        ("", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
+        ("", "blue", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
+    ],
+)
+def test_fail_unused_cache(testdir, marker, color, stdout_lines, stderr_lines, exit_code, unused_cache) -> None:  # noqa: PLR0913
+    """Ensure unused cached images are detected correctly."""
+    test_name = "foo"
+    image_name = test_name + ".png"
+    image_cache_dir = "image_cache_dir"
+
+    make_cached_images(testdir.tmpdir, image_cache_dir, image_name)
+    if unused_cache:
+        make_cached_images(testdir.tmpdir)
+
+    testdir.makepyfile(
+        f"""
+        import pytest
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        {marker}
+        def test_{test_name}(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="{color}")
+            plotter.show()
+            plotter.close()
+        """
+    )
+
+    result = testdir.runpytest("--fail_unused_cache")
+
+    assert result.ret == exit_code
+    result.stderr.fnmatch_lines(stderr_lines)
+    result.stdout.fnmatch_lines(stdout_lines)
