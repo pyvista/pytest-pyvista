@@ -12,7 +12,7 @@ import warnings
 import pytest
 import pyvista
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
 
@@ -217,11 +217,10 @@ class VerifyImageCache:
         if ((self.add_missing_images and not os.path.isfile(image_filename)) or self.reset_image_cache) and not self.reset_only_failed:  # noqa: PTH113
             plotter.screenshot(image_filename)
 
+        gen_image_filename = None
         if self.generated_image_dir is not None:
             gen_image_filename = os.path.join(self.generated_image_dir, test_name[5:] + ".png")  # noqa: PTH118
             plotter.screenshot(gen_image_filename)
-        else:
-            gen_image_filename = None
 
         error = pyvista.compare_images(image_filename, plotter)
 
