@@ -464,3 +464,24 @@ def test_fail_unused_cache_skip_multiple_images(testdir, skip) -> None:
     result = testdir.runpytest("--fail_unused_cache")
     expected = "*skipped*" if skip else "*[Pp]assed*"
     result.stdout.fnmatch_lines(expected)
+
+
+def test_fail_unused_cache_name_mismatch(testdir) -> None:
+    """Test cached image doesn't match test name."""
+    image_name = "im_cache.png"
+    make_cached_images(testdir.tmpdir, name=image_name)
+
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--fail_unused_cache")
+    result.stderr.fnmatch_lines([*RUNTIME_ERROR_LINES, f"[{image_name!r}]"])
