@@ -266,24 +266,6 @@ def _store_result(*, test_name: str, outcome: str, cached_filename: str, generat
     RESULTS[test_name] = result
 
 
-@pytest.hookimpl
-def pytest_collection_modifyitems(session, config, items) -> None:  # noqa: ANN001, ARG001
-    """Record skipped tests during collection."""
-    for item in items:
-        # Check if test is marked to be skipped at collection time
-        if isinstance(item, pytest.Function):
-            skip_marker = item.get_closest_marker("skip")
-            skipif_marker = item.get_closest_marker("skipif")
-            if skip_marker is not None or (skipif_marker is not None and skipif_marker.args and skipif_marker.args[0]):
-                test_name = item.name
-                _store_result(
-                    test_name=test_name,
-                    outcome="skipped",
-                    cached_filename=_image_name_from_test_name(test_name),
-                    generated_filename=None,
-                )
-
-
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for skipped tests."""
