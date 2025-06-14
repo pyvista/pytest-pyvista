@@ -3,6 +3,7 @@ from __future__ import annotations  # noqa: D100
 import filecmp
 import os
 
+import pytest
 import pyvista as pv
 
 pv.OFF_SCREEN = True
@@ -346,3 +347,38 @@ def test_file_not_found(testdir) -> None:
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*RegressionFileNotFound*")
     result.stdout.fnmatch_lines("*does not exist in image cache*")
+
+
+@pytest.mark.parametrize("call_show", [True, False])
+@pytest.mark.parametrize("check_useless_fixture", [True, False])
+def test_check_useless_fixture(testdir, call_show, check_useless_fixture) -> None:
+    """Test error is raised if fixture is used but no images are generated."""
+    if call_show:
+        make_cached_images(testdir.tmpdir)
+
+    testdir.makepyfile(
+        f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            {"plotter.show()" if call_show else ""}
+        """
+    )
+
+    result = testdir.runpytest("--check_useless_fixture") if check_useless_fixture else testdir.runpytest()
+
+    expect_ok = call_show or (not call_show and not check_useless_fixture)
+    expected_code = pytest.ExitCode.OK if expect_ok else pytest.ExitCode.TESTS_FAILED
+    assert result.ret == expected_code
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    if not expect_ok:
+        result.stdout.fnmatch_lines(
+            [
+                "*ERROR at teardown of test_imcache*",
+                "*Failed: Fixture `verify_image_cache` is used but no images were generated.",
+                "*Did you forget to call `show` or `plot`, or set `verify_image_cache.skip = True`?.",
+            ]
+        )

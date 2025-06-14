@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import os
 import platform
+from typing import TYPE_CHECKING
 import warnings
 
 import pytest
 import pyvista
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 class RegressionError(RuntimeError):
@@ -61,6 +65,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
+    )
+    group.addoption(
+        "--check_useless_fixture",
+        action="store_true",
+        help="Fail any tests that use the `verify_image_cache` fixture but don't generated any images.",
     )
 
 
@@ -229,6 +238,17 @@ class VerifyImageCache:
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
+    """Store test results for inspection."""
+    outcome = yield
+    if outcome:
+        rep = outcome.get_result()
+
+        # Attach the report to the item so fixtures/finalizers can inspect it
+        setattr(item, f"rep_{rep.when}", rep)
+
+
 @pytest.fixture
 def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     """Checks cached images against test images for PyVista."""  # noqa: D401
@@ -252,6 +272,16 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
 
     def reset() -> None:
         pyvista.global_theme.before_close_callback = None
+
+        if pytestconfig.getoption("check_useless_fixture"):
+            # Retrieve test call report
+            rep_call = getattr(request.node, "rep_call", None)
+
+            if rep_call and rep_call.passed and verify_image_cache.n_calls == 0:
+                pytest.fail(
+                    "Fixture `verify_image_cache` is used but no images were generated.\n"
+                    "Did you forget to call `show` or `plot`, or set `verify_image_cache.skip = True`?."
+                )
 
     request.addfinalizer(reset)  # noqa: PT021
     return verify_image_cache
