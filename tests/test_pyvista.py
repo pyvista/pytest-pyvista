@@ -1,5 +1,6 @@
 from __future__ import annotations  # noqa: D100
 
+from enum import Enum
 import filecmp
 import os
 
@@ -349,32 +350,65 @@ def test_file_not_found(testdir) -> None:
     result.stdout.fnmatch_lines("*does not exist in image cache*")
 
 
+class LiteralStrEnum(str, Enum):  # noqa: D101
+    def __str__(self) -> str:  # noqa: D105
+        return str(self.value)
+
+
+class PytestMark(LiteralStrEnum):  # noqa: D101
+    NONE = ""
+    SKIP = "@pytest.mark.skip"
+
+
+class SkipVerify(LiteralStrEnum):  # noqa: D101
+    NONE = ""
+    MACOS = "verify_image_cache.macos_skip_image_cache"
+    WINDOWS = "verify_image_cache.windows_skip_image_cache"
+    IGNORE = "verify_image_cache.ignore_image_cache"
+    SKIP = "verify_image_cache.skip"
+
+
+class MeshColor(LiteralStrEnum):  # noqa: D101
+    SUCCESS = "red"
+    FAIL = "blue"
+
+
+class HasUnusedCache(Enum):  # noqa: D101
+    TRUE = True
+    FALSE = False
+
+    def __bool__(self) -> bool:  # noqa: D105
+        return self.value
+
+
 RUNTIME_ERROR_MSG = "RuntimeError: Unused cached image files detected. The following images were not used by any of the tests:"
 
 
+# fmt: off
 @pytest.mark.parametrize(
-    ("marker", "skip_verify", "color", "stdout_lines", "stderr_lines", "exit_code", "unused_cache"),
+    ("marker", "skip_verify", "color", "stdout_lines", "stderr_lines", "exit_code", "has_unused_cache"),
     [
-        ("@pytest.mark.skip", "", "red", ["*skipped*"], [], pytest.ExitCode.OK, False),
-        ("", "", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
-        ("", "verify_image_cache.macos_skip_image_cache", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
-        ("", "verify_image_cache.windows_skip_image_cache", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
-        ("", "verify_image_cache.ignore_image_cache", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
-        ("", "verify_image_cache.skip", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
-        ("", "", "blue", ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, False),
-        ("@pytest.mark.skip", "", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
-        ("", "", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
-        ("", "", "blue", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
+        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, ["*skipped*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.MACOS, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.WINDOWS, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.IGNORE, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.SKIP, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.FALSE),
+        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE), # noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, HasUnusedCache.TRUE),# noqa: E501
     ],
 )
-def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, stderr_lines, exit_code, unused_cache) -> None:  # noqa: PLR0913
+# fmt: on
+def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, stderr_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
     image_name = test_name + ".png"
     image_cache_dir = "image_cache_dir"
 
     make_cached_images(testdir.tmpdir, image_cache_dir, image_name)
-    if unused_cache:
+    if has_unused_cache:
         make_cached_images(testdir.tmpdir)
 
     testdir.makepyfile(
