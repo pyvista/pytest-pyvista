@@ -6,6 +6,7 @@ from enum import Enum
 import os
 from pathlib import Path
 import platform
+import sys
 from typing import TYPE_CHECKING
 from typing import NamedTuple
 import warnings
@@ -337,11 +338,15 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
 
         if unused_skipped:
             msg = (
-                f"Unused cached image files detected ({len(unused_skipped)}).\n"
-                f"The following cached images were not generated or skipped by any of the tests:\n"
-                f"{sorted(unused_skipped)}"
+                f"\npytest-pyvista: ERROR: Unused cached image file(s) detected ({len(unused_skipped)}).\n"
+                f"The following images were not generated or skipped by any of the tests:\n"
+                f"{sorted(unused_skipped)}\n"
             )
-            raise RuntimeError(msg)
+            # Print the message so it appears in the output
+            sys.stderr.write(msg)
+            sys.stderr.flush()
+
+            session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
     RESULTS.clear()
 
