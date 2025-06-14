@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 import os
 from pathlib import Path
 import platform
@@ -22,6 +23,15 @@ class RegressionError(RuntimeError):
 
 class RegressionFileNotFound(FileNotFoundError):  # noqa: N818
     """Error when regression file is not found."""
+
+
+class Outcome(Enum):
+    """Outcome of the image verification."""
+
+    SUCCESS = "success"
+    SKIPPED = "skipped"
+    ERROR = "error"
+    WARNING = "warning"
 
 
 def pytest_addoption(parser) -> None:  # noqa: ANN001
@@ -202,7 +212,7 @@ class VerifyImageCache:
             # Log result as skipped
             _store_result(
                 test_name=test_name,
-                outcome="skipped",
+                outcome=Outcome.SKIPPED,
                 cached_filename=image_name,
                 generated_filename=gen_image_filename,
             )
@@ -224,7 +234,7 @@ class VerifyImageCache:
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
-            _store_result(test_name=test_name, outcome="error", cached_filename=image_filename, generated_filename=gen_image_filename)
+            _store_result(test_name=test_name, outcome=Outcome.ERROR, cached_filename=image_filename, generated_filename=gen_image_filename)
             if self.reset_only_failed:
                 warnings.warn(  # noqa: B028
                     f"{test_name} Exceeded image regression error of "
@@ -238,10 +248,10 @@ class VerifyImageCache:
                 msg = f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error}"
                 raise RegressionError(msg)
         if error > allowed_warning:
-            _store_result(test_name=test_name, outcome="warning", cached_filename=image_filename, generated_filename=gen_image_filename)
+            _store_result(test_name=test_name, outcome=Outcome.WARNING, cached_filename=image_filename, generated_filename=gen_image_filename)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
         else:
-            _store_result(test_name=test_name, outcome="pass", cached_filename=image_filename, generated_filename=gen_image_filename)
+            _store_result(test_name=test_name, outcome=Outcome.SUCCESS, cached_filename=image_filename, generated_filename=gen_image_filename)
 
 
 def _image_name_from_test_name(test_name: str) -> str:
@@ -249,7 +259,7 @@ def _image_name_from_test_name(test_name: str) -> str:
 
 
 class _ResultTuple(NamedTuple):
-    outcome: str
+    outcome: Outcome
     cached_filename: str
     generated_filename: str | None
 
@@ -257,7 +267,7 @@ class _ResultTuple(NamedTuple):
 RESULTS = {}
 
 
-def _store_result(*, test_name: str, outcome: str, cached_filename: str, generated_filename: str | None = None) -> None:
+def _store_result(*, test_name: str, outcome: Outcome, cached_filename: str, generated_filename: str | None = None) -> None:
     result = _ResultTuple(
         outcome=outcome,
         cached_filename=str(Path(cached_filename).name),
@@ -278,7 +288,7 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
             test_name = item.name
             _store_result(
                 test_name=test_name,
-                outcome="skipped",
+                outcome=Outcome.SKIPPED,
                 cached_filename=_image_name_from_test_name(test_name),
                 generated_filename=None,
             )
