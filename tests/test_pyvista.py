@@ -436,22 +436,31 @@ def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, st
     result.stdout.fnmatch_lines(stdout_lines)
 
 
-def test_fail_unused_cache_skip_multiple_images(testdir) -> None:
+@pytest.mark.parametrize("skip", [True,False])
+def test_fail_unused_cache_skip_multiple_images(testdir, skip) -> None:
     """Test skips when there are multiple calls to show() in a test."""
     make_cached_images(testdir.tmpdir, name="imcache.png")
-    make_cached_images(testdir.tmpdir, name="imcache_2.png")
+    make_cached_images(testdir.tmpdir, name="imcache_1.png")
+
+    marker = "@pytest.mark.skip" if skip else ""
     testdir.makepyfile(
-        """
+        f"""
         import pytest
         import pyvista as pv
         pv.OFF_SCREEN = True
-        @pytest.mark.skip
+        {marker}
         def test_imcache(verify_image_cache):
             sphere = pv.Sphere()
-            sphere.plot()
-            sphere.plot()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+            #
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
         """
     )
 
     result = testdir.runpytest("--fail_unused_cache")
-    result.stdout.fnmatch_lines("*skipped*")
+    expected = "*skipped*" if skip else "*[Pp]assed*"
+    result.stdout.fnmatch_lines(expected)
