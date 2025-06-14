@@ -300,6 +300,9 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     if outcome:
         rep = outcome.get_result()
 
+        # Attach the report to the item so fixtures/finalizers can inspect it
+        setattr(item, f"rep_{rep.when}", rep)
+
         # Log if test was skipped
         if rep.when in ["call", "setup"] and rep.skipped:
             test_name = item.name
@@ -374,6 +377,15 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
 
     def reset() -> None:
         pyvista.global_theme.before_close_callback = None
+
+        # Retrieve test call report
+        rep_call = getattr(request.node, "rep_call", None)
+
+        if rep_call and rep_call.passed and verify_image_cache.n_calls == 0:
+            pytest.fail(
+                "Fixture `verify_image_cache` is used but no images were generated.\n"
+                "Did you forget to call `show` or `plot`, or set `verify_image_cache.skip = True`?."
+            )
 
     request.addfinalizer(reset)  # noqa: PT021
     return verify_image_cache

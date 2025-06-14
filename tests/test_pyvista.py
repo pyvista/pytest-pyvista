@@ -485,3 +485,25 @@ def test_fail_unused_cache_name_mismatch(testdir) -> None:
 
     result = testdir.runpytest("--fail_unused_cache")
     result.stderr.fnmatch_lines([*TESTS_FAILED_ERROR_LINES, f"[{image_name!r}]"])
+
+
+def test_verify_image_cache_has_no_effect(testdir) -> None:
+    """Test regular usage of the `verify_image_cache` fixture."""
+    testdir.makepyfile(
+        """
+        def test_imcache(verify_image_cache):
+            ...
+        """
+    )
+
+
+    result = testdir.runpytest()
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.stdout.fnmatch_lines(
+        [
+            "*ERROR at teardown of test_imcache*",
+            "*Failed: Fixture `verify_image_cache` is used but no images were generated.",
+            "*Did you forget to call `show` or `plot`, or set `verify_image_cache.skip = True`?."
+        ]
+    )
