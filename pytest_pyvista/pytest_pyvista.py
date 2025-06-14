@@ -82,7 +82,7 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
     group.addoption(
         "--fail_unused_cache",
         action="store_true",
-        help="Enables failure if there are any images in the cache which were not compared during the test.",
+        help="Report test failure if there are any images in the cache which are not compared to any generated images.",
     )
 
 
