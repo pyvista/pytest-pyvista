@@ -353,17 +353,21 @@ RUNTIME_ERROR_MSG = "RuntimeError: Unused cached image files detected. The follo
 
 
 @pytest.mark.parametrize(
-    ("marker", "color", "stdout_lines", "stderr_lines", "exit_code", "unused_cache"),
+    ("marker", "skip_verify", "color", "stdout_lines", "stderr_lines", "exit_code", "unused_cache"),
     [
-        ("@pytest.mark.skip", "red", ["*skipped*"], [], pytest.ExitCode.OK, False),
-        ("", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
-        ("", "blue", ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, False),
-        ("@pytest.mark.skip", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
-        ("", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
-        ("", "blue", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
+        ("@pytest.mark.skip", "", "red", ["*skipped*"], [], pytest.ExitCode.OK, False),
+        ("", "", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
+        ("", "verify_image_cache.macos_skip_image_cache", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
+        ("", "verify_image_cache.windows_skip_image_cache", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
+        ("", "verify_image_cache.ignore_image_cache", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
+        ("", "verify_image_cache.skip", "red", ["*[Pp]assed*"], [], pytest.ExitCode.OK, False),
+        ("", "", "blue", ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, False),
+        ("@pytest.mark.skip", "", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
+        ("", "", "red", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
+        ("", "", "blue", [], [RUNTIME_ERROR_MSG, "['imcache.png']"], pytest.ExitCode.INTERNAL_ERROR, True),
     ],
 )
-def test_fail_unused_cache(testdir, marker, color, stdout_lines, stderr_lines, exit_code, unused_cache) -> None:  # noqa: PLR0913
+def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, stderr_lines, exit_code, unused_cache) -> None:  # noqa: PLR0913
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
     image_name = test_name + ".png"
@@ -380,6 +384,7 @@ def test_fail_unused_cache(testdir, marker, color, stdout_lines, stderr_lines, e
         pv.OFF_SCREEN = True
         {marker}
         def test_{test_name}(verify_image_cache):
+            {skip_verify}
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="{color}")
