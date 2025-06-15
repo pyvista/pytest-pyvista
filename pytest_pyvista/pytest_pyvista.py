@@ -285,11 +285,14 @@ RESULTS = {}
 
 
 def _store_result(*, test_name: str, outcome: Outcome, cached_filename: str, generated_filename: str | None = None) -> None:
-    result = _ResultTuple(
-        outcome=outcome,
-        cached_filename=str(Path(cached_filename).name),
-        generated_filename=str(Path(generated_filename).name) if generated_filename else None,
-    )
+    try:
+        result = _ResultTuple(
+            outcome=outcome,
+            cached_filename=str(Path(cached_filename).name),
+            generated_filename=str(Path(generated_filename).name) if generated_filename else None,
+        )
+    except Exception:  # noqa: BLE001
+        pytest.fail(f"test_name: {test_name}, outcome: {outcome}, cached: {cached_filename}, generated: {generated_filename}")
     RESULTS[test_name] = result
 
 
