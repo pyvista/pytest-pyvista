@@ -6,6 +6,7 @@ from enum import Enum
 import os
 from pathlib import Path
 import platform
+import shutil
 import sys
 from typing import TYPE_CHECKING
 from typing import NamedTuple
@@ -58,6 +59,16 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "generated_image_dir",
         default="generated_image_dir",
         help="Path to dump test images from the current run.",
+    )
+    group.addoption(
+        "--failed_image_dir",
+        action="store",
+        help="Path to dump images from failed tests from the current run.",
+    )
+    parser.addini(
+        "failed_image_dir",
+        default="failed_image_dir",
+        help="Path to dump images from failed tests from the current run.",
     )
     group.addoption(
         "--add_missing_images",
@@ -170,9 +181,8 @@ class VerifyImageCache:
         self.var_warning_value = var_warning_value
 
         self.generated_image_dir = generated_image_dir
-        if self.generated_image_dir is not None and not os.path.isdir(self.generated_image_dir):  # noqa: PTH112
-            warnings.warn(f"pyvista test generated image dir: {self.generated_image_dir} does not yet exist.  Creating dir.")  # noqa: B028
-            os.makedirs(self.generated_image_dir)  # noqa: PTH103
+        if self.generated_image_dir is not None:
+            _ensure_dir_exists(self.generated_image_dir, msg_name="generated image dir")
 
         self.high_variance_test = False
         self.windows_skip_image_cache = False
@@ -255,6 +265,20 @@ class VerifyImageCache:
             _store_result(test_name=test_name, outcome=Outcome.SUCCESS, cached_filename=image_filename, generated_filename=gen_image_filename)
 
 
+def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
+    if not Path(dirpath).is_dir():
+        msg = f"pyvista test {msg_name}: {dirpath} does not yet exist.  Creating dir."
+        warnings.warn(msg, stacklevel=2)
+        Path(dirpath).mkdir()
+
+
+def _get_dir_from_config_or_ini(pytestconfig, dirname: str) -> str:  # noqa: ANN001
+    gen_dir = pytestconfig.getoption(dirname)
+    if gen_dir is None:
+        gen_dir = pytestconfig.getini(dirname)
+    return gen_dir
+
+
 def _image_name_from_test_name(test_name: str) -> str:
     return test_name[5:] + ".png"
 
@@ -316,11 +340,10 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
     """Execute after the whole test run completes."""
     config = session.config
 
-    image_cache_dir = config.getoption("image_cache_dir")
     fail_unused_cache = config.getoption("fail_unused_cache")
-
-    if image_cache_dir is None:
-        image_cache_dir = config.getini("image_cache_dir")
+    image_cache_dir = _get_dir_from_config_or_ini(config, "image_cache_dir")
+    failed_image_dir = _get_dir_from_config_or_ini(config, "failed_image_dir")
+    generated_image_dir = _get_dir_from_config_or_ini(config, "generated_image_dir")
 
     if image_cache_dir and fail_unused_cache:
         cache_path = Path(image_cache_dir)
@@ -348,7 +371,30 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
 
             session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
+    if failed_image_dir:
+        for result in RESULTS.values():
+            if result.outcome in [Outcome.WARNING, Outcome.ERROR]:
+                cached_image_path = Path(image_cache_dir, result.cached_filename)
+                if cached_image_path.is_file():
+                    _ensure_dir_exists(failed_image_dir, msg_name="failed image dir")
+                    _save_failed_test_image(cached_image_path, result.outcome, image_cache_dir, failed_image_dir)
+                if result.generated_filename:
+                    _ensure_dir_exists(failed_image_dir, msg_name="failed image dir")
+                    generated_image_path = Path(generated_image_dir, result.generated_filename)
+                    _save_failed_test_image(generated_image_path, result.outcome, image_cache_dir, failed_image_dir)
+
     RESULTS.clear()
+
+
+def _save_failed_test_image(source_image_path: Path, outcome: Outcome, image_cache_dir: str, failed_image_dir: str) -> None:
+    """Save test image from cache or test to the failed image dir."""
+    parent_dir = Path(outcome.name.lower() + "s")
+    dest_dirname = "from_cache" if Path(source_image_path).parent == Path(image_cache_dir) else "from_test"
+    Path(failed_image_dir, parent_dir).mkdir(exist_ok=True)
+    dest_dir = Path(failed_image_dir, parent_dir, dest_dirname)
+    dest_dir.mkdir(exist_ok=True)
+    dest_path = Path(dest_dir, Path(source_image_path).name)
+    shutil.copy(source_image_path, dest_path)
 
 
 @pytest.fixture
@@ -361,13 +407,8 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
 
-    cache_dir = pytestconfig.getoption("image_cache_dir")
-    if cache_dir is None:
-        cache_dir = pytestconfig.getini("image_cache_dir")
-
-    gen_dir = pytestconfig.getoption("generated_image_dir")
-    if gen_dir is None:
-        gen_dir = pytestconfig.getini("generated_image_dir")
+    cache_dir = _get_dir_from_config_or_ini(pytestconfig, "image_cache_dir")
+    gen_dir = _get_dir_from_config_or_ini(pytestconfig, "generated_image_dir")
 
     verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir)
     pyvista.global_theme.before_close_callback = verify_image_cache

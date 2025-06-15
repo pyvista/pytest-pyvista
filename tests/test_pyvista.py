@@ -387,7 +387,6 @@ TESTS_FAILED_ERROR_LINES = [
 ]
 
 
-# fmt: off
 @pytest.mark.parametrize(
     ("marker", "skip_verify", "color", "stdout_lines", "stderr_lines", "exit_code", "has_unused_cache"),
     [
@@ -402,8 +401,7 @@ TESTS_FAILED_ERROR_LINES = [
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [*TESTS_FAILED_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [*TESTS_FAILED_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
     ],
-)
-# fmt: on
+)  # fmt: skip
 def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, stderr_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
@@ -436,7 +434,7 @@ def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, st
     result.stdout.fnmatch_lines(stdout_lines)
 
 
-@pytest.mark.parametrize("skip", [True,False])
+@pytest.mark.parametrize("skip", [True, False])
 def test_fail_unused_cache_skip_multiple_images(testdir, skip) -> None:
     """Test skips when there are multiple calls to show() in a test."""
     make_cached_images(testdir.tmpdir, name="imcache.png")
@@ -485,3 +483,50 @@ def test_fail_unused_cache_name_mismatch(testdir) -> None:
 
     result = testdir.runpytest("--fail_unused_cache")
     result.stderr.fnmatch_lines([*TESTS_FAILED_ERROR_LINES, f"[{image_name!r}]"])
+
+
+@pytest.mark.parametrize("outcome", ["error", "warning", "success"])
+def test_failed_image_dir(testdir, outcome) -> None:
+    """Test regular usage of the `verify_image_cache` fixture."""
+    cached_image_name = "imcache.png"
+    make_cached_images(testdir.tmpdir)
+
+    red = [255, 0, 0]
+    almost_red = [250, 0, 0]
+    definitely_not_red = [0, 0, 0]
+    color = definitely_not_red if outcome == "error" else almost_red if outcome == "warning" else red
+    testdir.makepyfile(
+        f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color={color})
+            plotter.show()
+        """
+    )
+    dirname = "failed_image_dir"
+    failed_image_dir_path = testdir.tmpdir / dirname
+    if outcome == "success":
+        assert not failed_image_dir_path.isdir()
+    else:
+        result = testdir.runpytest("--failed_image_dir", dirname)
+        result.stdout.fnmatch_lines("*UserWarning: pyvista test failed image dir: failed_image_dir does not yet exist.  Creating dir.")
+        result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
+
+        if outcome == "error":
+            expected_subdir = "errors"
+            not_expected_subdir = "warnings"
+        else:
+            expected_subdir = "warnings"
+            not_expected_subdir = "errors"
+
+        assert failed_image_dir_path.isdir()
+        assert (failed_image_dir_path / expected_subdir).isdir()
+        assert (failed_image_dir_path / expected_subdir / "from_cache").isdir()
+        assert (failed_image_dir_path / expected_subdir / "from_cache" / cached_image_name).isfile()
+        assert not (failed_image_dir_path / not_expected_subdir).isdir()
+
+        assert (failed_image_dir_path / expected_subdir / "from_test").isdir()
+        assert (failed_image_dir_path / expected_subdir / "from_test" / cached_image_name).isfile()
