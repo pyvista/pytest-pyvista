@@ -115,7 +115,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * ``--reset_only_failed`` reset the image cache of the failed tests only.
 
 * ``--check_useless_fixture`` fail any tests that use the `verify_image_cache`
-  fixture but don't generated any images. See also the ``expect_plot``
+  fixture but don't generate any images. See also the ``expect_plot``
   flag below.
 
 Test specific flags
