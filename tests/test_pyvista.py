@@ -1,6 +1,7 @@
 from __future__ import annotations  # noqa: D100
 
 import filecmp
+import json
 import os
 
 import pytest
@@ -394,3 +395,17 @@ def test_failed_image_dir(testdir, outcome) -> None:
 
         assert (failed_image_dir_path / expected_subdir / "from_test").isdir()
         assert (failed_image_dir_path / expected_subdir / "from_test" / cached_image_name).isfile()
+
+        # Test error is reported in JSON file
+        json_file = failed_image_dir_path / expected_subdir / (expected_subdir + ".json")
+        assert json_file.isfile()
+        errors = json.load(json_file)
+        assert len(errors) == 1
+        assert list(errors.keys()) == [cached_image_name]
+        reported_error = next(iter(errors.values()))
+        error_threshold = 500.0
+        warning_threshold = 200.0
+        if outcome == "error":
+            assert reported_error > error_threshold
+        else:
+            assert warning_threshold < reported_error < error_threshold

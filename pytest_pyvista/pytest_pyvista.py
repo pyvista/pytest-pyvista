@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import platform
@@ -229,7 +230,7 @@ class VerifyImageCache:
 
         if error > allowed_error:
             if self.failed_image_dir is not None:
-                self._save_failed_test_images("error", plotter, image_name)
+                self._save_failed_test_images("error", plotter, image_name, error)
             if self.reset_only_failed:
                 warnings.warn(  # noqa: B028
                     f"{test_name} Exceeded image regression error of "
@@ -244,10 +245,27 @@ class VerifyImageCache:
                 raise RegressionError(msg)
         if error > allowed_warning:
             if self.failed_image_dir is not None:
-                self._save_failed_test_images("warning", plotter, image_name)
+                self._save_failed_test_images("warning", plotter, image_name, error)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
 
-    def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: pyvista.Plotter, image_name: str) -> None:
+    def _save_failed_test_images(
+        self, error_or_warning: Literal["error", "warning"], plotter: pyvista.Plotter, image_name: str, error: float
+    ) -> None:
+        def write_test_result(json_filename: Path) -> None:
+            # Read existing results
+            if json_filename.exists():
+                with json_filename.open("r") as f:
+                    data = json.load(f)
+            else:
+                data = {}
+
+            # Update the data
+            data[image_name] = error
+
+            # Write back
+            with json_filename.open("w") as f:
+                json.dump(dict(sorted(data.items())), f, indent=2)
+
         def _make_failed_test_image_dir(
             errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
         ) -> Path:
@@ -260,13 +278,16 @@ class VerifyImageCache:
             return dest_dir
 
         error_dirname = cast("Literal['errors', 'warnings']", error_or_warning + "s")
-        from_test_dir = _make_failed_test_image_dir(error_dirname, "from_test")
-        plotter.screenshot(Path(from_test_dir, image_name))
+        from_dir = _make_failed_test_image_dir(error_dirname, "from_test")
+        plotter.screenshot(Path(from_dir, image_name))
 
         cached_image = Path(self.cache_dir, image_name)
         if cached_image.is_file():
-            from_cache_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
-            shutil.copy(cached_image, Path(from_cache_dir, image_name))
+            from_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
+            shutil.copy(cached_image, Path(from_dir, image_name))
+
+        results_file = from_dir.parent / (error_dirname + ".json")
+        write_test_result(results_file)
 
 
 def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
