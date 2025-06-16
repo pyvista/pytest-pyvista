@@ -107,15 +107,16 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
   directory.  This will override any configuration, see below.
 
+* ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
+  there is a warning or error raised. This directory is useful for reviewing test
+  failures. This will override any configuration, see below.
+
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 
 * ``--image_cache_dir <DIR>`` sets the image cache directory.  This will override any
   configuration, see below.
 
 * ``--reset_only_failed`` reset the image cache of the failed tests only.
-
-* ``--fail_unused_cache`` report test failure if there are any images in the cache
-  which are not compared to any generated images.
 
 Test specific flags
 -------------------
