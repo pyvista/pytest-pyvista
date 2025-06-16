@@ -351,7 +351,7 @@ def test_file_not_found(testdir) -> None:
 
 @pytest.mark.parametrize("outcome", ["error", "warning", "success"])
 def test_failed_image_dir(testdir, outcome) -> None:
-    """Test regular usage of the `verify_image_cache` fixture."""
+    """Test usage of the `failed_image_dir` option."""
     cached_image_name = "imcache.png"
     make_cached_images(testdir.tmpdir)
 
