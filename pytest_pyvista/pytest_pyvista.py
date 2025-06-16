@@ -315,7 +315,8 @@ def _combine_temp_jsons(parent_dir: Path) -> None:
                 json.dump(dict(sorted(combined_data.items())), f, indent=2)
 
         # Remove tmp dir
-        shutil.rmtree(tmp_jsons_dir)
+        if tmp_jsons_dir.exists():
+            shutil.rmtree(tmp_jsons_dir)
 
 
 @pytest.fixture
