@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 import platform
@@ -13,8 +12,6 @@ import warnings
 
 import pytest
 import pyvista
-
-_TMP_JSONS = ".tmp_jsons"
 
 
 class RegressionError(RuntimeError):
@@ -250,9 +247,7 @@ class VerifyImageCache:
                 self._save_failed_test_images("warning", plotter, image_name, error)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
 
-    def _save_failed_test_images(
-        self, error_or_warning: Literal["error", "warning"], plotter: pyvista.Plotter, image_name: str, error: float
-    ) -> None:
+    def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: pyvista.Plotter, image_name: str) -> None:
         def _make_failed_test_image_dir(
             errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
         ) -> Path:
@@ -273,16 +268,6 @@ class VerifyImageCache:
             from_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
             shutil.copy(cached_image, Path(from_dir, image_name))
 
-        tmp_jsons_dir = from_dir.parent / _TMP_JSONS
-        tmp_jsons_dir.mkdir(exist_ok=True)
-        results_file = tmp_jsons_dir / (image_name[:-4] + ".json")
-        _write_json(results_file, {image_name: error})
-
-
-def _write_json(json_filename: Path, data: dict) -> None:
-    with json_filename.open("w") as f:
-        json.dump(data, f, indent=2)
-
 
 def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
     if not Path(dirpath).is_dir():
@@ -296,27 +281,6 @@ def _get_dir_from_config_or_ini(pytestconfig, dirname: str) -> str:  # noqa: ANN
     if gen_dir is None:
         gen_dir = pytestconfig.getini(dirname)
     return gen_dir
-
-
-def _combine_temp_jsons(parent_dir: Path) -> None:
-    if parent_dir.exists():
-        # Read all JSON files from temp subdir into single dict
-        tmp_jsons_dir = parent_dir / ".tmp_jsons"
-        combined_data = {}
-        if tmp_jsons_dir.exists():
-            for json_file in tmp_jsons_dir.glob("*.json"):
-                with json_file.open() as f:
-                    data = json.load(f)
-                    combined_data.update(data)
-        # Save as single sorted JSON in the parent dir
-        if combined_data:
-            summary_file = Path(parent_dir) / (parent_dir.name + ".json")
-            with summary_file.open("w") as f:
-                json.dump(dict(sorted(combined_data.items())), f, indent=2)
-
-        # Remove tmp dir
-        if tmp_jsons_dir.exists():
-            shutil.rmtree(tmp_jsons_dir)
 
 
 @pytest.fixture
@@ -333,9 +297,6 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     gen_dir = _get_dir_from_config_or_ini(pytestconfig, "generated_image_dir")
     failed_dir = _get_dir_from_config_or_ini(pytestconfig, "failed_image_dir")
 
-    # Store failed dir path for use later in session finish
-    pytestconfig._failed_image_dir = failed_dir  # noqa: SLF001
-
     verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir)
     pyvista.global_theme.before_close_callback = verify_image_cache
 
@@ -344,17 +305,3 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
 
     request.addfinalizer(reset)  # noqa: PT021
     return verify_image_cache
-
-
-@pytest.hookimpl
-def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
-    """Merge and clean up temp json files."""
-    config = session.config
-
-    failed_image_dir = getattr(config, "_failed_image_dir", None)
-    if failed_image_dir:
-        warnings_dir = Path(failed_image_dir, "warnings")
-        _combine_temp_jsons(warnings_dir)
-
-        errors_dir = Path(failed_image_dir, "errors")
-        _combine_temp_jsons(errors_dir)

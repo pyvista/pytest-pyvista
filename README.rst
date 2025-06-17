@@ -108,9 +108,8 @@ These are the flags you can use when calling ``pytest`` in the command line:
   directory.  This will override any configuration, see below.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
-  there is a warning or error raised. Regression error values are also summarized in
-  a JSON file. This directory is useful for reviewing test failures.
-  This will override any configuration, see below.
+  there is a warning or error raised. This directory is useful for reviewing test
+  failures. This will override any configuration, see below.
 
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 
