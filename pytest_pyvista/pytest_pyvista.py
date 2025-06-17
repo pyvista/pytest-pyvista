@@ -224,12 +224,18 @@ class VerifyImageCache:
         if self.generated_image_dir is not None:
             gen_image_filename = os.path.join(self.generated_image_dir, test_name[5:] + ".png")  # noqa: PTH118
             plotter.screenshot(gen_image_filename)
+            if not Path(image_filename).is_file():
+                # Image comparison will fail, so save image before error
+                self._save_failed_test_images("error", plotter, image_name)
+
+                # Make sure this doesn't get called again
+                plotter._before_close_callback = None  # noqa: SLF001
 
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
             if self.failed_image_dir is not None:
-                self._save_failed_test_images("error", plotter, image_name, error)
+                self._save_failed_test_images("error", plotter, image_name)
             if self.reset_only_failed:
                 warnings.warn(  # noqa: B028
                     f"{test_name} Exceeded image regression error of "
@@ -244,7 +250,7 @@ class VerifyImageCache:
                 raise RegressionError(msg)
         if error > allowed_warning:
             if self.failed_image_dir is not None:
-                self._save_failed_test_images("warning", plotter, image_name, error)
+                self._save_failed_test_images("warning", plotter, image_name)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
 
     def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: pyvista.Plotter, image_name: str) -> None:
