@@ -349,11 +349,12 @@ def test_file_not_found(testdir) -> None:
     result.stdout.fnmatch_lines("*does not exist in image cache*")
 
 
-@pytest.mark.parametrize("outcome", ["error", "warning", "success"])
-def test_failed_image_dir(testdir, outcome) -> None:
+@pytest.mark.parametrize(("outcome", "make_cache"), [("error", False), ("error", True), ("warning", True), ("success", True)])
+def test_failed_image_dir(testdir, outcome, make_cache) -> None:
     """Test usage of the `failed_image_dir` option."""
     cached_image_name = "imcache.png"
-    make_cached_images(testdir.tmpdir)
+    if make_cache:
+        make_cached_images(testdir.tmpdir)
 
     red = [255, 0, 0]
     almost_red = [250, 0, 0]
@@ -377,7 +378,10 @@ def test_failed_image_dir(testdir, outcome) -> None:
     else:
         result = testdir.runpytest("--failed_image_dir", dirname)
         result.stdout.fnmatch_lines("*UserWarning: pyvista test failed image dir: failed_image_dir does not yet exist.  Creating dir.")
-        result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
+        if make_cache:
+            result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
+        else:
+            result.stdout.fnmatch_lines("*FileNotFoundError*")
 
         if outcome == "error":
             expected_subdir = "errors"
@@ -387,10 +391,19 @@ def test_failed_image_dir(testdir, outcome) -> None:
             not_expected_subdir = "errors"
 
         assert failed_image_dir_path.isdir()
+
+        # Test that dir with failed images is only created as needed
         assert (failed_image_dir_path / expected_subdir).isdir()
-        assert (failed_image_dir_path / expected_subdir / "from_cache").isdir()
-        assert (failed_image_dir_path / expected_subdir / "from_cache" / cached_image_name).isfile()
         assert not (failed_image_dir_path / not_expected_subdir).isdir()
 
-        assert (failed_image_dir_path / expected_subdir / "from_test").isdir()
-        assert (failed_image_dir_path / expected_subdir / "from_test" / cached_image_name).isfile()
+        from_test_dir = failed_image_dir_path / expected_subdir / "from_test"
+        assert from_test_dir.isdir()
+        assert (from_test_dir / cached_image_name).isfile()
+
+        from_cache_dir = failed_image_dir_path / expected_subdir / "from_cache"
+        if make_cache:
+            assert from_cache_dir.isdir()
+            assert (from_cache_dir / cached_image_name).isfile()
+        else:
+            assert not from_cache_dir.isdir()
+            assert not (from_cache_dir / cached_image_name).isfile()
