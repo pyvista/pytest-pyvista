@@ -282,7 +282,7 @@ def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
         Path(dirpath).mkdir()
 
 
-def _get_dir_from_config_or_ini(pytestconfig, dirname: str) -> str:  # noqa: ANN001
+def _get_option_from_config_or_ini(pytestconfig, dirname: str) -> str:  # noqa: ANN001
     gen_dir = pytestconfig.getoption(dirname)
     if gen_dir is None:
         gen_dir = pytestconfig.getini(dirname)
@@ -299,9 +299,9 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
 
-    cache_dir = _get_dir_from_config_or_ini(pytestconfig, "image_cache_dir")
-    gen_dir = _get_dir_from_config_or_ini(pytestconfig, "generated_image_dir")
-    failed_dir = _get_dir_from_config_or_ini(pytestconfig, "failed_image_dir")
+    cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir")
+    gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir")
+    failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir")
 
     verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir)
     pyvista.global_theme.before_close_callback = verify_image_cache
