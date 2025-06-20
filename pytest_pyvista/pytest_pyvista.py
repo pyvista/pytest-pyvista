@@ -184,6 +184,12 @@ class VerifyImageCache:
             The Plotter object that is being closed.
 
         """
+
+        def remove_plotter_close_callback() -> None:
+            # Make sure this doesn't get called again if this plotter doesn't close properly
+            # This is typically needed if an error is raised by this function
+            plotter._before_close_callback = None  # noqa: SLF001
+
         if self.skip:
             return
 
@@ -213,8 +219,7 @@ class VerifyImageCache:
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
 
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache and not self.reset_image_cache:  # noqa: PTH113
-            # Make sure this doesn't get called again if this plotter doesn't close properly
-            plotter._before_close_callback = None  # noqa: SLF001
+            remove_plotter_close_callback()
             msg = f"{image_filename} does not exist in image cache"
             raise RegressionFileNotFound(msg)
 
@@ -227,9 +232,7 @@ class VerifyImageCache:
             if not Path(image_filename).is_file():
                 # Image comparison will fail, so save image before error
                 self._save_failed_test_images("error", plotter, image_name)
-
-                # Make sure this doesn't get called again
-                plotter._before_close_callback = None  # noqa: SLF001
+                remove_plotter_close_callback()
 
         error = pyvista.compare_images(image_filename, plotter)
 
@@ -244,8 +247,7 @@ class VerifyImageCache:
                 )
                 plotter.screenshot(image_filename)
             else:
-                # Make sure this doesn't get called again if this plotter doesn't close properly
-                plotter._before_close_callback = None  # noqa: SLF001
+                remove_plotter_close_callback()
                 msg = f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error}"
                 raise RegressionError(msg)
         if error > allowed_warning:
