@@ -292,10 +292,10 @@ def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
 
 
 def _get_option_from_config_or_ini(pytestconfig, option: str) -> str:  # noqa: ANN001
-    gen_dir = pytestconfig.getoption(option)
-    if gen_dir is None:
-        gen_dir = pytestconfig.getini(option)
-    return gen_dir
+    value = pytestconfig.getoption(option)
+    if value is None:
+        value = pytestconfig.getini(option)
+    return value
 
 
 @pytest.fixture
