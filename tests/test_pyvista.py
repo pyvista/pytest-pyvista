@@ -372,11 +372,12 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
         """
     )
     dirname = "failed_image_dir"
+    result = testdir.runpytest("--failed_image_dir", dirname)
+
     failed_image_dir_path = testdir.tmpdir / dirname
     if outcome == "success":
         assert not failed_image_dir_path.isdir()
     else:
-        result = testdir.runpytest("--failed_image_dir", dirname)
         result.stdout.fnmatch_lines("*UserWarning: pyvista test failed image dir: failed_image_dir does not yet exist.  Creating dir.")
         if make_cache:
             result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
