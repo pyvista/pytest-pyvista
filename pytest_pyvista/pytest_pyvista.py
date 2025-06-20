@@ -284,10 +284,10 @@ def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
         Path(dirpath).mkdir()
 
 
-def _get_option_from_config_or_ini(pytestconfig, dirname: str) -> str:  # noqa: ANN001
-    gen_dir = pytestconfig.getoption(dirname)
+def _get_option_from_config_or_ini(pytestconfig, option: str) -> str:  # noqa: ANN001
+    gen_dir = pytestconfig.getoption(option)
     if gen_dir is None:
-        gen_dir = pytestconfig.getini(dirname)
+        gen_dir = pytestconfig.getini(option)
     return gen_dir
 
 
