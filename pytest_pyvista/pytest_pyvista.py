@@ -254,14 +254,16 @@ class VerifyImageCache:
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
 
     def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: pyvista.Plotter, image_name: str) -> None:
+        """Save test image from cache or test to the failed image dir."""
+
         def _make_failed_test_image_dir(
             errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
         ) -> Path:
-            """Save test image from cache or test to the failed image dir."""
             _ensure_dir_exists(self.failed_image_dir, msg_name="failed image dir")
-            Path(self.failed_image_dir, errors_or_warnings).mkdir(exist_ok=True)
+            errors_or_warnings_dir = Path(self.failed_image_dir, errors_or_warnings)
+            errors_or_warnings_dir.mkdir(exist_ok=True)
 
-            dest_dir = Path(self.failed_image_dir, errors_or_warnings, from_cache_or_test)
+            dest_dir = errors_or_warnings_dir / from_cache_or_test
             dest_dir.mkdir(exist_ok=True)
             return dest_dir
 
