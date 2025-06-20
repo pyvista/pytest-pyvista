@@ -157,6 +157,12 @@ Additionally, to configure the directory that will contain the generated test im
    [tool.pytest.ini_options]
    generated_image_dir = "generated_images"
 
+Similarly, configure the directory that will contain any failed test images:
+
+.. code::
+
+   [tool.pytest.ini_options]
+   failed_image_dir = "failed_images"
 
 Contributing
 ------------
