@@ -227,18 +227,18 @@ class VerifyImageCache:
             plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:
-            gen_image_filename = os.path.join(self.generated_image_dir, test_name[5:] + ".png")  # noqa: PTH118
+            gen_image_filename = os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
             plotter.screenshot(gen_image_filename)
             if not Path(image_filename).is_file():
                 # Image comparison will fail, so save image before error
-                self._save_failed_test_images("error", plotter, image_name)
+                self._save_failed_test_images("error", image_name)
                 remove_plotter_close_callback()
 
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
             if self.failed_image_dir is not None:
-                self._save_failed_test_images("error", plotter, image_name)
+                self._save_failed_test_images("error", image_name)
             if self.reset_only_failed:
                 warnings.warn(  # noqa: B028
                     f"{test_name} Exceeded image regression error of "
@@ -252,11 +252,11 @@ class VerifyImageCache:
                 raise RegressionError(msg)
         if error > allowed_warning:
             if self.failed_image_dir is not None:
-                self._save_failed_test_images("warning", plotter, image_name)
+                self._save_failed_test_images("warning", image_name)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
 
-    def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: pyvista.Plotter, image_name: str) -> None:
-        """Save test image from cache or test to the failed image dir."""
+    def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], image_name: str) -> None:
+        """Save test image from cache and from test to the failed image dir."""
 
         def _make_failed_test_image_dir(
             errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
@@ -270,13 +270,18 @@ class VerifyImageCache:
             return dest_dir
 
         error_dirname = cast("Literal['errors', 'warnings']", error_or_warning + "s")
-        from_dir = _make_failed_test_image_dir(error_dirname, "from_test")
-        plotter.screenshot(Path(from_dir, image_name))
 
-        cached_image = Path(self.cache_dir, image_name)
-        if cached_image.is_file():
-            from_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
-            shutil.copy(cached_image, Path(from_dir, image_name))
+        if self.generated_image_dir is not None:
+            generated_image = Path(self.generated_image_dir, image_name)
+            if generated_image.is_file():
+                from_test_dir = _make_failed_test_image_dir(error_dirname, "from_test")
+                shutil.copy(generated_image, Path(from_test_dir, image_name))
+
+        if self.cache_dir is not None:
+            cached_image = Path(self.cache_dir, image_name)
+            if cached_image.is_file():
+                from_cache_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
+                shutil.copy(cached_image, Path(from_cache_dir, image_name))
 
 
 def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
