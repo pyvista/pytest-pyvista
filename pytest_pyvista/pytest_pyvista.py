@@ -267,11 +267,8 @@ class VerifyImageCache:
             errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
         ) -> Path:
             _ensure_dir_exists(self.failed_image_dir, msg_name="failed image dir")
-            errors_or_warnings_dir = Path(self.failed_image_dir, errors_or_warnings)
-            errors_or_warnings_dir.mkdir(exist_ok=True)
-
-            dest_dir = errors_or_warnings_dir / from_cache_or_test
-            dest_dir.mkdir(exist_ok=True)
+            dest_dir = Path(self.failed_image_dir, errors_or_warnings, from_cache_or_test)
+            dest_dir.mkdir(exist_ok=True, parents=True)
             return dest_dir
 
         error_dirname = cast("Literal['errors', 'warnings']", error_or_warning + "s")
@@ -289,7 +286,7 @@ def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
     if not Path(dirpath).is_dir():
         msg = f"pyvista test {msg_name}: {dirpath} does not yet exist.  Creating dir."
         warnings.warn(msg, stacklevel=2)
-        Path(dirpath).mkdir()
+        Path(dirpath).mkdir(parents=True)
 
 
 def _get_option_from_config_or_ini(pytestconfig, option: str) -> str:  # noqa: ANN001
