@@ -54,6 +54,9 @@ def test_verify_image_cache(testdir) -> None:
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
+    assert (testdir.tmpdir / "image_cache_dir").isdir()
+    assert not (testdir.tmpdir / "generated_image_dir").isdir()
+
 
 def test_verify_image_cache_fail_regression(testdir) -> None:
     """Test regression of the `verify_image_cache` fixture."""
