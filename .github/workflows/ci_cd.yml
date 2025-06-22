@@ -174,7 +174,7 @@ jobs:
         working-directory: pyvista
 
       - name: Unit Testing
-        run: xvfb-run python -m pytest --allow_unused_generated -v --generated_image_dir gen_dir tests/plotting/test_plotting.py
+        run: xvfb-run python -m pytest -v --generated_image_dir gen_dir tests/plotting/test_plotting.py
         working-directory: pyvista
 
       - name: Upload generated image artifact

@@ -199,7 +199,7 @@ class VerifyImageCache:
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
 
         overwrite_cache = (self.add_missing_images or self.reset_image_cache) and not self.reset_only_failed
-        if not Path(image_filename).isfiles() or overwrite_cache:
+        if not Path(image_filename).is_file() or overwrite_cache:
             if self.allow_unused_generated or overwrite_cache:
                 plotter.screenshot(image_filename)
             else:
