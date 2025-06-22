@@ -114,7 +114,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
 
 * ``--reset_only_failed`` reset the image cache of the failed tests only.
 
-* ``--fail_unused_cache`` report test failure if there are any images in the cache
+* ``--allow_unused_cache`` report test failure if there are any images in the cache
   which are not compared to any generated images.
 
 Test specific flags

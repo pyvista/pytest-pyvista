@@ -80,7 +80,7 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Reset only the failed images in the PyVista cache.",
     )
     group.addoption(
-        "--fail_unused_cache",
+        "--allow_unused_cache",
         action="store_true",
         help="Report test failure if there are any images in the cache which are not compared to any generated images.",
     )
@@ -317,12 +317,12 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
     config = session.config
 
     image_cache_dir = config.getoption("image_cache_dir")
-    fail_unused_cache = config.getoption("fail_unused_cache")
+    allow_unused_cache = config.getoption("allow_unused_cache")
 
     if image_cache_dir is None:
         image_cache_dir = config.getini("image_cache_dir")
 
-    if image_cache_dir and fail_unused_cache:
+    if image_cache_dir and not allow_unused_cache:
         cache_path = Path(image_cache_dir)
         cached_files = {f.name for f in cache_path.glob("*.png")}
         tested_files = {result.cached_filename for result in RESULTS.values()}

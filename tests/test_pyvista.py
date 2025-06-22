@@ -21,7 +21,7 @@ def test_arguments(testdir) -> None:
 
         """
     )
-    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--fail_extra_image_cache", "--fail_unused_cache")
+    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--fail_extra_image_cache", "--allow_unused_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -405,9 +405,8 @@ TESTS_FAILED_ERROR_LINES = [
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [*TESTS_FAILED_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [*TESTS_FAILED_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
     ],
-)
-# fmt: on
-def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, stderr_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
+)# fmt: skip
+def test_allow_unused_cache(testdir, marker, skip_verify, color, stdout_lines, stderr_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
     image_name = test_name + ".png"
@@ -432,7 +431,7 @@ def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, st
         """
     )
 
-    result = testdir.runpytest("--fail_unused_cache")
+    result = testdir.runpytest()
 
     assert result.ret == exit_code
     result.stderr.fnmatch_lines(stderr_lines)
@@ -440,7 +439,8 @@ def test_fail_unused_cache(testdir, marker, skip_verify, color, stdout_lines, st
 
 
 @pytest.mark.parametrize("skip", [True,False])
-def test_fail_unused_cache_skip_multiple_images(testdir, skip) -> None:
+@pytest.mark.parametrize("args", ["--allow_unused_cache", []])
+def test_allow_unused_cache_skip_multiple_images(testdir, skip, args) -> None:
     """Test skips when there are multiple calls to show() in a test."""
     make_cached_images(testdir.tmpdir, name="imcache.png")
     make_cached_images(testdir.tmpdir, name="imcache_1.png")
@@ -464,15 +464,18 @@ def test_fail_unused_cache_skip_multiple_images(testdir, skip) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_unused_cache")
+    result = testdir.runpytest(args)
     expected = "*skipped*" if skip else "*[Pp]assed*"
     result.stdout.fnmatch_lines(expected)
+    assert result.ret == pytest.ExitCode.OK
 
 
-def test_fail_unused_cache_name_mismatch(testdir) -> None:
+@pytest.mark.parametrize("allow_unused_cache", [True, False])
+def test_allow_unused_cache_name_mismatch(testdir, allow_unused_cache) -> None:
     """Test cached image doesn't match test name."""
     image_name = "im_cache.png"
     make_cached_images(testdir.tmpdir, name=image_name)
+    make_cached_images(testdir.tmpdir)
 
     testdir.makepyfile(
         """
@@ -485,6 +488,11 @@ def test_fail_unused_cache_name_mismatch(testdir) -> None:
             plotter.show()
         """
     )
-
-    result = testdir.runpytest("--fail_unused_cache")
-    result.stderr.fnmatch_lines([*TESTS_FAILED_ERROR_LINES, f"[{image_name!r}]"])
+    args = "--allow_unused_cache" if allow_unused_cache else []
+    result = testdir.runpytest(args)
+    if allow_unused_cache:
+        result.stdout.fnmatch_lines("*[Pp]assed*")
+        assert result.ret == pytest.ExitCode.OK
+    else:
+        result.stderr.fnmatch_lines([*TESTS_FAILED_ERROR_LINES, f"[{image_name!r}]"])
+        assert result.ret == pytest.ExitCode.TESTS_FAILED
