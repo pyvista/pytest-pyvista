@@ -56,7 +56,7 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
     )
     parser.addini(
         "generated_image_dir",
-        default="generated_image_dir",
+        default=None,
         help="Path to dump test images from the current run.",
     )
     group.addoption(
