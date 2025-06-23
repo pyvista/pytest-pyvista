@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import platform
 import warnings
 
@@ -198,15 +197,14 @@ class VerifyImageCache:
         image_name = test_name[5:] + ".png"
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
 
-        overwrite_cache = (self.add_missing_images or self.reset_image_cache) and not self.reset_only_failed
-        if not Path(image_filename).is_file() or overwrite_cache:
-            if self.allow_unused_generated or overwrite_cache:
-                plotter.screenshot(image_filename)
-            else:
-                # Make sure this doesn't get called again if this plotter doesn't close properly
-                plotter._before_close_callback = None  # noqa: SLF001
-                msg = f"{image_filename} does not exist in image cache"
-                raise RegressionFileNotFound(msg)
+        if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images) and not self.reset_image_cache:  # noqa: PTH113
+            # Make sure this doesn't get called again if this plotter doesn't close properly
+            plotter._before_close_callback = None  # noqa: SLF001
+            msg = f"{image_filename} does not exist in image cache"
+            raise RegressionFileNotFound(msg)
+
+        if ((self.add_missing_images and not os.path.isfile(image_filename)) or self.reset_image_cache) and not self.reset_only_failed:  # noqa: PTH113
+            plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:
             gen_image_filename = os.path.join(self.generated_image_dir, test_name[5:] + ".png")  # noqa: PTH118
