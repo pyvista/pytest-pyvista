@@ -255,11 +255,19 @@ def test_add_missing_images_commandline(testdir) -> None:
 
 
 @pytest.mark.parametrize("fail_extra_image_cache", [True, False])
-def test_reset_image_cache(testdir, fail_extra_image_cache) -> None:
+@pytest.mark.parametrize("make_cache", [True, False])
+def test_reset_image_cache(testdir, fail_extra_image_cache, make_cache) -> None:
     """Test reset_image_cache  via CLI option."""
-    filename = make_cached_images(testdir.tmpdir)
-    filename_original = make_cached_images(testdir.tmpdir, name="original.png")
-    assert filecmp.cmp(filename, filename_original, shallow=False)
+    dirname = "image_cache_dir"
+    test_image_name = "imcache.png"
+    filename_test = testdir.tmpdir / dirname / test_image_name
+    filename_original = make_cached_images(testdir.tmpdir, dirname, name="original.png")
+    if make_cache:
+        filename = make_cached_images(testdir.tmpdir)
+        assert filecmp.cmp(filename, filename_original, shallow=False)
+    else:
+        filename = filename_test
+        assert not filename_test.isfile()
 
     testdir.makepyfile(
         """
@@ -276,7 +284,7 @@ def test_reset_image_cache(testdir, fail_extra_image_cache) -> None:
     if fail_extra_image_cache:
         args.append("--fail_extra_image_cache")
     result = testdir.runpytest(*args)
-    # file was overwritten
+    # file was created or overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
     # should pass even if image doesn't match
     result.stdout.fnmatch_lines("*[Pp]assed*")
