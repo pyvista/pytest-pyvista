@@ -255,6 +255,8 @@ def test_add_missing_images_commandline(testdir, reset_only_failed) -> None:
     result = testdir.runpytest(*args)
     isfile = (testdir.tmpdir / "image_cache_dir" / "imcache.png").isfile()
     if reset_only_failed:
+        # TODO: An error is currently generated with this option enabled, but should not be. # noqa: TD002, TD003, FIX002
+        #   The test should pass with ExitCode.OK
         assert not isfile
         result.stdout.fnmatch_lines("*FileNotFoundError*")
         assert result.ret == pytest.ExitCode.TESTS_FAILED
