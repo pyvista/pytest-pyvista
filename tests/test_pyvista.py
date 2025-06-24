@@ -3,6 +3,7 @@ from __future__ import annotations  # noqa: D100
 import filecmp
 import os
 
+import pytest
 import pyvista as pv
 
 pv.OFF_SCREEN = True
@@ -253,7 +254,8 @@ def test_add_missing_images_commandline(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_reset_image_cache(testdir) -> None:
+@pytest.mark.parametrize("fail_extra_image_cache", [True, False])
+def test_reset_image_cache(testdir, fail_extra_image_cache) -> None:
     """Test reset_image_cache  via CLI option."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
@@ -270,7 +272,10 @@ def test_reset_image_cache(testdir) -> None:
             plotter.show()
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache", "--reset_image_cache")
+    args = ["--reset_image_cache"]
+    if fail_extra_image_cache:
+        args.append("--fail_extra_image_cache")
+    result = testdir.runpytest(*args)
     # file was overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
     # should pass even if image doesn't match
@@ -307,7 +312,9 @@ def test_cleanup(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_reset_only_failed(testdir) -> None:
+@pytest.mark.parametrize("add_missing_images", [True, False])
+@pytest.mark.parametrize("reset_image_cache", [True, False])
+def test_reset_only_failed(testdir, reset_image_cache, add_missing_images) -> None:
     """Test usage of the `reset_only_failed` flag."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
@@ -325,7 +332,13 @@ def test_reset_only_failed(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--reset_only_failed")
+    args = ["--reset_only_failed"]
+    if add_missing_images:
+        args.append("--add_missing_images")
+    if reset_image_cache:
+        args.append("--reset_image_cache")
+
+    result = testdir.runpytest(*args)
     result.stdout.fnmatch_lines("*[Pp]assed*")
     result.stdout.fnmatch_lines("*This image will be reset in the cache.")
     # file was overwritten
