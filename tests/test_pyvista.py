@@ -257,9 +257,11 @@ def test_add_missing_images_commandline(testdir, reset_only_failed) -> None:
     if reset_only_failed:
         assert not isfile
         result.stdout.fnmatch_lines("*FileNotFoundError*")
+        assert result.ret == pytest.ExitCode.TESTS_FAILED
     else:
         assert isfile
         result.stdout.fnmatch_lines("*[Pp]assed*")
+        assert result.ret == pytest.ExitCode.OK
 
 
 @pytest.mark.parametrize("fail_extra_image_cache", [True, False])
