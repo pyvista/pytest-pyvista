@@ -223,6 +223,7 @@ class VerifyImageCache:
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
 
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache and not self.reset_image_cache:  # noqa: PTH113
+            self._save_failed_test_images("error", plotter, image_name)
             remove_plotter_close_callback()
             msg = f"{image_filename} does not exist in image cache"
             raise RegressionFileNotFound(msg)
