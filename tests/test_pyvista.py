@@ -3,6 +3,7 @@ from __future__ import annotations  # noqa: D100
 import filecmp
 import os
 
+import pytest
 import pyvista as pv
 
 pv.OFF_SCREEN = True
@@ -234,7 +235,8 @@ def test_generated_image_dir_ini(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_add_missing_images_commandline(testdir) -> None:
+@pytest.mark.parametrize("reset_only_failed", [True, False])
+def test_add_missing_images_commandline(testdir, reset_only_failed) -> None:
     """Test setting add_missing_images via CLI option."""
     testdir.makepyfile(
         """
@@ -247,10 +249,13 @@ def test_add_missing_images_commandline(testdir) -> None:
             plotter.show()
         """
     )
-
-    result = testdir.runpytest("--add_missing_images")
+    args = ["--add_missing_images"]
+    if reset_only_failed:
+        args.append("--reset_only_failed")
+    result = testdir.runpytest(*args)
     assert os.path.isfile(os.path.join(testdir.tmpdir, "image_cache_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
+    assert result.ret == pytest.ExitCode.OK
 
 
 def test_reset_image_cache(testdir) -> None:
