@@ -197,20 +197,14 @@ class VerifyImageCache:
         image_name = test_name[5:] + ".png"
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
 
-        if not os.path.isfile(image_filename):  # noqa: SIM102, PTH113
-            if self.fail_extra_image_cache:  # noqa: SIM102
-                if not self.reset_image_cache:
-                    # Make sure this doesn't get called again if this plotter doesn't close properly
-                    plotter._before_close_callback = None  # noqa: SLF001
-                    msg = f"{image_filename} does not exist in image cache"
-                    raise RegressionFileNotFound(msg)
+        if not os.path.isfile(image_filename) and self.fail_extra_image_cache and not self.reset_image_cache:  # noqa: PTH113
+            # Make sure this doesn't get called again if this plotter doesn't close properly
+            plotter._before_close_callback = None  # noqa: SLF001
+            msg = f"{image_filename} does not exist in image cache"
+            raise RegressionFileNotFound(msg)
 
-        if self.add_missing_images and not os.path.isfile(image_filename):  # noqa: SIM102, PTH113
-            if not self.reset_only_failed:
-                plotter.screenshot(image_filename)
-        if self.reset_image_cache:  # noqa: SIM102
-            if not self.reset_only_failed:
-                plotter.screenshot(image_filename)
+        if ((self.add_missing_images and not os.path.isfile(image_filename)) or self.reset_image_cache) and not self.reset_only_failed:  # noqa: PTH113
+            plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:
             gen_image_filename = os.path.join(self.generated_image_dir, test_name[5:] + ".png")  # noqa: PTH118
