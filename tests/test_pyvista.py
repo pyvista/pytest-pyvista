@@ -2,6 +2,7 @@ from __future__ import annotations  # noqa: D100
 
 import filecmp
 import os
+from pathlib import Path
 
 import pytest
 import pyvista as pv
@@ -24,17 +25,46 @@ def test_arguments(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def make_cached_images(test_path, path="image_cache_dir", name="imcache.png"):  # noqa: ANN201
+def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red"):  # noqa: ANN201
     """Makes image cache in `test_path/path`."""  # noqa: D401
     d = os.path.join(test_path, path)  # noqa: PTH118
     if not os.path.isdir(d):  # noqa: PTH112
         os.mkdir(d)  # noqa: PTH102
     sphere = pv.Sphere()
     plotter = pv.Plotter()
-    plotter.add_mesh(sphere, color="red")
+    plotter.add_mesh(sphere, color=color)
     filename = os.path.join(d, name)  # noqa: PTH118
     plotter.screenshot(filename)
     return filename
+
+
+def get_path_inode(path: str | Path) -> int:
+    """Return the inode for the given path."""
+    return Path(path).stat().st_ino
+
+
+def file_has_changed(filepath: str, original_contents_path: str | None = None, original_inode: int | None = None) -> bool:
+    """
+    Return True if a file has changed.
+
+    Specify `original_contents_path` to check if the contents of `filepath` match the contents
+    of `original_contents_path`.
+
+    Specify `original_inode` to check if the inode of `filepath` matches `original_inode`.
+
+    Specify both `original_contents_path` and `original_inode` to check both.
+    """
+    assert original_contents_path or original_inode, "Original contents filepath or original inode must be specified"
+    content_changed = False
+    if original_contents_path:
+        content_changed = not filecmp.cmp(filepath, original_contents_path, shallow=False)
+
+    replaced = False
+    if original_inode:
+        new_inode = get_path_inode(filepath)
+        replaced = new_inode != original_inode
+
+    return content_changed or replaced
 
 
 def test_verify_image_cache(testdir) -> None:
@@ -238,7 +268,8 @@ def test_generated_image_dir_ini(testdir) -> None:
 
 @pytest.mark.parametrize("reset_only_failed", [True, False])
 @pytest.mark.parametrize("force_regression_error", [True, False])
-def test_add_missing_images_commandline(testdir, reset_only_failed, force_regression_error) -> None:
+@pytest.mark.parametrize("add_second_test", [True, False])
+def test_add_missing_images_commandline(tmp_path, testdir, reset_only_failed, force_regression_error, add_second_test) -> None:
     """Test setting add_missing_images via CLI option."""
     if force_regression_error:
         # Make a cached image (which has a red sphere) but specify a blue sphere in the test file
@@ -247,6 +278,24 @@ def test_add_missing_images_commandline(testdir, reset_only_failed, force_regres
         color = "blue"
     else:
         color = "red"
+
+    if add_second_test:
+        second_color = "lime"
+        assert second_color != color
+        always_passes_filename = make_cached_images(testdir.tmpdir, name="always_passes.png", color=second_color)
+        always_passes_ground_truth = make_cached_images(tmp_path, name="always_passes.png", color=second_color)
+        always_passes_inode = get_path_inode(always_passes_filename)
+        second_test = f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_always_passes(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color={second_color!r})
+            plotter.show()
+        """
+    else:
+        second_test = ""
 
     testdir.makepyfile(
         f"""
@@ -257,6 +306,7 @@ def test_add_missing_images_commandline(testdir, reset_only_failed, force_regres
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color={color!r})
             plotter.show()
+        {second_test}
         """
     )
     args = ["--add_missing_images"]
@@ -277,6 +327,10 @@ def test_add_missing_images_commandline(testdir, reset_only_failed, force_regres
         pl = pv.Plotter()
         pl.add_mesh(pv.Sphere(), color=color)
         assert pv.compare_images(pl, str(expected_file)) == 0.0
+
+    if add_second_test:
+        # Make sure second test image was not modified
+        assert not file_has_changed(always_passes_filename, original_contents_path=always_passes_ground_truth, original_inode=always_passes_inode)
 
 
 def test_reset_image_cache(testdir) -> None:
