@@ -240,7 +240,8 @@ def test_generated_image_dir_ini(testdir) -> None:
 def test_add_missing_images_commandline(testdir, reset_only_failed, force_regression_error) -> None:
     """Test setting add_missing_images via CLI option."""
     if force_regression_error:
-        # Make a cached image but with the wrong color to generate a regression failure
+        # Make a cached image (which has a red sphere) but specify a blue sphere in the test file
+        # to generate a regression failure
         make_cached_images(testdir.tmpdir)
         color = "blue"
     else:
@@ -271,7 +272,7 @@ def test_add_missing_images_commandline(testdir, reset_only_failed, force_regres
         result.stdout.fnmatch_lines("*[Pp]assed*")
         assert result.ret == pytest.ExitCode.OK
 
-        # Make sure the final image in the cache matches the test image
+        # Make sure the final image in the cache matches the generated test image
         pl = pv.Plotter()
         pl.add_mesh(pv.Sphere(), color=color)
         assert pv.compare_images(pl, str(expected_file)) == 0.0
