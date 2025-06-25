@@ -3,6 +3,7 @@ from __future__ import annotations  # noqa: D100
 import filecmp
 import os
 
+import pytest
 import pyvista as pv
 
 pv.OFF_SCREEN = True
@@ -56,6 +57,7 @@ def test_verify_image_cache(testdir) -> None:
 
     assert (testdir.tmpdir / "image_cache_dir").isdir()
     assert not (testdir.tmpdir / "generated_image_dir").isdir()
+    assert not (testdir.tmpdir / "failed_image_dir").isdir()
 
 
 def test_verify_image_cache_fail_regression(testdir) -> None:
@@ -349,3 +351,64 @@ def test_file_not_found(testdir) -> None:
     result = testdir.runpytest("--fail_extra_image_cache")
     result.stdout.fnmatch_lines("*RegressionFileNotFound*")
     result.stdout.fnmatch_lines("*does not exist in image cache*")
+
+
+@pytest.mark.parametrize(("outcome", "make_cache"), [("error", False), ("error", True), ("warning", True), ("success", True)])
+def test_failed_image_dir(testdir, outcome, make_cache) -> None:
+    """Test usage of the `failed_image_dir` option."""
+    cached_image_name = "imcache.png"
+    if make_cache:
+        make_cached_images(testdir.tmpdir)
+
+    red = [255, 0, 0]
+    almost_red = [250, 0, 0]
+    definitely_not_red = [0, 0, 0]
+    color = definitely_not_red if outcome == "error" else almost_red if outcome == "warning" else red
+    testdir.makepyfile(
+        f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color={color})
+            plotter.show()
+        """
+    )
+    dirname = "failed_image_dir"
+    result = testdir.runpytest("--failed_image_dir", dirname)
+
+    failed_image_dir_path = testdir.tmpdir / dirname
+    if outcome == "success":
+        assert not failed_image_dir_path.isdir()
+    else:
+        result.stdout.fnmatch_lines("*UserWarning: pyvista test failed image dir: failed_image_dir does not yet exist.  Creating dir.")
+        if make_cache:
+            result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
+        else:
+            result.stdout.fnmatch_lines("*FileNotFoundError*")
+
+        if outcome == "error":
+            expected_subdir = "errors"
+            not_expected_subdir = "warnings"
+        else:
+            expected_subdir = "warnings"
+            not_expected_subdir = "errors"
+
+        assert failed_image_dir_path.isdir()
+
+        # Test that dir with failed images is only created as needed
+        assert (failed_image_dir_path / expected_subdir).isdir()
+        assert not (failed_image_dir_path / not_expected_subdir).isdir()
+
+        from_test_dir = failed_image_dir_path / expected_subdir / "from_test"
+        assert from_test_dir.isdir()
+        assert (from_test_dir / cached_image_name).isfile()
+
+        from_cache_dir = failed_image_dir_path / expected_subdir / "from_cache"
+        if make_cache:
+            assert from_cache_dir.isdir()
+            assert (from_cache_dir / cached_image_name).isfile()
+        else:
+            assert not from_cache_dir.isdir()
+            assert not (from_cache_dir / cached_image_name).isfile()
