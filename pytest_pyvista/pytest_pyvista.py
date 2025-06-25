@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import platform
+import shutil
+from typing import TYPE_CHECKING
+from typing import Literal
+from typing import cast
 import warnings
 
 import pytest
 import pyvista
+
+if TYPE_CHECKING:
+    from pyvista import Plotter
 
 
 class RegressionError(RuntimeError):
@@ -41,6 +49,16 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "generated_image_dir",
         default=None,
         help="Path to dump test images from the current run.",
+    )
+    group.addoption(
+        "--failed_image_dir",
+        action="store",
+        help="Path to dump images from failed tests from the current run.",
+    )
+    parser.addini(
+        "failed_image_dir",
+        default=None,
+        help="Path to dump images from failed tests from the current run.",
     )
     group.addoption(
         "--add_missing_images",
@@ -133,6 +151,7 @@ class VerifyImageCache:
         var_error_value=1000.0,  # noqa: ANN001
         var_warning_value=1000.0,  # noqa: ANN001
         generated_image_dir=None,  # noqa: ANN001
+        failed_image_dir=None,  # noqa: ANN001
     ) -> None:
         self.test_name = test_name
 
@@ -148,9 +167,9 @@ class VerifyImageCache:
         self.var_warning_value = var_warning_value
 
         self.generated_image_dir = generated_image_dir
-        if self.generated_image_dir is not None and not os.path.isdir(self.generated_image_dir):  # noqa: PTH112
-            warnings.warn(f"pyvista test generated image dir: {self.generated_image_dir} does not yet exist.  Creating dir.")  # noqa: B028
-            os.makedirs(self.generated_image_dir)  # noqa: PTH103
+        if self.generated_image_dir is not None:
+            _ensure_dir_exists(self.generated_image_dir, msg_name="generated image dir")
+        self.failed_image_dir = failed_image_dir
 
         self.high_variance_test = False
         self.windows_skip_image_cache = False
@@ -169,6 +188,12 @@ class VerifyImageCache:
             The Plotter object that is being closed.
 
         """
+
+        def remove_plotter_close_callback() -> None:
+            # Make sure this doesn't get called again if this plotter doesn't close properly
+            # This is typically needed if an error is raised by this function
+            plotter._before_close_callback = None  # noqa: SLF001
+
         if self.skip:
             return
 
@@ -198,8 +223,9 @@ class VerifyImageCache:
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
 
         if not os.path.isfile(image_filename) and self.fail_extra_image_cache and not self.reset_image_cache:  # noqa: PTH113
-            # Make sure this doesn't get called again if this plotter doesn't close properly
-            plotter._before_close_callback = None  # noqa: SLF001
+            if self.failed_image_dir is not None:
+                self._save_failed_test_images("error", plotter, image_name)
+            remove_plotter_close_callback()
             msg = f"{image_filename} does not exist in image cache"
             raise RegressionFileNotFound(msg)
 
@@ -207,12 +233,19 @@ class VerifyImageCache:
             plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:
-            gen_image_filename = os.path.join(self.generated_image_dir, test_name[5:] + ".png")  # noqa: PTH118
+            gen_image_filename = os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
             plotter.screenshot(gen_image_filename)
+
+        if self.failed_image_dir is not None and not Path(image_filename).is_file():
+            # Image comparison will fail, so save image before error
+            self._save_failed_test_images("error", plotter, image_name)
+            remove_plotter_close_callback()
 
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
+            if self.failed_image_dir is not None:
+                self._save_failed_test_images("error", plotter, image_name)
             if self.reset_only_failed:
                 warnings.warn(  # noqa: B028
                     f"{test_name} Exceeded image regression error of "
@@ -221,12 +254,48 @@ class VerifyImageCache:
                 )
                 plotter.screenshot(image_filename)
             else:
-                # Make sure this doesn't get called again if this plotter doesn't close properly
-                plotter._before_close_callback = None  # noqa: SLF001
+                remove_plotter_close_callback()
                 msg = f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error}"
                 raise RegressionError(msg)
         if error > allowed_warning:
+            if self.failed_image_dir is not None:
+                self._save_failed_test_images("warning", plotter, image_name)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
+
+    def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: Plotter, image_name: str) -> None:
+        """Save test image from cache and from test to the failed image dir."""
+
+        def _make_failed_test_image_dir(
+            errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
+        ) -> Path:
+            _ensure_dir_exists(self.failed_image_dir, msg_name="failed image dir")
+            dest_dir = Path(self.failed_image_dir, errors_or_warnings, from_cache_or_test)
+            dest_dir.mkdir(exist_ok=True, parents=True)
+            return dest_dir
+
+        error_dirname = cast("Literal['errors', 'warnings']", error_or_warning + "s")
+
+        from_test_dir = _make_failed_test_image_dir(error_dirname, "from_test")
+        plotter.screenshot(from_test_dir / image_name)
+
+        cached_image = Path(self.cache_dir, image_name)
+        if cached_image.is_file():
+            from_cache_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
+            shutil.copy(cached_image, from_cache_dir / image_name)
+
+
+def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
+    if not Path(dirpath).is_dir():
+        msg = f"pyvista test {msg_name}: {dirpath} does not yet exist.  Creating dir."
+        warnings.warn(msg, stacklevel=2)
+        Path(dirpath).mkdir(parents=True)
+
+
+def _get_option_from_config_or_ini(pytestconfig, option: str) -> str:  # noqa: ANN001
+    value = pytestconfig.getoption(option)
+    if value is None:
+        value = pytestconfig.getini(option)
+    return value
 
 
 @pytest.fixture
@@ -239,15 +308,11 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
 
-    cache_dir = pytestconfig.getoption("image_cache_dir")
-    if cache_dir is None:
-        cache_dir = pytestconfig.getini("image_cache_dir")
+    cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir")
+    gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir")
+    failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir")
 
-    gen_dir = pytestconfig.getoption("generated_image_dir")
-    if gen_dir is None:
-        gen_dir = pytestconfig.getini("generated_image_dir")
-
-    verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir)
+    verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir)
     pyvista.global_theme.before_close_callback = verify_image_cache
 
     def reset() -> None:
