@@ -222,7 +222,8 @@ class VerifyImageCache:
         image_name = test_name[5:] + ".png"
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
 
-        if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images) and not self.reset_image_cache:  # noqa: PTH113
+        if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):  # noqa: PTH113
+            # Raise error since the cached image does not exist and will not be added later
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
             remove_plotter_close_callback()
@@ -235,6 +236,12 @@ class VerifyImageCache:
         if self.generated_image_dir is not None:
             gen_image_filename = os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
             plotter.screenshot(gen_image_filename)
+
+        if not Path(image_filename).is_file() and self.allow_unused_generated:
+            # Test image has been generated, but cached image does not exist
+            # The generated image is considered unused, so exit safely before image
+            # comparison to avoid a FileNotFoundError
+            return
 
         if self.failed_image_dir is not None and not Path(image_filename).is_file():
             # Image comparison will fail, so save image before error

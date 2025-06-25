@@ -83,6 +83,34 @@ def test_verify_image_cache_fail_regression(testdir) -> None:
     result.stdout.fnmatch_lines("*Exceeded image regression error of*")
 
 
+@pytest.mark.parametrize("allow_unused_generated", [True, False])
+def test_allow_unused_generated(testdir, allow_unused_generated) -> None:
+    """Test using `--allow_unused_generated` CLI option."""
+    testdir.makepyfile(
+        """
+       import pytest
+       import pyvista as pv
+       pv.OFF_SCREEN = True
+       def test_imcache(verify_image_cache):
+           sphere = pv.Sphere()
+           plotter = pv.Plotter()
+           plotter.add_mesh(sphere, color="red")
+           plotter.show()
+       """
+    )
+    if allow_unused_generated:
+        args = ["--allow_unused_generated"]
+        exit_code = pytest.ExitCode.OK
+        match = "*[Pp]assed*"
+    else:
+        args = []
+        exit_code = pytest.ExitCode.TESTS_FAILED
+        match = "*RegressionFileNotFound*"
+    result = testdir.runpytest(*args)
+    result.stdout.fnmatch_lines(match)
+    assert result.ret == exit_code
+
+
 def test_skip(testdir) -> None:
     """Test `skip` flag of `verify_image_cache`."""
     make_cached_images(testdir.tmpdir)
