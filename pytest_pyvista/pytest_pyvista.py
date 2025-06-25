@@ -221,11 +221,17 @@ class VerifyImageCache:
         # "test_" to get the name for the image.
         image_name = test_name[5:] + ".png"
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
+        gen_image_filename = os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
 
         if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):  # noqa: PTH113
             # Raise error since the cached image does not exist and will not be added later
+
+            # Save images as needed before error
+            if self.generated_image_dir is not None:
+                plotter.screenshot(gen_image_filename)
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
+
             remove_plotter_close_callback()
             msg = f"{image_filename} does not exist in image cache"
             raise RegressionFileNotFound(msg)
@@ -234,7 +240,6 @@ class VerifyImageCache:
             plotter.screenshot(image_filename)
 
         if self.generated_image_dir is not None:
-            gen_image_filename = os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
             plotter.screenshot(gen_image_filename)
 
         if not Path(image_filename).is_file() and self.allow_unused_generated:

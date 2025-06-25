@@ -83,8 +83,9 @@ def test_verify_image_cache_fail_regression(testdir) -> None:
     result.stdout.fnmatch_lines("*Exceeded image regression error of*")
 
 
+@pytest.mark.parametrize("use_generated_image_dir", [True, False])
 @pytest.mark.parametrize("allow_unused_generated", [True, False])
-def test_allow_unused_generated(testdir, allow_unused_generated) -> None:
+def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_image_dir) -> None:
     """Test using `--allow_unused_generated` CLI option."""
     testdir.makepyfile(
         """
@@ -106,9 +107,15 @@ def test_allow_unused_generated(testdir, allow_unused_generated) -> None:
         args = []
         exit_code = pytest.ExitCode.TESTS_FAILED
         match = "*RegressionFileNotFound*"
+
+    if use_generated_image_dir:
+        args.extend(["--generated_image_dir", "gen_dir"])
+
     result = testdir.runpytest(*args)
     result.stdout.fnmatch_lines(match)
     assert result.ret == exit_code
+
+    assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile() == use_generated_image_dir
 
 
 def test_skip(testdir) -> None:
