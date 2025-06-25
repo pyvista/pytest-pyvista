@@ -236,16 +236,24 @@ def test_generated_image_dir_ini(testdir) -> None:
 
 
 @pytest.mark.parametrize("reset_only_failed", [True, False])
-def test_add_missing_images_commandline(testdir, reset_only_failed) -> None:
+@pytest.mark.parametrize("force_regression_error", [True, False])
+def test_add_missing_images_commandline(testdir, reset_only_failed, force_regression_error) -> None:
     """Test setting add_missing_images via CLI option."""
+    if force_regression_error:
+        # Make a cached image but with the wrong color to generate a regression failure
+        make_cached_images(testdir.tmpdir)
+        color = "blue"
+    else:
+        color = "red"
+
     testdir.makepyfile(
-        """
+        f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
             sphere = pv.Sphere()
             plotter = pv.Plotter()
-            plotter.add_mesh(sphere, color="red")
+            plotter.add_mesh(sphere, color={color!r})
             plotter.show()
         """
     )
@@ -253,9 +261,20 @@ def test_add_missing_images_commandline(testdir, reset_only_failed) -> None:
     if reset_only_failed:
         args.append("--reset_only_failed")
     result = testdir.runpytest(*args)
-    assert os.path.isfile(os.path.join(testdir.tmpdir, "image_cache_dir", "imcache.png"))  # noqa: PTH113, PTH118
-    result.stdout.fnmatch_lines("*[Pp]assed*")
-    assert result.ret == pytest.ExitCode.OK
+
+    if force_regression_error and not reset_only_failed:
+        result.stdout.fnmatch_lines("*RegressionError*")
+        assert result.ret == pytest.ExitCode.TESTS_FAILED
+    else:
+        expected_file = testdir.tmpdir / "image_cache_dir" / "imcache.png"
+        assert expected_file.isfile()
+        result.stdout.fnmatch_lines("*[Pp]assed*")
+        assert result.ret == pytest.ExitCode.OK
+
+        # Make sure the final image in the cache matches the test image
+        pl = pv.Plotter()
+        pl.add_mesh(pv.Sphere(), color=color)
+        assert pv.compare_images(pl, str(expected_file)) == 0.0
 
 
 def test_reset_image_cache(testdir) -> None:
