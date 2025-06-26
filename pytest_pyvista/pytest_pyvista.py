@@ -36,9 +36,9 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
     )
     group.addoption("--ignore_image_cache", action="store_true", help="Ignores the image cache.")
     group.addoption(
-        "--fail_extra_image_cache",
+        "--allow_unused_generated",
         action="store_true",
-        help="Enables failure if image cache does not exist.",
+        help="Prevent test failure if a generated test image has no use.",
     )
     group.addoption(
         "--generated_image_dir",
@@ -137,7 +137,7 @@ class VerifyImageCache:
 
     reset_image_cache = False
     ignore_image_cache = False
-    fail_extra_image_cache = False
+    allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
 
@@ -221,10 +221,17 @@ class VerifyImageCache:
         # "test_" to get the name for the image.
         image_name = test_name[5:] + ".png"
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
+        gen_image_filename = None if self.generated_image_dir is None else os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
 
-        if not os.path.isfile(image_filename) and self.fail_extra_image_cache and not self.reset_image_cache:  # noqa: PTH113
+        if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):  # noqa: PTH113
+            # Raise error since the cached image does not exist and will not be added later
+
+            # Save images as needed before error
+            if gen_image_filename is not None:
+                plotter.screenshot(gen_image_filename)
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
+
             remove_plotter_close_callback()
             msg = f"{image_filename} does not exist in image cache"
             raise RegressionFileNotFound(msg)
@@ -232,9 +239,14 @@ class VerifyImageCache:
         if ((self.add_missing_images and not os.path.isfile(image_filename)) or self.reset_image_cache) and not self.reset_only_failed:  # noqa: PTH113
             plotter.screenshot(image_filename)
 
-        if self.generated_image_dir is not None:
-            gen_image_filename = os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
+        if gen_image_filename is not None:
             plotter.screenshot(gen_image_filename)
+
+        if not Path(image_filename).is_file() and self.allow_unused_generated:
+            # Test image has been generated, but cached image does not exist
+            # The generated image is considered unused, so exit safely before image
+            # comparison to avoid a FileNotFoundError
+            return
 
         if self.failed_image_dir is not None and not Path(image_filename).is_file():
             # Image comparison will fail, so save image before error
@@ -304,7 +316,7 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
     VerifyImageCache.ignore_image_cache = pytestconfig.getoption("ignore_image_cache")
-    VerifyImageCache.fail_extra_image_cache = pytestconfig.getoption("fail_extra_image_cache")
+    VerifyImageCache.allow_unused_generated = pytestconfig.getoption("allow_unused_generated")
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
 

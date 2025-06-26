@@ -16,11 +16,11 @@ def test_arguments(testdir) -> None:
         def test_args(verify_image_cache):
             assert verify_image_cache.reset_image_cache
             assert verify_image_cache.ignore_image_cache
-            assert verify_image_cache.fail_extra_image_cache
+            assert verify_image_cache.allow_unused_generated == False
 
         """
     )
-    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--fail_extra_image_cache")
+    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -52,7 +52,7 @@ def test_verify_image_cache(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest()
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
     assert (testdir.tmpdir / "image_cache_dir").isdir()
@@ -76,11 +76,46 @@ def test_verify_image_cache_fail_regression(testdir) -> None:
        """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest()
     result.stdout.fnmatch_lines("*[Ff]ailed*")
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
     result.stdout.fnmatch_lines("*pytest_pyvista.pytest_pyvista.RegressionError:*")
     result.stdout.fnmatch_lines("*Exceeded image regression error of*")
+
+
+@pytest.mark.parametrize("use_generated_image_dir", [True, False])
+@pytest.mark.parametrize("allow_unused_generated", [True, False])
+def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_image_dir) -> None:
+    """Test using `--allow_unused_generated` CLI option."""
+    testdir.makepyfile(
+        """
+       import pytest
+       import pyvista as pv
+       pv.OFF_SCREEN = True
+       def test_imcache(verify_image_cache):
+           sphere = pv.Sphere()
+           plotter = pv.Plotter()
+           plotter.add_mesh(sphere, color="red")
+           plotter.show()
+       """
+    )
+    if allow_unused_generated:
+        args = ["--allow_unused_generated"]
+        exit_code = pytest.ExitCode.OK
+        match = "*[Pp]assed*"
+    else:
+        args = []
+        exit_code = pytest.ExitCode.TESTS_FAILED
+        match = "*RegressionFileNotFound*"
+
+    if use_generated_image_dir:
+        args.extend(["--generated_image_dir", "gen_dir"])
+
+    result = testdir.runpytest(*args)
+    result.stdout.fnmatch_lines(match)
+    assert result.ret == exit_code
+
+    assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile() == use_generated_image_dir
 
 
 def test_skip(testdir) -> None:
@@ -100,7 +135,7 @@ def test_skip(testdir) -> None:
          """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest()
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -119,7 +154,7 @@ def test_image_cache_dir_commandline(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache", "--image_cache_dir", "newdir")
+    result = testdir.runpytest("--image_cache_dir", "newdir")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -143,7 +178,7 @@ def test_image_cache_dir_ini(testdir) -> None:
         image_cache_dir = "newdir"
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest()
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -181,11 +216,11 @@ def test_high_variance_test(testdir) -> None:
             plotter.show()
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache", "test_file1.py")
+    result = testdir.runpytest("test_file1.py")
     result.stdout.fnmatch_lines("*[Ff]ailed*")
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
 
-    result = testdir.runpytest("--fail_extra_image_cache", "test_file2.py")
+    result = testdir.runpytest("test_file2.py")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -204,7 +239,7 @@ def test_generated_image_dir_commandline(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache", "--generated_image_dir", "gen_dir")
+    result = testdir.runpytest("--generated_image_dir", "gen_dir")
     assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
     assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
@@ -230,7 +265,7 @@ def test_generated_image_dir_ini(testdir) -> None:
         generated_image_dir = "gen_dir"
         """
     )
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest()
     assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
     assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
     result.stdout.fnmatch_lines("*[Pp]assed*")
@@ -267,9 +302,9 @@ def test_add_missing_images_commandline(testdir, reset_only_failed) -> None:
         assert result.ret == pytest.ExitCode.OK
 
 
-@pytest.mark.parametrize("fail_extra_image_cache", [True, False])
+@pytest.mark.parametrize("allow_unused_generated", [True, False])
 @pytest.mark.parametrize("make_cache", [True, False])
-def test_reset_image_cache(testdir, fail_extra_image_cache, make_cache) -> None:
+def test_reset_image_cache(testdir, allow_unused_generated, make_cache) -> None:
     """Test reset_image_cache  via CLI option."""
     dirname = "image_cache_dir"
     test_image_name = "imcache.png"
@@ -294,8 +329,8 @@ def test_reset_image_cache(testdir, fail_extra_image_cache, make_cache) -> None:
         """
     )
     args = ["--reset_image_cache"]
-    if fail_extra_image_cache:
-        args.append("--fail_extra_image_cache")
+    if allow_unused_generated:
+        args.append("--allow_unused_generated")
     result = testdir.runpytest(*args)
     # file was created or overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
@@ -329,7 +364,7 @@ def test_cleanup(testdir) -> None:
        """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest()
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -380,7 +415,7 @@ def test_file_not_found(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--fail_extra_image_cache")
+    result = testdir.runpytest()
     result.stdout.fnmatch_lines("*RegressionFileNotFound*")
     result.stdout.fnmatch_lines("*does not exist in image cache*")
 
@@ -418,7 +453,7 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
         if make_cache:
             result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
         else:
-            result.stdout.fnmatch_lines("*FileNotFoundError*")
+            result.stdout.fnmatch_lines("*RegressionFileNotFound*")
 
         if outcome == "error":
             expected_subdir = "errors"
