@@ -121,7 +121,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
   cache (e.g. if using ``--add_missing_images``). Otherwise, an error is raised by
   default.
 
-* ``--allow_unused_cache`` report test failure if there are any images in the cache
+* ``--disallow_unused_cache`` report test failure if there are any images in the cache
   which are not compared to any generated images.
 
 Test specific flags
