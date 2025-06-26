@@ -83,9 +83,9 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Reset only the failed images in the PyVista cache.",
     )
     group.addoption(
-        "--check_useless_fixture",
+        "--allow_useless_fixture",
         action="store_true",
-        help="Fail any tests that use the `verify_image_cache` fixture but don't generate any images.",
+        help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
     )
 
 
@@ -147,7 +147,6 @@ class VerifyImageCache:
     fail_extra_image_cache = False
     add_missing_images = False
     reset_only_failed = False
-    expect_plot = True
 
     def __init__(  # noqa: D107, PLR0913
         self,
@@ -337,21 +336,21 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     def reset() -> None:
         pyvista.global_theme.before_close_callback = None
 
-        if pytestconfig.getoption("check_useless_fixture"):
+        # Check if the fixture was not used
+        # Value from fixture takes precedence over value set by CLI
+        allow_useless_fixture = getattr(verify_image_cache, "allow_useless_fixture", None)
+        if allow_useless_fixture is None:
+            allow_useless_fixture = pytestconfig.getoption("allow_useless_fixture")
+
+        if not allow_useless_fixture:
             # Retrieve test call report
             rep_call = getattr(request.node, "rep_call", None)
 
-            if rep_call and rep_call.passed:
-                if verify_image_cache.expect_plot and verify_image_cache.n_calls == 0:
-                    pytest.fail(
-                        "Fixture `verify_image_cache` is used but no images were generated.\n"
-                        "Did you forget to call `show` or `plot`, or set `verify_image_cache.expect_plot=False`?."
-                    )
-                if not verify_image_cache.expect_plot and verify_image_cache.n_calls > 0:
-                    pytest.fail(
-                        f"Fixture `verify_image_cache` has value `expect_plot=False`, but {verify_image_cache.n_calls} plot(s) were generated.\n"
-                        "Either remove any calls to `show` or `plot`, or set `verify_image_cache.expect_plot=True`."
-                    )
+            if rep_call and rep_call.passed and verify_image_cache.n_calls == 0:
+                pytest.fail(
+                    "Fixture `verify_image_cache` is used but no images were generated.\n"
+                    "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
+                )
 
     request.addfinalizer(reset)  # noqa: PT021
     return verify_image_cache
