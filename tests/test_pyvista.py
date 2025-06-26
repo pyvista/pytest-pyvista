@@ -559,13 +559,17 @@ class HasUnusedCache(Enum):  # noqa: D101
         return self.value
 
 
-TESTS_FAILED_ERROR_LINES = [
-    "pytest-pyvista: ERROR: Unused cached image file(s) detected (1).",
-    "The following images were not generated or skipped by any of the tests:",
-]
+def _unused_cache_stdout_lines(image_name: str) -> list[str]:
+    return [
+        "*pytest-pyvista ERROR*",
+        "Unused cached image file(s) detected (1). The following images are",
+        "cached, but were not generated or skipped by any of the tests:",
+        f"[{image_name!r}]",
+        "These images should either be removed from the cache, or the corresponding",
+        "tests should be modified to ensure an image is generated for comparison.",
+    ]
 
 
-# fmt: off
 @pytest.mark.parametrize(
     ("marker", "skip_verify", "color", "stdout_lines", "stderr_lines", "exit_code", "has_unused_cache"),
     [
@@ -576,9 +580,9 @@ TESTS_FAILED_ERROR_LINES = [
         (PytestMark.NONE, SkipVerify.IGNORE, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
         (PytestMark.NONE, SkipVerify.SKIP, MeshColor.SUCCESS, ["*[Pp]assed*"], [], pytest.ExitCode.OK, HasUnusedCache.FALSE),
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, ["*FAILED*"], [], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.FALSE),
-        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, [], [*TESTS_FAILED_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
-        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [], [*TESTS_FAILED_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
-        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [], [*TESTS_FAILED_ERROR_LINES, "['imcache.png']"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
+        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.SUCCESS, [*_unused_cache_stdout_lines("imcache.png")], [], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.SUCCESS, [*_unused_cache_stdout_lines("imcache.png")], [], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [*_unused_cache_stdout_lines("imcache.png")], [], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),  # noqa: E501
     ],
 )  # fmt: skip
 def test_disallow_unused_cache(testdir, marker, skip_verify, color, stdout_lines, stderr_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
@@ -613,7 +617,7 @@ def test_disallow_unused_cache(testdir, marker, skip_verify, color, stdout_lines
     result.stdout.fnmatch_lines(stdout_lines)
 
 
-@pytest.mark.parametrize("skip", [True,False])
+@pytest.mark.parametrize("skip", [True, False])
 @pytest.mark.parametrize("args", ["--disallow_unused_cache", []])
 def test_disallow_unused_cache_skip_multiple_images(testdir, skip, args) -> None:
     """Test skips when there are multiple calls to show() in a test."""
@@ -666,7 +670,7 @@ def test_disallow_unused_cache_name_mismatch(testdir, disallow_unused_cache) -> 
     args = "--disallow_unused_cache" if disallow_unused_cache else []
     result = testdir.runpytest(args)
     if disallow_unused_cache:
-        result.stderr.fnmatch_lines([*TESTS_FAILED_ERROR_LINES, f"[{image_name!r}]"])
+        result.stdout.fnmatch_lines([*_unused_cache_stdout_lines(image_name)])
         assert result.ret == pytest.ExitCode.TESTS_FAILED
     else:
         result.stdout.fnmatch_lines("*[Pp]assed*")

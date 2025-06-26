@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import platform
 import shutil
-import sys
 from typing import TYPE_CHECKING
 from typing import Literal
 from typing import NamedTuple
@@ -375,18 +374,10 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
 
 
 @pytest.hookimpl
-def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
     """Execute after the whole test run completes."""
-    config = session.config
-
-    image_cache_dir = config.getoption("image_cache_dir")
-    disallow_unused_cache = config.getoption("disallow_unused_cache")
-
-    if image_cache_dir is None:
-        image_cache_dir = config.getini("image_cache_dir")
-
-    if image_cache_dir and disallow_unused_cache:
-        cache_path = Path(image_cache_dir)
+    if config.getoption("disallow_unused_cache"):
+        cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
         cached_files = {f.name for f in cache_path.glob("*.png")}
         tested_files = {result.cached_filename for result in RESULTS.values()}
         unused = cached_files - tested_files
@@ -400,16 +391,16 @@ def pytest_sessionfinish(session, exitstatus) -> None:  # noqa: ANN001, ARG001
                 unused_skipped.remove(image_name)
 
         if unused_skipped:
-            msg = (
-                f"\npytest-pyvista: ERROR: Unused cached image file(s) detected ({len(unused_skipped)}).\n"
-                f"The following images were not generated or skipped by any of the tests:\n"
-                f"{sorted(unused_skipped)}\n"
-            )
-            # Print the message so it appears in the output
-            sys.stderr.write(msg)
-            sys.stderr.flush()
-
-            session.exitstatus = pytest.ExitCode.TESTS_FAILED
+            tr = terminalreporter
+            tr.ensure_newline()
+            tr.section("pytest-pyvista ERROR", sep="=", red=True, bold=True)
+            tr.line(f"Unused cached image file(s) detected ({len(unused_skipped)}). The following images are", red=True)
+            tr.line("cached, but were not generated or skipped by any of the tests:", red=True)
+            tr.line(f"{sorted(unused_skipped)}", yellow=True)
+            tr.line("")
+            tr.line("These images should either be removed from the cache, or the corresponding", red=True)
+            tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
+            pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
 
     RESULTS.clear()
 
