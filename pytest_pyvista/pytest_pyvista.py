@@ -33,7 +33,7 @@ class RegressionFileNotFound(FileNotFoundError):  # noqa: N818
     """
 
 
-class RegressionFileNotFoundError(FileNotFoundError):
+class RegressionFileNotFoundError(RegressionFileNotFound):
     """Error when regression file is not found."""
 
 
