@@ -185,6 +185,12 @@ class VerifyImageCache:
         self.skip = False
         self.n_calls = 0
 
+    @staticmethod
+    def _is_skipped(*, skip: bool, windows_skip_image_cache: bool, macos_skip_image_cache: bool, ignore_image_cache: bool) -> bool:
+        skip_windows = os.name == "nt" and windows_skip_image_cache
+        skip_macos = platform.system() == "Darwin" and macos_skip_image_cache
+        return skip or ignore_image_cache or skip_windows or skip_macos
+
     def __call__(self, plotter):  # noqa: ANN001, ANN204, C901, PLR0912
         """
         Either store or validate an image.
@@ -201,12 +207,6 @@ class VerifyImageCache:
             # This is typically needed if an error is raised by this function
             plotter._before_close_callback = None  # noqa: SLF001
 
-        if self.skip:
-            return
-
-        if self.ignore_image_cache:
-            return
-
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
@@ -217,18 +217,19 @@ class VerifyImageCache:
             allowed_error = self.error_value
             allowed_warning = self.warning_value
 
-        # some tests fail when on Windows with OSMesa
-        if os.name == "nt" and self.windows_skip_image_cache:
-            return
-        # high variation for MacOS
-        if platform.system() == "Darwin" and self.macos_skip_image_cache:
-            return
-
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
         image_name = test_name[5:] + ".png"
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
         gen_image_filename = None if self.generated_image_dir is None else os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
+
+        if VerifyImageCache._is_skipped(
+            skip=self.skip,
+            windows_skip_image_cache=self.windows_skip_image_cache,
+            macos_skip_image_cache=self.macos_skip_image_cache,
+            ignore_image_cache=self.ignore_image_cache,
+        ):
+            return
 
         if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):  # noqa: PTH113
             # Raise error since the cached image does not exist and will not be added later
@@ -354,7 +355,13 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
         if allow_useless_fixture is None:
             allow_useless_fixture = pytestconfig.getoption("allow_useless_fixture")
 
-        if not allow_useless_fixture:
+        skipped = VerifyImageCache._is_skipped(  # noqa: SLF001
+            skip=verify_image_cache.skip,
+            windows_skip_image_cache=verify_image_cache.windows_skip_image_cache,
+            macos_skip_image_cache=verify_image_cache.macos_skip_image_cache,
+            ignore_image_cache=verify_image_cache.ignore_image_cache,
+        )
+        if not allow_useless_fixture and not skipped:
             # Retrieve test call report
             rep_call = getattr(request.node, "rep_call", None)
 

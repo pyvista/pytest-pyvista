@@ -449,22 +449,25 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
             assert not (from_cache_dir / cached_image_name).isfile()
 
 
+@pytest.mark.parametrize("skip", [True, False])
 @pytest.mark.parametrize("call_show", [True, False])
 @pytest.mark.parametrize("allow_useless_fixture_cli", [True, False])
 @pytest.mark.parametrize("allow_useless_fixture_attr", [True, False, None])
-def test_allow_useless_fixture(testdir, call_show, allow_useless_fixture_cli, allow_useless_fixture_attr) -> None:
+def test_allow_useless_fixture(testdir, call_show, allow_useless_fixture_cli, allow_useless_fixture_attr, skip) -> None:
     """Test error is raised if fixture is used but no images are generated."""
     if call_show:
         # Ensure there is a cached image to compare to the generated image
         make_cached_images(testdir.tmpdir)
 
-    attr = "" if allow_useless_fixture_attr is None else f"verify_image_cache.allow_useless_fixture = {allow_useless_fixture_attr}"
+    allow_attr = "" if allow_useless_fixture_attr is None else f"verify_image_cache.allow_useless_fixture = {allow_useless_fixture_attr}"
+    skip_attr = f"verify_image_cache.skip = {skip}"
     testdir.makepyfile(
         f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
-            {attr}
+            {allow_attr}
+            {skip_attr}
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
@@ -476,7 +479,7 @@ def test_allow_useless_fixture(testdir, call_show, allow_useless_fixture_cli, al
 
     # Expect local attr to take precedence over CLI value
     allow_useless_fixture = allow_useless_fixture_attr if allow_useless_fixture_attr is not None else allow_useless_fixture_cli
-    expect_failure = not call_show and not allow_useless_fixture
+    expect_failure = (not call_show and not allow_useless_fixture) and not skip
     expected_code = pytest.ExitCode.TESTS_FAILED if expect_failure else pytest.ExitCode.OK
     assert result.ret == expected_code
     result.stdout.fnmatch_lines("*[Pp]assed*")
