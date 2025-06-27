@@ -163,6 +163,7 @@ def test_skip(testdir, skip_type: str, mock_platform_system: str) -> None:
 
 
 def _run_skip_test(testdir, skip_type: str) -> None:
+    make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
         f"""
         import pytest
