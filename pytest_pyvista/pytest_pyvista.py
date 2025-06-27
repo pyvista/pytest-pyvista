@@ -14,7 +14,7 @@ import warnings
 import pytest
 import pyvista
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from pyvista import Plotter
 
 
@@ -247,11 +247,6 @@ class VerifyImageCache:
             # The generated image is considered unused, so exit safely before image
             # comparison to avoid a FileNotFoundError
             return
-
-        if self.failed_image_dir is not None and not Path(image_filename).is_file():
-            # Image comparison will fail, so save image before error
-            self._save_failed_test_images("error", plotter, image_name)
-            remove_plotter_close_callback()
 
         error = pyvista.compare_images(image_filename, plotter)
 
