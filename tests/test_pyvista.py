@@ -150,10 +150,11 @@ def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_i
 
 
 @pytest.mark.parametrize("mock_platform_system", ["Darwin", None])
-@pytest.mark.parametrize("skip_type", ["skip", "ignore_image_cache"])
+@pytest.mark.parametrize("skip_type", ["skip", "ignore_image_cache", "macos_skip_image_cache"])
 def test_skip(testdir, skip_type: str, mock_platform_system: str) -> None:
     """Test all skip flags of `verify_image_cache`."""
     if mock_platform_system:
+        # Simulate test for macOS
         patcher = mock.patch("platform.system", return_value=mock_platform_system)
         with patcher:
             _run_skip_test(testdir, skip_type)
