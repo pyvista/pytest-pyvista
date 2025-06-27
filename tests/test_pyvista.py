@@ -3,6 +3,7 @@ from __future__ import annotations  # noqa: D100
 import filecmp
 import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
 import pyvista as pv
@@ -148,16 +149,26 @@ def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_i
     assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile() == use_generated_image_dir
 
 
-def test_skip(testdir) -> None:
-    """Test `skip` flag of `verify_image_cache`."""
-    make_cached_images(testdir.tmpdir)
+@pytest.mark.parametrize("mock_platform_system", ["Darwin", None])
+@pytest.mark.parametrize("skip_type", ["skip", "ignore_image_cache"])
+def test_skip(testdir, skip_type: str, mock_platform_system: str) -> None:
+    """Test all skip flags of `verify_image_cache`."""
+    if mock_platform_system:
+        patcher = mock.patch("platform.system", return_value=mock_platform_system)
+        with patcher:
+            _run_skip_test(testdir, skip_type)
+    else:
+        _run_skip_test(testdir, skip_type)
+
+
+def _run_skip_test(testdir, skip_type: str) -> None:
     testdir.makepyfile(
-        """
+        f"""
         import pytest
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
-            verify_image_cache.skip = True
+            verify_image_cache.{skip_type} = True
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="blue")
