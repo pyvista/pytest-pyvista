@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from enum import Enum
 import os
 from pathlib import Path
 import platform
 import shutil
 from typing import TYPE_CHECKING
 from typing import Literal
-from typing import NamedTuple
 from typing import cast
 import warnings
 
@@ -22,21 +20,16 @@ if TYPE_CHECKING:  # pragma: no cover
     from pyvista import Plotter
 
 
+VISITED_CACHED_IMAGE_NAMES: set[str] = set()
+SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
+
+
 class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria."""
 
 
 class RegressionFileNotFound(FileNotFoundError):  # noqa: N818
     """Error when regression file is not found."""
-
-
-class Outcome(Enum):
-    """Outcome of the image verification."""
-
-    SUCCESS = "success"
-    SKIPPED = "skipped"
-    ERROR = "error"
-    WARNING = "warning"
 
 
 def pytest_addoption(parser) -> None:  # noqa: ANN001
@@ -196,7 +189,7 @@ class VerifyImageCache:
         self.skip = False
         self.n_calls = 0
 
-    def __call__(self, plotter):  # noqa: ANN001, ANN204, C901, PLR0912, PLR0915
+    def __call__(self, plotter):  # noqa: ANN001, ANN204, C901, PLR0912
         """
         Either store or validate an image.
 
@@ -231,14 +224,9 @@ class VerifyImageCache:
         skip_windows = os.name == "nt" and self.windows_skip_image_cache
         skip_macos = platform.system() == "Darwin" and self.macos_skip_image_cache
         if self.skip or self.ignore_image_cache or skip_windows or skip_macos:
-            # Log result as skipped
-            _store_result(
-                test_name=test_name,
-                outcome=Outcome.SKIPPED,
-                cached_filename=image_name,
-                generated_filename=gen_image_filename,
-            )
+            SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
             return
+        VISITED_CACHED_IMAGE_NAMES.add(image_name)
 
         if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):  # noqa: PTH113
             # Raise error since the cached image does not exist and will not be added later
@@ -273,7 +261,6 @@ class VerifyImageCache:
         error = pyvista.compare_images(image_filename, plotter)
 
         if error > allowed_error:
-            _store_result(test_name=test_name, outcome=Outcome.ERROR, cached_filename=image_filename, generated_filename=gen_image_filename)
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
             if self.reset_only_failed:
@@ -288,12 +275,9 @@ class VerifyImageCache:
                 msg = f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error}"
                 raise RegressionError(msg)
         if error > allowed_warning:
-            _store_result(test_name=test_name, outcome=Outcome.WARNING, cached_filename=image_filename, generated_filename=gen_image_filename)
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("warning", plotter, image_name)
             warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
-        else:
-            _store_result(test_name=test_name, outcome=Outcome.SUCCESS, cached_filename=image_filename, generated_filename=gen_image_filename)
 
     def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: Plotter, image_name: str) -> None:
         """Save test image from cache and from test to the failed image dir."""
@@ -337,40 +321,15 @@ def _test_name_from_image_name(image_name: str) -> str:
     return "test_" + remove_suffix(image_name)
 
 
-class _ResultTuple(NamedTuple):
-    outcome: Outcome
-    cached_filename: str
-    generated_filename: str | None
-
-
-RESULTS = {}
-
-
-def _store_result(*, test_name: str, outcome: Outcome, cached_filename: str, generated_filename: str | None = None) -> None:
-    result = _ResultTuple(
-        outcome=outcome,
-        cached_filename=str(Path(cached_filename).name),
-        generated_filename=str(Path(generated_filename).name) if generated_filename else None,
-    )
-    RESULTS[test_name] = result
-
-
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for skipped tests."""
     outcome = yield
     if outcome:
+        # Mark cached image as skipped if test was skipped during setup or execution
         rep = outcome.get_result()
-
-        # Log if test was skipped
         if rep.when in ["call", "setup"] and rep.skipped:
-            test_name = item.name
-            _store_result(
-                test_name=test_name,
-                outcome=Outcome.SKIPPED,
-                cached_filename=_image_name_from_test_name(test_name),
-                generated_filename=None,
-            )
+            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
 
 
 @pytest.hookimpl
@@ -378,16 +337,14 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
     """Execute after the whole test run completes."""
     if config.getoption("disallow_unused_cache"):
         cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
-        cached_files = {f.name for f in cache_path.glob("*.png")}
-        tested_files = {result.cached_filename for result in RESULTS.values()}
-        unused = cached_files - tested_files
+        cached_image_names = {f.name for f in cache_path.glob("*.png")}
+        unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES - SKIPPED_CACHED_IMAGE_NAMES
 
         # Exclude images from skipped tests where multiple images are generated
-        unused_skipped = unused.copy()
-        for image_name in unused:
-            test_name = _test_name_from_image_name(image_name)
-            result = RESULTS.get(test_name)
-            if result and result.outcome == Outcome.SKIPPED:
+        unused_skipped = unused_cached_image_names.copy()
+        for image_name in unused_cached_image_names:
+            base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
+            if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
                 unused_skipped.remove(image_name)
 
         if unused_skipped:
@@ -402,7 +359,8 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
             tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
             pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
 
-    RESULTS.clear()
+    VISITED_CACHED_IMAGE_NAMES.clear()
+    SKIPPED_CACHED_IMAGE_NAMES.clear()
 
 
 def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
