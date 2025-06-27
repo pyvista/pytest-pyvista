@@ -14,8 +14,14 @@ import warnings
 import pytest
 import pyvista
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Generator
+
     from pyvista import Plotter
+
+
+VISITED_CACHED_IMAGE_NAMES: set[str] = set()
+SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 
 
 class RegressionError(RuntimeError):
@@ -79,6 +85,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
+    )
+    group.addoption(
+        "--disallow_unused_cache",
+        action="store_true",
+        help="Report test failure if there are any images in the cache which are not compared to any generated images.",
     )
 
 
@@ -194,12 +205,6 @@ class VerifyImageCache:
             # This is typically needed if an error is raised by this function
             plotter._before_close_callback = None  # noqa: SLF001
 
-        if self.skip:
-            return
-
-        if self.ignore_image_cache:
-            return
-
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
@@ -210,18 +215,18 @@ class VerifyImageCache:
             allowed_error = self.error_value
             allowed_warning = self.warning_value
 
-        # some tests fail when on Windows with OSMesa
-        if os.name == "nt" and self.windows_skip_image_cache:
-            return
-        # high variation for MacOS
-        if platform.system() == "Darwin" and self.macos_skip_image_cache:
-            return
-
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
-        image_name = test_name[5:] + ".png"
+        image_name = _image_name_from_test_name(test_name)
         image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
         gen_image_filename = None if self.generated_image_dir is None else os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
+
+        skip_windows = os.name == "nt" and self.windows_skip_image_cache
+        skip_macos = platform.system() == "Darwin" and self.macos_skip_image_cache
+        if self.skip or self.ignore_image_cache or skip_windows or skip_macos:
+            SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
+            return
+        VISITED_CACHED_IMAGE_NAMES.add(image_name)
 
         if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):  # noqa: PTH113
             # Raise error since the cached image does not exist and will not be added later
@@ -294,6 +299,68 @@ class VerifyImageCache:
         if cached_image.is_file():
             from_cache_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
             shutil.copy(cached_image, from_cache_dir / image_name)
+
+
+def _image_name_from_test_name(test_name: str) -> str:
+    return test_name[5:] + ".png"
+
+
+def _test_name_from_image_name(image_name: str) -> str:
+    def remove_suffix(s: str) -> str:
+        """Remove integer and png suffix."""
+        no_png_ext = s[:-4]
+        parts = no_png_ext.split("_")
+        if len(parts) > 1:
+            try:
+                int(parts[-1])
+                parts = parts[:-1]  # Remove the integer suffix
+            except ValueError:
+                pass  # Last part is not an integer; do nothing
+        return "_".join(parts)
+
+    return "test_" + remove_suffix(image_name)
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
+    """Store test results for skipped tests."""
+    outcome = yield
+    if outcome:
+        # Mark cached image as skipped if test was skipped during setup or execution
+        rep = outcome.get_result()
+        if rep.when in ["call", "setup"] and rep.skipped:
+            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
+
+
+@pytest.hookimpl
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
+    """Execute after the whole test run completes."""
+    if config.getoption("disallow_unused_cache"):
+        cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
+        cached_image_names = {f.name for f in cache_path.glob("*.png")}
+        unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES - SKIPPED_CACHED_IMAGE_NAMES
+
+        # Exclude images from skipped tests where multiple images are generated
+        unused_skipped = unused_cached_image_names.copy()
+        for image_name in unused_cached_image_names:
+            base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
+            if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
+                unused_skipped.remove(image_name)
+
+        if unused_skipped:
+            tr = terminalreporter
+            tr.ensure_newline()
+            tr.section("pytest-pyvista ERROR", sep="=", red=True, bold=True)
+            tr.line(f"Unused cached image file(s) detected ({len(unused_skipped)}). The following images are", red=True)
+            tr.line("cached, but were not generated or skipped by any of the tests:", red=True)
+            tr.line(f"{sorted(unused_skipped)}", yellow=True)
+            tr.line("")
+            tr.line("These images should either be removed from the cache, or the corresponding", red=True)
+            tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
+            pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
+
+    VISITED_CACHED_IMAGE_NAMES.clear()
+    SKIPPED_CACHED_IMAGE_NAMES.clear()
 
 
 def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
