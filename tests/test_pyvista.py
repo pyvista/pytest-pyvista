@@ -173,7 +173,7 @@ def _run_skip_test(testdir, skip_type: str) -> None:
             verify_image_cache.{skip_type} = True
             sphere = pv.Sphere()
             plotter = pv.Plotter()
-            plotter.add_mesh(sphere, color="blue")
+            plotter.add_mesh(sphere, color="red")
             plotter.show()
          """
     )
