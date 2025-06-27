@@ -3,6 +3,7 @@ from __future__ import annotations  # noqa: D100
 import filecmp
 import os
 from pathlib import Path
+import platform
 from unittest import mock
 
 import pytest
@@ -173,13 +174,15 @@ def _run_skip_test(testdir, skip_type: str) -> None:
             verify_image_cache.{skip_type} = True
             sphere = pv.Sphere()
             plotter = pv.Plotter()
-            plotter.add_mesh(sphere, color="red")
+            plotter.add_mesh(sphere, color="blue")
             plotter.show()
          """
     )
 
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    # Expect failure if verification is not skipped
+    match = "*RegressionError*" if skip_type == "macos_skip_image_cache" and platform.system() != "Darwin" else "*[Pp]assed*"
+    result.stdout.fnmatch_lines(match)
 
 
 def test_image_cache_dir_commandline(testdir) -> None:
