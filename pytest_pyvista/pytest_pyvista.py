@@ -25,6 +25,15 @@ class RegressionError(RuntimeError):
 
 
 class RegressionFileNotFound(FileNotFoundError):  # noqa: N818
+    """
+    Error when regression file is not found.
+
+    DO NOT USE, maintained for backwards-compatibility only.
+    Use RegressionFileNotFoundError instead.
+    """
+
+
+class RegressionFileNotFoundError(RegressionFileNotFound):
     """Error when regression file is not found."""
 
 
@@ -148,25 +157,26 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
 
-    def __init__(  # noqa: D107, PLR0913
+    def __init__(  # noqa: PLR0913
         self,
-        test_name,  # noqa: ANN001
-        cache_dir,  # noqa: ANN001
+        test_name: str,
+        cache_dir: str,
         *,
-        error_value=500.0,  # noqa: ANN001
-        warning_value=200.0,  # noqa: ANN001
-        var_error_value=1000.0,  # noqa: ANN001
-        var_warning_value=1000.0,  # noqa: ANN001
-        generated_image_dir=None,  # noqa: ANN001
-        failed_image_dir=None,  # noqa: ANN001
+        error_value: float = 500.0,
+        warning_value: float = 200.0,
+        var_error_value: float = 1000.0,
+        var_warning_value: float = 1000.0,
+        generated_image_dir: str | None = None,
+        failed_image_dir: str | None = None,
     ) -> None:
+        """Initialize VerifyImageCache."""
         self.test_name = test_name
 
         self.cache_dir = cache_dir
 
-        if not os.path.isdir(self.cache_dir):  # noqa: PTH112
-            warnings.warn(f"pyvista test cache image dir: {self.cache_dir} does not yet exist'  Creating empty cache.")  # noqa: B028
-            os.mkdir(self.cache_dir)  # noqa: PTH102
+        if not Path(self.cache_dir).is_dir():
+            warnings.warn(f"pyvista test cache image dir: {self.cache_dir} does not yet exist'  Creating empty cache.", stacklevel=2)
+            Path(self.cache_dir).mkdir()
 
         self.error_value = error_value
         self.warning_value = warning_value
@@ -191,7 +201,7 @@ class VerifyImageCache:
         skip_macos = platform.system() == "Darwin" and macos_skip_image_cache
         return skip or ignore_image_cache or skip_windows or skip_macos
 
-    def __call__(self, plotter):  # noqa: ANN001, ANN204, C901, PLR0912
+    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912
         """
         Either store or validate an image.
 
@@ -220,8 +230,8 @@ class VerifyImageCache:
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
         image_name = test_name[5:] + ".png"
-        image_filename = os.path.join(self.cache_dir, image_name)  # noqa: PTH118
-        gen_image_filename = None if self.generated_image_dir is None else os.path.join(self.generated_image_dir, image_name)  # noqa: PTH118
+        image_filename = Path(self.cache_dir, image_name)
+        gen_image_filename = None if self.generated_image_dir is None else Path(self.generated_image_dir, image_name)
 
         if VerifyImageCache._is_skipped(
             skip=self.skip,
@@ -231,7 +241,7 @@ class VerifyImageCache:
         ):
             return
 
-        if not os.path.isfile(image_filename) and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):  # noqa: PTH113
+        if not image_filename.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
 
             # Save images as needed before error
@@ -242,9 +252,9 @@ class VerifyImageCache:
 
             remove_plotter_close_callback()
             msg = f"{image_filename} does not exist in image cache"
-            raise RegressionFileNotFound(msg)
+            raise RegressionFileNotFoundError(msg)
 
-        if (self.add_missing_images and not os.path.isfile(image_filename)) or (self.reset_image_cache and not self.reset_only_failed):  # noqa: PTH113
+        if (self.add_missing_images and not image_filename.is_file()) or (self.reset_image_cache and not self.reset_only_failed):
             plotter.screenshot(image_filename)
 
         if gen_image_filename is not None:
@@ -261,16 +271,17 @@ class VerifyImageCache:
             self._save_failed_test_images("error", plotter, image_name)
             remove_plotter_close_callback()
 
-        error = pyvista.compare_images(image_filename, plotter)
+        error = pyvista.compare_images(str(image_filename), plotter)
 
         if error > allowed_error:
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
             if self.reset_only_failed:
-                warnings.warn(  # noqa: B028
+                warnings.warn(
                     f"{test_name} Exceeded image regression error of "
                     f"{allowed_error} with an image error equal to: {error}"
-                    f"\nThis image will be reset in the cache."
+                    f"\nThis image will be reset in the cache.",
+                    stacklevel=2,
                 )
                 plotter.screenshot(image_filename)
             else:
@@ -280,7 +291,7 @@ class VerifyImageCache:
         if error > allowed_warning:
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("warning", plotter, image_name)
-            warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}")  # noqa: B028
+            warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}", stacklevel=2)
 
     def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: Plotter, image_name: str) -> None:
         """Save test image from cache and from test to the failed image dir."""
@@ -288,8 +299,10 @@ class VerifyImageCache:
         def _make_failed_test_image_dir(
             errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
         ) -> Path:
-            _ensure_dir_exists(self.failed_image_dir, msg_name="failed image dir")
-            dest_dir = Path(self.failed_image_dir, errors_or_warnings, from_cache_or_test)
+            # Check was done earlier to verify this is not None
+            failed_image_dir = cast("str", self.failed_image_dir)
+            _ensure_dir_exists(failed_image_dir, msg_name="failed image dir")
+            dest_dir = Path(failed_image_dir, errors_or_warnings, from_cache_or_test)
             dest_dir.mkdir(exist_ok=True, parents=True)
             return dest_dir
 
@@ -330,8 +343,8 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
 
 
 @pytest.fixture
-def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
-    """Checks cached images against test images for PyVista."""  # noqa: D401
+def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, None, None]:  # noqa: ANN001
+    """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
     VerifyImageCache.ignore_image_cache = pytestconfig.getoption("ignore_image_cache")
@@ -346,30 +359,28 @@ def verify_image_cache(request, pytestconfig):  # noqa: ANN001, ANN201
     verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir)
     pyvista.global_theme.before_close_callback = verify_image_cache
 
-    def reset() -> None:
-        pyvista.global_theme.before_close_callback = None
+    yield verify_image_cache
 
-        # Check if the fixture was not used
-        # Value from fixture takes precedence over value set by CLI
-        allow_useless_fixture = getattr(verify_image_cache, "allow_useless_fixture", None)
-        if allow_useless_fixture is None:
-            allow_useless_fixture = pytestconfig.getoption("allow_useless_fixture")
+    pyvista.global_theme.before_close_callback = None
 
-        skipped = VerifyImageCache._is_skipped(  # noqa: SLF001
-            skip=verify_image_cache.skip,
-            windows_skip_image_cache=verify_image_cache.windows_skip_image_cache,
-            macos_skip_image_cache=verify_image_cache.macos_skip_image_cache,
-            ignore_image_cache=verify_image_cache.ignore_image_cache,
-        )
-        if not allow_useless_fixture and not skipped:
-            # Retrieve test call report
-            rep_call = getattr(request.node, "rep_call", None)
+    # Check if the fixture was not used
+    # Value from fixture takes precedence over value set by CLI
+    allow_useless_fixture = getattr(verify_image_cache, "allow_useless_fixture", None)
+    if allow_useless_fixture is None:
+        allow_useless_fixture = pytestconfig.getoption("allow_useless_fixture")
 
-            if rep_call and rep_call.passed and verify_image_cache.n_calls == 0:
-                pytest.fail(
-                    "Fixture `verify_image_cache` is used but no images were generated.\n"
-                    "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
-                )
+    skipped = VerifyImageCache._is_skipped(  # noqa: SLF001
+        skip=verify_image_cache.skip,
+        windows_skip_image_cache=verify_image_cache.windows_skip_image_cache,
+        macos_skip_image_cache=verify_image_cache.macos_skip_image_cache,
+        ignore_image_cache=verify_image_cache.ignore_image_cache,
+    )
+    if not allow_useless_fixture and not skipped:
+        # Retrieve test call report
+        rep_call = getattr(request.node, "rep_call", None)
 
-    request.addfinalizer(reset)  # noqa: PT021
-    return verify_image_cache
+        if rep_call and rep_call.passed and verify_image_cache.n_calls == 0:
+            pytest.fail(
+                "Fixture `verify_image_cache` is used but no images were generated.\n"
+                "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
+            )
