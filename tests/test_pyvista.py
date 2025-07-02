@@ -1,8 +1,9 @@
-from __future__ import annotations  # noqa: D100
+"""Tests for pytest-pyvista."""
+
+from __future__ import annotations
 
 from enum import Enum
 import filecmp
-import os
 from pathlib import Path
 
 import pytest
@@ -26,15 +27,14 @@ def test_arguments(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red"):  # noqa: ANN201
-    """Makes image cache in `test_path/path`."""  # noqa: D401
-    d = os.path.join(test_path, path)  # noqa: PTH118
-    if not os.path.isdir(d):  # noqa: PTH112
-        os.mkdir(d)  # noqa: PTH102
+def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red") -> Path:
+    """Make image cache in `test_path/path`."""
+    d = Path(test_path, path)
+    d.mkdir(exist_ok=True)
     sphere = pv.Sphere()
     plotter = pv.Plotter()
     plotter.add_mesh(sphere, color=color)
-    filename = os.path.join(d, name)  # noqa: PTH118
+    filename = d / name
     plotter.screenshot(filename)
     return filename
 
@@ -137,7 +137,7 @@ def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_i
     else:
         args = []
         exit_code = pytest.ExitCode.TESTS_FAILED
-        match = "*RegressionFileNotFound*"
+        match = "*RegressionFileNotFoundError*"
 
     if use_generated_image_dir:
         args.extend(["--generated_image_dir", "gen_dir"])
@@ -271,8 +271,8 @@ def test_generated_image_dir_commandline(testdir) -> None:
     )
 
     result = testdir.runpytest("--generated_image_dir", "gen_dir")
-    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
-    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
+    assert (testdir.tmpdir / "gen_dir").isdir()
+    assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile()
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -297,8 +297,8 @@ def test_generated_image_dir_ini(testdir) -> None:
         """
     )
     result = testdir.runpytest()
-    assert os.path.isdir(os.path.join(testdir.tmpdir, "gen_dir"))  # noqa: PTH112, PTH118
-    assert os.path.isfile(os.path.join(testdir.tmpdir, "gen_dir", "imcache.png"))  # noqa: PTH113, PTH118
+    assert (testdir.tmpdir / "gen_dir").isdir()
+    assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile()
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -449,7 +449,7 @@ def test_reset_only_failed(testdir) -> None:
 
 
 def test_file_not_found(testdir) -> None:
-    """Test RegressionFileNotFound is correctly raised."""
+    """Test RegressionFileNotFoundError is correctly raised."""
     testdir.makepyfile(
         """
         import pyvista as pv
@@ -463,7 +463,7 @@ def test_file_not_found(testdir) -> None:
     )
 
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*RegressionFileNotFound*")
+    result.stdout.fnmatch_lines("*RegressionFileNotFoundError*")
     result.stdout.fnmatch_lines("*does not exist in image cache*")
 
 
@@ -500,7 +500,7 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
         if make_cache:
             result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
         else:
-            result.stdout.fnmatch_lines("*RegressionFileNotFound*")
+            result.stdout.fnmatch_lines("*RegressionFileNotFoundError*")
 
         if outcome == "error":
             expected_subdir = "errors"
