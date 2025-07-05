@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import filecmp
 from pathlib import Path
+import platform
+from unittest import mock
 
 import pytest
 import pyvista as pv
@@ -148,16 +150,28 @@ def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_i
     assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile() == use_generated_image_dir
 
 
-def test_skip(testdir) -> None:
-    """Test `skip` flag of `verify_image_cache`."""
+@pytest.mark.parametrize("mock_platform_system", ["Darwin", None])
+@pytest.mark.parametrize("skip_type", ["skip", "ignore_image_cache", "macos_skip_image_cache"])
+def test_skip(testdir, skip_type: str, mock_platform_system: str) -> None:
+    """Test all skip flags of `verify_image_cache`."""
+    if mock_platform_system:
+        # Simulate test for macOS
+        patcher = mock.patch("platform.system", return_value=mock_platform_system)
+        with patcher:
+            _run_skip_test(testdir, skip_type)
+    else:
+        _run_skip_test(testdir, skip_type)
+
+
+def _run_skip_test(testdir, skip_type: str) -> None:
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
-        """
+        f"""
         import pytest
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
-            verify_image_cache.skip = True
+            verify_image_cache.{skip_type} = True
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="blue")
@@ -166,7 +180,9 @@ def test_skip(testdir) -> None:
     )
 
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    # Expect failure if verification is not skipped
+    match = "*RegressionError*" if skip_type == "macos_skip_image_cache" and platform.system() != "Darwin" else "*[Pp]assed*"
+    result.stdout.fnmatch_lines(match)
 
 
 def test_image_cache_dir_commandline(testdir) -> None:
@@ -368,11 +384,20 @@ def test_add_missing_images_commandline(tmp_path, testdir, reset_only_failed, fo
         assert not file_has_changed(always_passes_filename, original_contents_path=always_passes_ground_truth, original_inode=always_passes_inode)
 
 
-def test_reset_image_cache(testdir) -> None:
+@pytest.mark.parametrize("allow_unused_generated", [True, False])
+@pytest.mark.parametrize("make_cache", [True, False])
+def test_reset_image_cache(testdir, allow_unused_generated, make_cache) -> None:
     """Test reset_image_cache  via CLI option."""
-    filename = make_cached_images(testdir.tmpdir)
-    filename_original = make_cached_images(testdir.tmpdir, name="original.png")
-    assert filecmp.cmp(filename, filename_original, shallow=False)
+    dirname = "image_cache_dir"
+    test_image_name = "imcache.png"
+    filename_test = testdir.tmpdir / dirname / test_image_name
+    filename_original = make_cached_images(testdir.tmpdir, dirname, name="original.png")
+    if make_cache:
+        filename = make_cached_images(testdir.tmpdir)
+        assert filecmp.cmp(filename, filename_original, shallow=False)
+    else:
+        filename = filename_test
+        assert not filename_test.isfile()
 
     testdir.makepyfile(
         """
@@ -385,8 +410,11 @@ def test_reset_image_cache(testdir) -> None:
             plotter.show()
         """
     )
-    result = testdir.runpytest("--reset_image_cache")
-    # file was overwritten
+    args = ["--reset_image_cache"]
+    if allow_unused_generated:
+        args.append("--allow_unused_generated")
+    result = testdir.runpytest(*args)
+    # file was created or overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
     # should pass even if image doesn't match
     result.stdout.fnmatch_lines("*[Pp]assed*")
@@ -422,7 +450,9 @@ def test_cleanup(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_reset_only_failed(testdir) -> None:
+@pytest.mark.parametrize("add_missing_images", [True, False])
+@pytest.mark.parametrize("reset_image_cache", [True, False])
+def test_reset_only_failed(testdir, reset_image_cache, add_missing_images) -> None:
     """Test usage of the `reset_only_failed` flag."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
@@ -440,7 +470,13 @@ def test_reset_only_failed(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--reset_only_failed")
+    args = ["--reset_only_failed"]
+    if add_missing_images:
+        args.append("--add_missing_images")
+    if reset_image_cache:
+        args.append("--reset_image_cache")
+
+    result = testdir.runpytest(*args)
     result.stdout.fnmatch_lines("*[Pp]assed*")
     result.stdout.fnmatch_lines("*This image will be reset in the cache.")
     # file was overwritten
