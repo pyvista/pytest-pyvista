@@ -561,3 +561,49 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
         else:
             assert not from_cache_dir.isdir()
             assert not (from_cache_dir / cached_image_name).isfile()
+
+
+@pytest.mark.parametrize("skip", [True, False])
+@pytest.mark.parametrize("call_show", [True, False])
+@pytest.mark.parametrize("allow_useless_fixture_cli", [True, False])
+@pytest.mark.parametrize("allow_useless_fixture_attr", [True, False, None])
+def test_allow_useless_fixture(testdir, call_show, allow_useless_fixture_cli, allow_useless_fixture_attr, skip) -> None:
+    """Test error is raised if fixture is used but no images are generated."""
+    if call_show:
+        # Ensure there is a cached image to compare to the generated image
+        make_cached_images(testdir.tmpdir)
+
+    allow_attr = "" if allow_useless_fixture_attr is None else f"verify_image_cache.allow_useless_fixture = {allow_useless_fixture_attr}"
+    skip_attr = f"verify_image_cache.skip = {skip}"
+    testdir.makepyfile(
+        f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            {allow_attr}
+            {skip_attr}
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            {"plotter.show()" if call_show else ""}
+        """
+    )
+
+    result = testdir.runpytest("--allow_useless_fixture") if allow_useless_fixture_cli else testdir.runpytest()
+
+    # Expect local attr to take precedence over CLI value
+    allow_useless_fixture = allow_useless_fixture_attr if allow_useless_fixture_attr is not None else allow_useless_fixture_cli
+    expect_failure = (not call_show and not allow_useless_fixture) and not skip
+    expected_code = pytest.ExitCode.TESTS_FAILED if expect_failure else pytest.ExitCode.OK
+    assert result.ret == expected_code
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    if expect_failure:
+        result.stdout.fnmatch_lines(
+            [
+                "*ERROR at teardown of test_imcache*",
+                "*Failed: Fixture `verify_image_cache` is used but no images were generated.",
+                "*Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?.",
+            ]
+        )
+    else:
+        assert "ERROR" not in result.stdout.str()

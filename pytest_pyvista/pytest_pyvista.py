@@ -14,7 +14,7 @@ import warnings
 import pytest
 import pyvista
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
     from pyvista import Plotter
@@ -90,6 +90,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
+    )
+    group.addoption(
+        "--allow_useless_fixture",
+        action="store_true",
+        help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
     )
 
 
@@ -190,6 +195,12 @@ class VerifyImageCache:
         self.skip = False
         self.n_calls = 0
 
+    @staticmethod
+    def _is_skipped(*, skip: bool, windows_skip_image_cache: bool, macos_skip_image_cache: bool, ignore_image_cache: bool) -> bool:
+        skip_windows = os.name == "nt" and windows_skip_image_cache
+        skip_macos = platform.system() == "Darwin" and macos_skip_image_cache
+        return skip or ignore_image_cache or skip_windows or skip_macos
+
     def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912
         """
         Either store or validate an image.
@@ -206,12 +217,6 @@ class VerifyImageCache:
             # This is typically needed if an error is raised by this function
             plotter._before_close_callback = None  # noqa: SLF001
 
-        if self.skip:
-            return
-
-        if self.ignore_image_cache:
-            return
-
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
@@ -222,18 +227,19 @@ class VerifyImageCache:
             allowed_error = self.error_value
             allowed_warning = self.warning_value
 
-        # some tests fail when on Windows with OSMesa
-        if os.name == "nt" and self.windows_skip_image_cache:
-            return
-        # high variation for MacOS
-        if platform.system() == "Darwin" and self.macos_skip_image_cache:
-            return
-
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
         image_name = test_name[5:] + ".png"
         image_filename = Path(self.cache_dir, image_name)
         gen_image_filename = None if self.generated_image_dir is None else Path(self.generated_image_dir, image_name)
+
+        if VerifyImageCache._is_skipped(
+            skip=self.skip,
+            windows_skip_image_cache=self.windows_skip_image_cache,
+            macos_skip_image_cache=self.macos_skip_image_cache,
+            ignore_image_cache=self.ignore_image_cache,
+        ):
+            return
 
         if not image_filename.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
@@ -325,6 +331,17 @@ def _get_option_from_config_or_ini(pytestconfig, option: str) -> str:  # noqa: A
     return value
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
+    """Store test results for inspection."""
+    outcome = yield
+    if outcome:
+        rep = outcome.get_result()
+
+        # Attach the report to the item so fixtures/finalizers can inspect it
+        setattr(item, f"rep_{rep.when}", rep)
+
+
 @pytest.fixture
 def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, None, None]:  # noqa: ANN001
     """Check cached images against test images for PyVista."""
@@ -345,3 +362,25 @@ def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, Non
     yield verify_image_cache
 
     pyvista.global_theme.before_close_callback = None
+
+    # Check if the fixture was not used
+    # Value from fixture takes precedence over value set by CLI
+    allow_useless_fixture = getattr(verify_image_cache, "allow_useless_fixture", None)
+    if allow_useless_fixture is None:
+        allow_useless_fixture = pytestconfig.getoption("allow_useless_fixture")
+
+    skipped = VerifyImageCache._is_skipped(  # noqa: SLF001
+        skip=verify_image_cache.skip,
+        windows_skip_image_cache=verify_image_cache.windows_skip_image_cache,
+        macos_skip_image_cache=verify_image_cache.macos_skip_image_cache,
+        ignore_image_cache=verify_image_cache.ignore_image_cache,
+    )
+    if not allow_useless_fixture and not skipped:
+        # Retrieve test call report
+        rep_call = getattr(request.node, "rep_call", None)
+
+        if rep_call and rep_call.passed and verify_image_cache.n_calls == 0:
+            pytest.fail(
+                "Fixture `verify_image_cache` is used but no images were generated.\n"
+                "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
+            )
