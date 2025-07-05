@@ -369,11 +369,20 @@ def test_add_missing_images_commandline(tmp_path, testdir, reset_only_failed, fo
         assert not file_has_changed(always_passes_filename, original_contents_path=always_passes_ground_truth, original_inode=always_passes_inode)
 
 
-def test_reset_image_cache(testdir) -> None:
+@pytest.mark.parametrize("allow_unused_generated", [True, False])
+@pytest.mark.parametrize("make_cache", [True, False])
+def test_reset_image_cache(testdir, allow_unused_generated, make_cache) -> None:
     """Test reset_image_cache  via CLI option."""
-    filename = make_cached_images(testdir.tmpdir)
-    filename_original = make_cached_images(testdir.tmpdir, name="original.png")
-    assert filecmp.cmp(filename, filename_original, shallow=False)
+    dirname = "image_cache_dir"
+    test_image_name = "imcache.png"
+    filename_test = testdir.tmpdir / dirname / test_image_name
+    filename_original = make_cached_images(testdir.tmpdir, dirname, name="original.png")
+    if make_cache:
+        filename = make_cached_images(testdir.tmpdir)
+        assert filecmp.cmp(filename, filename_original, shallow=False)
+    else:
+        filename = filename_test
+        assert not filename_test.isfile()
 
     testdir.makepyfile(
         """
@@ -386,8 +395,11 @@ def test_reset_image_cache(testdir) -> None:
             plotter.show()
         """
     )
-    result = testdir.runpytest("--reset_image_cache")
-    # file was overwritten
+    args = ["--reset_image_cache"]
+    if allow_unused_generated:
+        args.append("--allow_unused_generated")
+    result = testdir.runpytest(*args)
+    # file was created or overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
     # should pass even if image doesn't match
     result.stdout.fnmatch_lines("*[Pp]assed*")
