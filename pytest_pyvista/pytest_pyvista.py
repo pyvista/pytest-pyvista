@@ -348,17 +348,6 @@ def _test_name_from_image_name(image_name: str) -> str:
     return "test_" + remove_suffix(image_name)
 
 
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
-    """Store test results for skipped tests."""
-    outcome = yield
-    if outcome:
-        # Mark cached image as skipped if test was skipped during setup or execution
-        rep = outcome.get_result()
-        if rep.when in ["call", "setup"] and rep.skipped:
-            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
-
-
 @pytest.hookimpl
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
     """Execute after the whole test run completes."""
@@ -402,6 +391,21 @@ def _get_option_from_config_or_ini(pytestconfig, option: str) -> str:  # noqa: A
     if value is None:
         value = pytestconfig.getini(option)
     return value
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
+    """Store test results for inspection."""
+    outcome = yield
+    if outcome:
+        rep = outcome.get_result()
+
+        # Mark cached image as skipped if test was skipped during setup or execution
+        if rep.when in ["call", "setup"] and rep.skipped:
+            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
+
+        # Attach the report to the item so fixtures/finalizers can inspect it
+        setattr(item, f"rep_{rep.when}", rep)
 
 
 @pytest.fixture

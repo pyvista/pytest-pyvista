@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import Enum
 import filecmp
 from pathlib import Path
+import platform
+from unittest import mock
 
 import pytest
 import pyvista as pv
@@ -149,16 +151,28 @@ def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_i
     assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile() == use_generated_image_dir
 
 
-def test_skip(testdir) -> None:
-    """Test `skip` flag of `verify_image_cache`."""
+@pytest.mark.parametrize("mock_platform_system", ["Darwin", None])
+@pytest.mark.parametrize("skip_type", ["skip", "ignore_image_cache", "macos_skip_image_cache"])
+def test_skip(testdir, skip_type: str, mock_platform_system: str) -> None:
+    """Test all skip flags of `verify_image_cache`."""
+    if mock_platform_system:
+        # Simulate test for macOS
+        patcher = mock.patch("platform.system", return_value=mock_platform_system)
+        with patcher:
+            _run_skip_test(testdir, skip_type)
+    else:
+        _run_skip_test(testdir, skip_type)
+
+
+def _run_skip_test(testdir, skip_type: str) -> None:
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
-        """
+        f"""
         import pytest
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
-            verify_image_cache.skip = True
+            verify_image_cache.{skip_type} = True
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="blue")
@@ -167,7 +181,9 @@ def test_skip(testdir) -> None:
     )
 
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    # Expect failure if verification is not skipped
+    match = "*RegressionError*" if skip_type == "macos_skip_image_cache" and platform.system() != "Darwin" else "*[Pp]assed*"
+    result.stdout.fnmatch_lines(match)
 
 
 def test_image_cache_dir_commandline(testdir) -> None:
@@ -435,7 +451,9 @@ def test_cleanup(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_reset_only_failed(testdir) -> None:
+@pytest.mark.parametrize("add_missing_images", [True, False])
+@pytest.mark.parametrize("reset_image_cache", [True, False])
+def test_reset_only_failed(testdir, reset_image_cache, add_missing_images) -> None:
     """Test usage of the `reset_only_failed` flag."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
@@ -453,7 +471,13 @@ def test_reset_only_failed(testdir) -> None:
         """
     )
 
-    result = testdir.runpytest("--reset_only_failed")
+    args = ["--reset_only_failed"]
+    if add_missing_images:
+        args.append("--add_missing_images")
+    if reset_image_cache:
+        args.append("--reset_image_cache")
+
+    result = testdir.runpytest(*args)
     result.stdout.fnmatch_lines("*[Pp]assed*")
     result.stdout.fnmatch_lines("*This image will be reset in the cache.")
     # file was overwritten
@@ -538,6 +562,52 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
         else:
             assert not from_cache_dir.isdir()
             assert not (from_cache_dir / cached_image_name).isfile()
+
+
+@pytest.mark.parametrize("skip", [True, False])
+@pytest.mark.parametrize("call_show", [True, False])
+@pytest.mark.parametrize("allow_useless_fixture_cli", [True, False])
+@pytest.mark.parametrize("allow_useless_fixture_attr", [True, False, None])
+def test_allow_useless_fixture(testdir, call_show, allow_useless_fixture_cli, allow_useless_fixture_attr, skip) -> None:
+    """Test error is raised if fixture is used but no images are generated."""
+    if call_show:
+        # Ensure there is a cached image to compare to the generated image
+        make_cached_images(testdir.tmpdir)
+
+    allow_attr = "" if allow_useless_fixture_attr is None else f"verify_image_cache.allow_useless_fixture = {allow_useless_fixture_attr}"
+    skip_attr = f"verify_image_cache.skip = {skip}"
+    testdir.makepyfile(
+        f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            {allow_attr}
+            {skip_attr}
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            {"plotter.show()" if call_show else ""}
+        """
+    )
+
+    result = testdir.runpytest("--allow_useless_fixture") if allow_useless_fixture_cli else testdir.runpytest()
+
+    # Expect local attr to take precedence over CLI value
+    allow_useless_fixture = allow_useless_fixture_attr if allow_useless_fixture_attr is not None else allow_useless_fixture_cli
+    expect_failure = (not call_show and not allow_useless_fixture) and not skip
+    expected_code = pytest.ExitCode.TESTS_FAILED if expect_failure else pytest.ExitCode.OK
+    assert result.ret == expected_code
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    if expect_failure:
+        result.stdout.fnmatch_lines(
+            [
+                "*ERROR at teardown of test_imcache*",
+                "*Failed: Fixture `verify_image_cache` is used but no images were generated.",
+                "*Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?.",
+            ]
+        )
+    else:
+        assert "ERROR" not in result.stdout.str()
 
 
 class LiteralStrEnum(str, Enum):  # noqa: D101
