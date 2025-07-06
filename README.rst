@@ -124,6 +124,12 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * ``--disallow_unused_cache`` report test failure if there are any images in the cache
   which are not compared to any generated images.
 
+* Use ``--allow_useless_fixture`` to prevent test failure when the ``verify_image_cache``
+  fixture is used but no images are generated. If no images are generated (i.e. there are
+  no calls made to ``Plotter.show()`` or ``mesh.plot()``), then these tests will fail
+  by default. Set this CLI flag to allow this globally, or use the test-specific flag
+  by the same name below to configure this on a per-test basis.
+
 Test specific flags
 -------------------
 These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
@@ -142,6 +148,10 @@ in the beginning of your test function.
 
 * ``skip``: If you have a test that plots a figure, but you don't want to compare
   its output against the cache, you can skip it with this flag.
+
+* ``allow_useless_fixture``: Set this flag to ``True`` to prevent test failure when the
+  ``verify_image_cache`` fixture is used but no images are generated. The value of this
+  flag takes precedence over the global flag by the same name (see above).
 
 Configuration
 -------------
