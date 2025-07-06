@@ -20,6 +20,10 @@ if TYPE_CHECKING:  # pragma: no cover
     from pyvista import Plotter
 
 
+VISITED_CACHED_IMAGE_NAMES: set[str] = set()
+SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
+
+
 class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria."""
 
@@ -90,6 +94,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
+    )
+    group.addoption(
+        "--disallow_unused_cache",
+        action="store_true",
+        help="Report test failure if there are any images in the cache which are not compared to any generated images.",
     )
     group.addoption(
         "--allow_useless_fixture",
@@ -229,7 +238,7 @@ class VerifyImageCache:
 
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
-        image_name = test_name[5:] + ".png"
+        image_name = _image_name_from_test_name(test_name)
         image_filename = Path(self.cache_dir, image_name)
         gen_image_filename = None if self.generated_image_dir is None else Path(self.generated_image_dir, image_name)
 
@@ -239,7 +248,9 @@ class VerifyImageCache:
             macos_skip_image_cache=self.macos_skip_image_cache,
             ignore_image_cache=self.ignore_image_cache,
         ):
+            SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
             return
+        VISITED_CACHED_IMAGE_NAMES.add(image_name)
 
         if not image_filename.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
@@ -317,6 +328,57 @@ class VerifyImageCache:
             shutil.copy(cached_image, from_cache_dir / image_name)
 
 
+def _image_name_from_test_name(test_name: str) -> str:
+    return test_name[5:] + ".png"
+
+
+def _test_name_from_image_name(image_name: str) -> str:
+    def remove_suffix(s: str) -> str:
+        """Remove integer and png suffix."""
+        no_png_ext = s[:-4]
+        parts = no_png_ext.split("_")
+        if len(parts) > 1:
+            try:
+                int(parts[-1])
+                parts = parts[:-1]  # Remove the integer suffix
+            except ValueError:
+                pass  # Last part is not an integer; do nothing
+        return "_".join(parts)
+
+    return "test_" + remove_suffix(image_name)
+
+
+@pytest.hookimpl
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
+    """Execute after the whole test run completes."""
+    if config.getoption("disallow_unused_cache"):
+        cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
+        cached_image_names = {f.name for f in cache_path.glob("*.png")}
+        unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES - SKIPPED_CACHED_IMAGE_NAMES
+
+        # Exclude images from skipped tests where multiple images are generated
+        unused_skipped = unused_cached_image_names.copy()
+        for image_name in unused_cached_image_names:
+            base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
+            if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
+                unused_skipped.remove(image_name)
+
+        if unused_skipped:
+            tr = terminalreporter
+            tr.ensure_newline()
+            tr.section("pytest-pyvista ERROR", sep="=", red=True, bold=True)
+            tr.line(f"Unused cached image file(s) detected ({len(unused_skipped)}). The following images are", red=True)
+            tr.line("cached, but were not generated or skipped by any of the tests:", red=True)
+            tr.line(f"{sorted(unused_skipped)}", yellow=True)
+            tr.line("")
+            tr.line("These images should either be removed from the cache, or the corresponding", red=True)
+            tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
+            pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
+
+    VISITED_CACHED_IMAGE_NAMES.clear()
+    SKIPPED_CACHED_IMAGE_NAMES.clear()
+
+
 def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
     if not Path(dirpath).is_dir():
         msg = f"pyvista test {msg_name}: {dirpath} does not yet exist.  Creating dir."
@@ -337,6 +399,10 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     outcome = yield
     if outcome:
         rep = outcome.get_result()
+
+        # Mark cached image as skipped if test was skipped during setup or execution
+        if rep.when in ["call", "setup"] and rep.skipped:
+            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
 
         # Attach the report to the item so fixtures/finalizers can inspect it
         setattr(item, f"rep_{rep.when}", rep)

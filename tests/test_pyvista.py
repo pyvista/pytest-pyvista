@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 import filecmp
 from pathlib import Path
 import platform
@@ -24,7 +25,7 @@ def test_arguments(testdir) -> None:
 
         """
     )
-    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache")
+    result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--disallow_unused_cache")
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -607,3 +608,151 @@ def test_allow_useless_fixture(testdir, call_show, allow_useless_fixture_cli, al
         )
     else:
         assert "ERROR" not in result.stdout.str()
+
+
+class LiteralStrEnum(str, Enum):  # noqa: D101
+    def __str__(self) -> str:  # noqa: D105
+        return str(self.value)
+
+
+class PytestMark(LiteralStrEnum):  # noqa: D101
+    NONE = ""
+    SKIP = "@pytest.mark.skip"
+
+
+class SkipVerify(LiteralStrEnum):  # noqa: D101
+    NONE = ""
+    MACOS = "verify_image_cache.macos_skip_image_cache"
+    WINDOWS = "verify_image_cache.windows_skip_image_cache"
+    IGNORE = "verify_image_cache.ignore_image_cache"
+    SKIP = "verify_image_cache.skip"
+
+
+class MeshColor(LiteralStrEnum):  # noqa: D101
+    OK = "red"
+    FAIL = "blue"
+
+
+class HasUnusedCache(Enum):  # noqa: D101
+    TRUE = True
+    FALSE = False
+
+    def __bool__(self) -> bool:  # noqa: D105
+        return self.value
+
+
+def _unused_cache_lines(image_name: str) -> list[str]:
+    return [
+        "*pytest-pyvista ERROR*",
+        "Unused cached image file(s) detected (1). The following images are",
+        "cached, but were not generated or skipped by any of the tests:",
+        f"[{image_name!r}]",
+        "These images should either be removed from the cache, or the corresponding",
+        "tests should be modified to ensure an image is generated for comparison.",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("marker", "skip_verify", "color", "stdout_lines", "exit_code", "has_unused_cache"),
+    [
+        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.OK, ["*skipped*"], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.OK, ["*[Pp]assed*"], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.MACOS, MeshColor.OK, ["*[Pp]assed*"], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.WINDOWS, MeshColor.OK, ["*[Pp]assed*"], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.IGNORE, MeshColor.OK, ["*[Pp]assed*"], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.SKIP, MeshColor.OK, ["*[Pp]assed*"], pytest.ExitCode.OK, HasUnusedCache.FALSE),
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, ["*FAILED*"], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.FALSE),
+        (PytestMark.SKIP, SkipVerify.NONE, MeshColor.OK, [*_unused_cache_lines("imcache.png")], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.OK, [*_unused_cache_lines("imcache.png")], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),
+        (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [*_unused_cache_lines("imcache.png")], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),
+    ],
+)
+def test_disallow_unused_cache(testdir, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
+    """Ensure unused cached images are detected correctly."""
+    test_name = "foo"
+    image_name = test_name + ".png"
+    image_cache_dir = "image_cache_dir"
+
+    make_cached_images(testdir.tmpdir, image_cache_dir, image_name)
+    if has_unused_cache:
+        make_cached_images(testdir.tmpdir)
+
+    testdir.makepyfile(
+        f"""
+        import pytest
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        {marker}
+        def test_{test_name}(verify_image_cache):
+            {skip_verify}
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="{color}")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest("--disallow_unused_cache")
+
+    assert result.ret == exit_code
+    result.stdout.fnmatch_lines(stdout_lines)
+
+
+@pytest.mark.parametrize("skip", [True, False])
+@pytest.mark.parametrize("args", ["--disallow_unused_cache", []])
+def test_disallow_unused_cache_skip_multiple_images(testdir, skip, args) -> None:
+    """Test skips when there are multiple calls to show() in a test."""
+    make_cached_images(testdir.tmpdir, name="imcache.png")
+    make_cached_images(testdir.tmpdir, name="imcache_1.png")
+
+    marker = "@pytest.mark.skip" if skip else ""
+    testdir.makepyfile(
+        f"""
+        import pytest
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        {marker}
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+            #
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = testdir.runpytest(args)
+    expected = "*skipped*" if skip else "*[Pp]assed*"
+    result.stdout.fnmatch_lines(expected)
+    assert result.ret == pytest.ExitCode.OK
+
+
+@pytest.mark.parametrize("disallow_unused_cache", [True, False])
+def test_disallow_unused_cache_name_mismatch(testdir, disallow_unused_cache) -> None:
+    """Test cached image doesn't match test name."""
+    image_name = "im_cache.png"
+    make_cached_images(testdir.tmpdir, name=image_name)
+    make_cached_images(testdir.tmpdir)
+
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+    args = "--disallow_unused_cache" if disallow_unused_cache else []
+    result = testdir.runpytest(args)
+    if disallow_unused_cache:
+        result.stdout.fnmatch_lines([*_unused_cache_lines(image_name)])
+        assert result.ret == pytest.ExitCode.TESTS_FAILED
+    else:
+        result.stdout.fnmatch_lines("*[Pp]assed*")
+        assert result.ret == pytest.ExitCode.OK
