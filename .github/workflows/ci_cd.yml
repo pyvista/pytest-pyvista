@@ -80,6 +80,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Verify wheel
+        if: matrix.python-version == '3.12'
         run: |
           python -m pip install --upgrade pip build twine
           python -m build && python -m twine check dist/*
@@ -115,6 +116,14 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Upload distribution artifacts
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
+          retention-days: 7
+
   release:
     name: Release
     if: |
@@ -126,27 +135,23 @@ jobs:
       - downstream
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-artifacts
+          path: dist/
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.MAIN_PYTHON_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip build twine
-
-      - name: Build artifacts
-        run: |
-          python -m build && python -m twine check dist/*
+          python-version: "3.12"
 
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
+          python -m pip install twine
           python -m twine upload --skip-existing ./**/*.whl
           python -m twine upload --skip-existing ./**/*.tar.gz
 
