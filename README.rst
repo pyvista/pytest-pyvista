@@ -100,12 +100,13 @@ These are the flags you can use when calling ``pytest`` in the command line:
 
 * You can use ``--ignore_image_cache`` if you want to
   temporarily ignore regression testing, e.g. on a particular CI action.
-
-* When using ``--fail_extra_image_cache`` if there is an extra image in the
-  cache, it will report as an error.
   
 * ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
   directory.  This will override any configuration, see below.
+
+* ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
+  there is a warning or error raised. This directory is useful for reviewing test
+  failures. This will override any configuration, see below.
 
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 
@@ -113,6 +114,21 @@ These are the flags you can use when calling ``pytest`` in the command line:
   configuration, see below.
 
 * ``--reset_only_failed`` reset the image cache of the failed tests only.
+
+* Use ``--allow_unused_generated`` to prevent an error from being raised when a
+  test image is generated but not used. A test image is considered "used" if it has a
+  corresponding cached image to compare against, or is used to reset or update the
+  cache (e.g. if using ``--add_missing_images``). Otherwise, an error is raised by
+  default.
+
+* ``--disallow_unused_cache`` report test failure if there are any images in the cache
+  which are not compared to any generated images.
+
+* Use ``--allow_useless_fixture`` to prevent test failure when the ``verify_image_cache``
+  fixture is used but no images are generated. If no images are generated (i.e. there are
+  no calls made to ``Plotter.show()`` or ``mesh.plot()``), then these tests will fail
+  by default. Set this CLI flag to allow this globally, or use the test-specific flag
+  by the same name below to configure this on a per-test basis.
 
 Test specific flags
 -------------------
@@ -132,6 +148,10 @@ in the beginning of your test function.
 
 * ``skip``: If you have a test that plots a figure, but you don't want to compare
   its output against the cache, you can skip it with this flag.
+
+* ``allow_useless_fixture``: Set this flag to ``True`` to prevent test failure when the
+  ``verify_image_cache`` fixture is used but no images are generated. The value of this
+  flag takes precedence over the global flag by the same name (see above).
 
 Configuration
 -------------
@@ -153,6 +173,12 @@ Additionally, to configure the directory that will contain the generated test im
    [tool.pytest.ini_options]
    generated_image_dir = "generated_images"
 
+Similarly, configure the directory that will contain any failed test images:
+
+.. code::
+
+   [tool.pytest.ini_options]
+   failed_image_dir = "failed_images"
 
 Contributing
 ------------
