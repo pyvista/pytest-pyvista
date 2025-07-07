@@ -188,6 +188,7 @@ jobs:
         working-directory: pyvista
 
       - name: Unit Testing
+        working-directory: pyvista
         run: xvfb-run python -m pytest --fail_extra_image_cache -v --generated_image_dir gen_dir tests/plotting/test_plotting.py -n auto
 
       - name: Upload generated image artifact
