@@ -79,6 +79,11 @@ jobs:
           cache: "pip"
           cache-dependency-path: pyproject.toml
 
+      - name: Verify wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build && python -m twine check dist/*
+
       - name: Install pytest-pyvista with test dependencies
         run: |
           pip install .[tests] 'pyvista>=0.37'
