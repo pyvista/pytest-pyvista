@@ -8,7 +8,6 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Framework :: Pytest",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
@@ -19,7 +18,8 @@ classifiers = [
 ]
 dependencies = ["pytest>=3.5.0"]
 dynamic = ["description", "version"]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 name = "pytest_pyvista"
 python_requires = ">=3.9"
 readme = "README.rst"
