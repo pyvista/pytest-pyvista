@@ -24,7 +24,7 @@
    .. autosummary::
    
       ~VerifyImageCache.add_missing_images
-      ~VerifyImageCache.fail_extra_image_cache
+      ~VerifyImageCache.allow_unused_generated
       ~VerifyImageCache.ignore_image_cache
       ~VerifyImageCache.reset_image_cache
       ~VerifyImageCache.reset_only_failed

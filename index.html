@@ -2,41 +2,45 @@
 <!DOCTYPE html>
 
 
-<html lang="en" >
+<html lang="en" data-content_root="./" >
 
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pytest-pyvista &#8212; pytest-pyvista 0.1.9 documentation</title>
+    <title>pytest-pyvista &#8212; pytest-pyvista 0.2.0 documentation</title>
   
   
   
   <script data-cfasync="false">
     document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
-    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
   </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=e353d410970836974a52" rel="stylesheet" />
-<link href="_static/styles/bootstrap.css?digest=e353d410970836974a52" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=e353d410970836974a52" rel="stylesheet" />
+  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
-  
-  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=e353d410970836974a52" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
-
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
   
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=e353d410970836974a52" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=e353d410970836974a52" />
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
-    <script src="_static/documentation_options.js?v=dba2a9e9"></script>
-    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/documentation_options.js?v=938c9ccc"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="_static/copybutton.js?v=f281be69"></script>
@@ -46,6 +50,7 @@
     <link rel="next" title="API Reference" href="api.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="0.2.0" />
   </head>
   
   
@@ -53,23 +58,16 @@
 
   
   
-  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
   
-  <input type="checkbox"
-          class="sidebar-toggle"
-          name="__primary"
-          id="__primary"/>
-  <label class="overlay overlay-primary" for="__primary"></label>
+  <div id="pst-scroll-pixel-helper"></div>
   
-  <input type="checkbox"
-          class="sidebar-toggle"
-          name="__secondary"
-          id="__secondary"/>
-  <label class="overlay overlay-secondary" for="__secondary"></label>
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
   
-  <div class="search-button__wrapper">
-    <div class="search-button__overlay"></div>
-    <div class="search-button__search-container">
+  <dialog id="pst-search-dialog">
+    
 <form class="bd-search d-flex align-items-center"
       action="search.html"
       method="get">
@@ -77,7 +75,6 @@
   <input type="search"
          class="form-control"
          name="q"
-         id="search-input"
          placeholder="Search the docs ..."
          aria-label="Search the docs ..."
          autocomplete="off"
@@ -85,18 +82,27 @@
          autocapitalize="off"
          spellcheck="false"/>
   <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form></div>
-  </div>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
   
-    <nav class="bd-header navbar navbar-expand-lg bd-navbar">
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
 <div class="bd-header__inner bd-page-width">
-  <label class="sidebar-toggle primary-toggle" for="__primary">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
     <span class="fa-solid fa-bars"></span>
-  </label>
+  </button>
   
-  <div class="navbar-header-items__start">
+  
+  <div class="col-lg-3 navbar-header-items__start">
     
       <div class="navbar-item">
+
+  
+    
   
 
 <a class="navbar-brand logo" href="#">
@@ -104,39 +110,34 @@
   
   
   
+  
     
     
       
     
     
-    <img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-light" alt="Logo image"/>
-    <script>document.write(`<img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-dark" alt="Logo image"/>`);</script>
+    <img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-light" alt="pytest-pyvista 0.2.0 documentation - Home"/>
+    <img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-dark pst-js-only" alt="pytest-pyvista 0.2.0 documentation - Home"/>
   
   
 </a></div>
     
   </div>
   
-  
   <div class="col-lg-9 navbar-header-items">
     
     <div class="me-auto navbar-header-items__center">
       
-        <div class="navbar-item"><nav class="navbar-nav">
-  <p class="sidebar-header-items__title"
-     role="heading"
-     aria-level="1"
-     aria-label="Site Navigation">
-    Site Navigation
-  </p>
+        <div class="navbar-item">
+<nav>
   <ul class="bd-navbar-elements navbar-nav">
     
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="api.html">
-                        API Reference
-                      </a>
-                    </li>
-                
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="api.html">
+    API Reference
+  </a>
+</li>
+
   </ul>
 </nav></div>
       
@@ -147,28 +148,24 @@
       
         <div class="navbar-item navbar-persistent--container">
           
-<script>
-document.write(`
-  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-  </button>
-`);
-</script>
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
         </div>
       
       
         <div class="navbar-item">
-<script>
-document.write(`
-  <button class="theme-switch-button btn btn-sm btn-outline-primary navbar-btn rounded-circle" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="theme-switch" data-mode="light"><i class="fa-solid fa-sun"></i></span>
-    <span class="theme-switch" data-mode="dark"><i class="fa-solid fa-moon"></i></span>
-    <span class="theme-switch" data-mode="auto"><i class="fa-solid fa-circle-half-stroke"></i></span>
-  </button>
-`);
-</script></div>
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
       
-        <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+        <div class="navbar-item"><ul class="navbar-icon-links"
     aria-label="Icon Links">
         <li class="nav-item">
           
@@ -179,8 +176,8 @@ document.write(`
           
           
           
-          <a href="https://github.com/pyvista/pytest-pyvista" title="GitHub" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github"></i></span>
-            <label class="sr-only">GitHub</label></a>
+          <a href="https://github.com/pyvista/pytest-pyvista" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
         </li>
         <li class="nav-item">
           
@@ -191,8 +188,8 @@ document.write(`
           
           
           
-          <a href="http://slack.pyvista.org" title="Slack Community" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fab fa-slack"></i></span>
-            <label class="sr-only">Slack Community</label></a>
+          <a href="http://slack.pyvista.org" title="Slack Community" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fab fa-slack fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Slack Community</span></a>
         </li>
         <li class="nav-item">
           
@@ -203,8 +200,8 @@ document.write(`
           
           
           
-          <a href="https://github.com/pyvista/pyvista/discussions" title="Support" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa fa-comment fa-fw"></i></span>
-            <label class="sr-only">Support</label></a>
+          <a href="https://github.com/pyvista/pyvista/discussions" title="Support" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa fa-comment fa-fw fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Support</span></a>
         </li>
         <li class="nav-item">
           
@@ -215,8 +212,8 @@ document.write(`
           
           
           
-          <a href="https://github.com/pyvista/pyvista/blob/main/CONTRIBUTING.rst" title="Contributing" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa fa-gavel fa-fw"></i></span>
-            <label class="sr-only">Contributing</label></a>
+          <a href="https://github.com/pyvista/pyvista/blob/main/CONTRIBUTING.rst" title="Contributing" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa fa-gavel fa-fw fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Contributing</span></a>
         </li>
 </ul></div>
       
@@ -226,29 +223,34 @@ document.write(`
   
   
     <div class="navbar-persistent--mobile">
-<script>
-document.write(`
-  <button class="btn btn-sm navbar-btn search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-  </button>
-`);
-</script>
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
     </div>
   
 
   
-    <label class="sidebar-toggle secondary-toggle" for="__secondary">
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
       <span class="fa-solid fa-outdent"></span>
-    </label>
+    </button>
   
 </div>
 
-    </nav>
+    </header>
   
+
   <div class="bd-container">
     <div class="bd-container__inner bd-page-width">
       
-      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
         
 
   
@@ -257,23 +259,21 @@ document.write(`
     
       <div class="sidebar-header-items__center">
         
-          <div class="navbar-item"><nav class="navbar-nav">
-  <p class="sidebar-header-items__title"
-     role="heading"
-     aria-level="1"
-     aria-label="Site Navigation">
-    Site Navigation
-  </p>
+          
+          
+            <div class="navbar-item">
+<nav>
   <ul class="bd-navbar-elements navbar-nav">
     
-                    <li class="nav-item">
-                      <a class="nav-link nav-internal" href="api.html">
-                        API Reference
-                      </a>
-                    </li>
-                
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="api.html">
+    API Reference
+  </a>
+</li>
+
   </ul>
 </nav></div>
+          
         
       </div>
     
@@ -282,17 +282,14 @@ document.write(`
       <div class="sidebar-header-items__end">
         
           <div class="navbar-item">
-<script>
-document.write(`
-  <button class="theme-switch-button btn btn-sm btn-outline-primary navbar-btn rounded-circle" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="theme-switch" data-mode="light"><i class="fa-solid fa-sun"></i></span>
-    <span class="theme-switch" data-mode="dark"><i class="fa-solid fa-moon"></i></span>
-    <span class="theme-switch" data-mode="auto"><i class="fa-solid fa-circle-half-stroke"></i></span>
-  </button>
-`);
-</script></div>
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
         
-          <div class="navbar-item"><ul class="navbar-icon-links navbar-nav"
+          <div class="navbar-item"><ul class="navbar-icon-links"
     aria-label="Icon Links">
         <li class="nav-item">
           
@@ -303,8 +300,8 @@ document.write(`
           
           
           
-          <a href="https://github.com/pyvista/pytest-pyvista" title="GitHub" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa-brands fa-square-github"></i></span>
-            <label class="sr-only">GitHub</label></a>
+          <a href="https://github.com/pyvista/pytest-pyvista" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
         </li>
         <li class="nav-item">
           
@@ -315,8 +312,8 @@ document.write(`
           
           
           
-          <a href="http://slack.pyvista.org" title="Slack Community" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fab fa-slack"></i></span>
-            <label class="sr-only">Slack Community</label></a>
+          <a href="http://slack.pyvista.org" title="Slack Community" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fab fa-slack fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Slack Community</span></a>
         </li>
         <li class="nav-item">
           
@@ -327,8 +324,8 @@ document.write(`
           
           
           
-          <a href="https://github.com/pyvista/pyvista/discussions" title="Support" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa fa-comment fa-fw"></i></span>
-            <label class="sr-only">Support</label></a>
+          <a href="https://github.com/pyvista/pyvista/discussions" title="Support" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa fa-comment fa-fw fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Support</span></a>
         </li>
         <li class="nav-item">
           
@@ -339,8 +336,8 @@ document.write(`
           
           
           
-          <a href="https://github.com/pyvista/pyvista/blob/main/CONTRIBUTING.rst" title="Contributing" class="nav-link" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><span><i class="fa fa-gavel fa-fw"></i></span>
-            <label class="sr-only">Contributing</label></a>
+          <a href="https://github.com/pyvista/pyvista/blob/main/CONTRIBUTING.rst" title="Contributing" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa fa-gavel fa-fw fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">Contributing</span></a>
         </li>
 </ul></div>
         
@@ -350,33 +347,42 @@ document.write(`
   
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
   </div>
-  
-  <div id="rtd-footer-container"></div>
 
 
       </div>
       
-      <main id="main-content" class="bd-main">
+      <main id="main-content" class="bd-main" role="main">
         
         
           <div class="bd-content">
             <div class="bd-article-container">
               
-              <div class="bd-header-article"></div>
+              <div class="bd-header-article d-print-none"></div>
               
               
               
                 
 <div id="searchbox"></div>
-                <article class="bd-article" role="main">
+                <article class="bd-article">
                   
   <section id="pytest-pyvista">
 <h1>pytest-pyvista<a class="headerlink" href="#pytest-pyvista" title="Link to this heading">#</a></h1>
-<a class="reference external image-reference" href="https://pypi.org/project/pytest-pyvista"><img alt="PyPI version" src="https://img.shields.io/pypi/v/pytest-pyvista.svg?color=orange&amp;label=pypi&amp;logo=python&amp;logoColor=white" /></a>
-<a class="reference external image-reference" href="https://anaconda.org/conda-forge/pytest-pyvista"><img alt="conda-forge version" src="https://img.shields.io/conda/vn/conda-forge/pytest-pyvista?color=orange&amp;label=conda-forge&amp;logo=conda-forge&amp;logoColor=white" /></a>
-<a class="reference external image-reference" href="https://pypi.org/project/pytest-pyvista"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/pytest-pyvista.svg?color=orange&amp;logo=python&amp;label=python&amp;logoColor=white" /></a>
-<a class="reference external image-reference" href="https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml"><img alt="GitHub Actions: Unit Testing and Deployment" src="https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml/badge.svg" /></a>
+<a class="reference external image-reference" href="https://pypi.org/project/pytest-pyvista"><img alt="PyPI version" src="https://img.shields.io/pypi/v/pytest-pyvista.svg?color=orange&amp;label=pypi&amp;logo=python&amp;logoColor=white" />
+</a>
+<a class="reference external image-reference" href="https://anaconda.org/conda-forge/pytest-pyvista"><img alt="conda-forge version" src="https://img.shields.io/conda/vn/conda-forge/pytest-pyvista?color=orange&amp;label=conda-forge&amp;logo=conda-forge&amp;logoColor=white" />
+</a>
+<a class="reference external image-reference" href="https://pypi.org/project/pytest-pyvista"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/pytest-pyvista.svg?color=orange&amp;logo=python&amp;label=python&amp;logoColor=white" />
+</a>
+<a class="reference external image-reference" href="https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml"><img alt="GitHub Actions: Unit Testing and Deployment" src="https://github.com/pyvista/pytest-pyvista/actions/workflows/ci_cd.yml/badge.svg" />
+</a>
 <p>Plugin to test PyVista plot outputs.</p>
 <hr class="docutils" />
 <p>This <a class="reference external" href="https://github.com/pytest-dev/pytest">pytest</a> plugin was generated with <a class="reference external" href="https://github.com/audreyr/cookiecutter">Cookiecutter</a> along with
@@ -393,7 +399,7 @@ fail.</p>
 </section>
 <section id="requirements">
 <h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading">#</a></h2>
-<p>You must have a Python version &gt;= 3.8, as well as PyVista installed
+<p>You must have a Python version &gt;= 3.9, as well as PyVista installed
 in your environment.</p>
 <p>pyvista version &gt;=0.37.0 and vtk version &gt;=9.0.0 required.</p>
 </section>
@@ -415,9 +421,9 @@ plugin will automatically manage the cache generation if it does not exist, and
 the image comparison itself. Make sure you enable <cite>pv.OFF_SCREEN</cite> when loading
 PyVista, so the <cite>pl.show()</cite> doesn’t pop up any window while testing.  By default,
 the verify_image_cache fixture should be used for each test for image comparison:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pyvista</span> <span class="k">as</span> <span class="nn">pv</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyvista</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pv</span>
 <span class="n">pv</span><span class="o">.</span><span class="n">OFF_SCREEN</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">def</span> <span class="nf">test_succeeds</span><span class="p">(</span><span class="n">verify_image_cache</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_succeeds</span><span class="p">(</span><span class="n">verify_image_cache</span><span class="p">):</span>
     <span class="n">pl</span> <span class="o">=</span> <span class="n">pyvista</span><span class="o">.</span><span class="n">Plotter</span><span class="p">()</span>
     <span class="n">pl</span><span class="o">.</span><span class="n">add_mesh</span><span class="p">(</span><span class="n">pyvista</span><span class="o">.</span><span class="n">Sphere</span><span class="p">(),</span> <span class="n">show_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">pl</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
@@ -426,15 +432,15 @@ the verify_image_cache fixture should be used for each test for image comparison
 <p>If most tests utilize this functionality, possibly restricted to a module,
 a wrapped version could be used:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">autouse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">wrapped_verify_image_cache</span><span class="p">(</span><span class="n">verify_image_cache</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">wrapped_verify_image_cache</span><span class="p">(</span><span class="n">verify_image_cache</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">verify_image_cache</span>
 </pre></div>
 </div>
 <p>If you need to use any flag inside the tests, you can modify the
 <cite>verify_image_cache</cite> object in the test:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pyvista</span> <span class="k">as</span> <span class="nn">pv</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyvista</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pv</span>
 <span class="n">pv</span><span class="o">.</span><span class="n">OFF_SCREEN</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">def</span> <span class="nf">test_succeeds</span><span class="p">(</span><span class="n">verify_image_cache</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_succeeds</span><span class="p">(</span><span class="n">verify_image_cache</span><span class="p">):</span>
     <span class="n">verify_image_cache</span><span class="o">.</span><span class="n">windows_skip_image_cache</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">pl</span> <span class="o">=</span> <span class="n">pyvista</span><span class="o">.</span><span class="n">Plotter</span><span class="p">()</span>
     <span class="n">pl</span><span class="o">.</span><span class="n">add_mesh</span><span class="p">(</span><span class="n">pyvista</span><span class="o">.</span><span class="n">Sphere</span><span class="p">(),</span> <span class="n">show_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -451,13 +457,27 @@ a wrapped version could be used:</p>
 testing or for potentially a major or minor release.</p></li>
 <li><p>You can use <code class="docutils literal notranslate"><span class="pre">--ignore_image_cache</span></code> if you want to
 temporarily ignore regression testing, e.g. on a particular CI action.</p></li>
-<li><p>When using <code class="docutils literal notranslate"><span class="pre">--fail_extra_image_cache</span></code> if there is an extra image in the
-cache, it will report as an error.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--generated_image_dir</span> <span class="pre">&lt;DIR&gt;</span></code> dumps all generated test images into &lt;DIR&gt;.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--generated_image_dir</span> <span class="pre">&lt;DIR&gt;</span></code> dumps all generated test images into the provided
+directory.  This will override any configuration, see below.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--failed_image_dir</span> <span class="pre">&lt;DIR&gt;</span></code> dumps copies of cached and generated test images when
+there is a warning or error raised. This directory is useful for reviewing test
+failures. This will override any configuration, see below.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--add_missing_images</span></code> adds any missing images from the test run to the cache.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">--image_cache_dir</span> <span class="pre">&lt;DIR&gt;</span></code> sets the image cache dir.  This will override any
+<li><p><code class="docutils literal notranslate"><span class="pre">--image_cache_dir</span> <span class="pre">&lt;DIR&gt;</span></code> sets the image cache directory.  This will override any
 configuration, see below.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--reset_only_failed</span></code> reset the image cache of the failed tests only.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">--allow_unused_generated</span></code> to prevent an error from being raised when a
+test image is generated but not used. A test image is considered “used” if it has a
+corresponding cached image to compare against, or is used to reset or update the
+cache (e.g. if using <code class="docutils literal notranslate"><span class="pre">--add_missing_images</span></code>). Otherwise, an error is raised by
+default.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--disallow_unused_cache</span></code> report test failure if there are any images in the cache
+which are not compared to any generated images.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">--allow_useless_fixture</span></code> to prevent test failure when the <code class="docutils literal notranslate"><span class="pre">verify_image_cache</span></code>
+fixture is used but no images are generated. If no images are generated (i.e. there are
+no calls made to <code class="docutils literal notranslate"><span class="pre">Plotter.show()</span></code> or <code class="docutils literal notranslate"><span class="pre">mesh.plot()</span></code>), then these tests will fail
+by default. Set this CLI flag to allow this globally, or use the test-specific flag
+by the same name below to configure this on a per-test basis.</p></li>
 </ul>
 </section>
 <section id="test-specific-flags">
@@ -475,6 +495,9 @@ from MacOS/Linux.</p></li>
 from Windows/Linux.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">skip</span></code>: If you have a test that plots a figure, but you don’t want to compare
 its output against the cache, you can skip it with this flag.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">allow_useless_fixture</span></code>: Set this flag to <code class="docutils literal notranslate"><span class="pre">True</span></code> to prevent test failure when the
+<code class="docutils literal notranslate"><span class="pre">verify_image_cache</span></code> fixture is used but no images are generated. The value of this
+flag takes precedence over the global flag by the same name (see above).</p></li>
 </ul>
 </section>
 <section id="configuration">
@@ -483,9 +506,19 @@ its output against the cache, you can skip it with this flag.</p></li>
 <a class="reference external" href="https://docs.pytest.org/en/latest/reference/customize.html">pytest configuration</a>
 section, consider configuring your test directory location to
 avoid passing command line arguments when calling <code class="docutils literal notranslate"><span class="pre">pytest</span></code>, for example in
-<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></p>
+<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">tool</span><span class="o">.</span><span class="n">pytest</span><span class="o">.</span><span class="n">ini_options</span><span class="p">]</span>
 <span class="n">image_cache_dir</span> <span class="o">=</span> <span class="s2">&quot;tests/plotting/image_cache&quot;</span>
+</pre></div>
+</div>
+<p>Additionally, to configure the directory that will contain the generated test images:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">tool</span><span class="o">.</span><span class="n">pytest</span><span class="o">.</span><span class="n">ini_options</span><span class="p">]</span>
+<span class="n">generated_image_dir</span> <span class="o">=</span> <span class="s2">&quot;generated_images&quot;</span>
+</pre></div>
+</div>
+<p>Similarly, configure the directory that will contain any failed test images:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">tool</span><span class="o">.</span><span class="n">pytest</span><span class="o">.</span><span class="n">ini_options</span><span class="p">]</span>
+<span class="n">failed_image_dir</span> <span class="o">=</span> <span class="s2">&quot;failed_images&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -519,17 +552,23 @@ description.</p>
               
               
               
+              
+              
             </div>
             
             
               
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
 
   <div class="sidebar-secondary-item">
-  <div class="page-toc tocsection onthispage">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
     <i class="fa-solid fa-list"></i> On this page
   </div>
-  <nav class="bd-toc-nav page-toc">
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#features">Features</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#requirements">Requirements</a></li>
@@ -545,6 +584,7 @@ description.</p>
   </nav></div>
 
   <div class="sidebar-secondary-item">
+
   
   <div class="tocsection editthispage">
     <a href="https://github.com/pyvista/pytest-pyvista/edit/main/doc/index.rst">
@@ -572,8 +612,8 @@ description.</p>
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="_static/scripts/bootstrap.js?digest=e353d410970836974a52"></script>
-<script src="_static/scripts/pydata-sphinx-theme.js?digest=e353d410970836974a52"></script>
+  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
   <footer class="bd-footer">
 <div class="bd-footer__inner bd-page-width">
@@ -581,17 +621,19 @@ description.</p>
     <div class="footer-items__start">
       
         <div class="footer-item">
+
   <p class="copyright">
     
-      © Copyright 2023, PyVista.
+      © Copyright 2025, PyVista.
       <br/>
     
   </p>
 </div>
       
         <div class="footer-item">
+
   <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.1.
     <br/>
   </p>
 </div>
@@ -599,10 +641,13 @@ description.</p>
     </div>
   
   
+  
     <div class="footer-items__end">
       
-        <div class="footer-item"><p class="theme-version">
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.13.3.
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
 </p></div>
       
     </div>
