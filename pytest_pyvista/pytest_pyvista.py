@@ -397,8 +397,9 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
             base = _image_name_from_test_name(_test_name_from_image_name(image_name))
-            parts = image_name.split("-")[::-1]
-            parts.append(base)
+            parts = base.split("-")[::-1]
+            if len(parts) > 1:
+                parts.append(base)
             base_image_name = "-".join(parts)
             if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
                 unused_skipped.remove(image_name)
