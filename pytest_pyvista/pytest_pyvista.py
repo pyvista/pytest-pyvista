@@ -378,20 +378,30 @@ def _image_name_from_test_name(test_name: str, node_path: Path | None = None, im
     return "-".join(name_parts) + ".png"
 
 
-def _test_name_from_image_name(image_name: str) -> str:
-    def remove_suffix(s: str) -> str:
-        """Remove integer and png suffix."""
-        no_png_ext = s[:-4]
-        parts = no_png_ext.split("_")
-        if len(parts) > 1:
-            try:
-                int(parts[-1])
-                parts = parts[:-1]  # Remove the integer suffix
-            except ValueError:
-                pass  # Last part is not an integer; do nothing
-        return "_".join(parts)
+def _remove_suffix_from_image_name(s: str) -> str:
+    """Remove integer and png suffix."""
+    no_png_ext = s.removesuffix(".png")
+    parts = no_png_ext.split("_")
+    if len(parts) > 1:
+        try:
+            int(parts[-1])
+            parts = parts[:-1]  # Remove the integer suffix
+        except ValueError:
+            pass  # Last part is not an integer; do nothing
+    return "_".join(parts)
 
-    return "test_" + remove_suffix(image_name.split("-")[-1])
+
+def _remove_prefix_from_image_name(image_name: str) -> str:
+    if "[" in image_name:
+        # Need to handle cases where pytest uses '-' with parametrized tests
+        left, right = image_name.split("[", maxsplit=1)
+        return left.split("-")[-1] + "[" + right
+    return image_name.split("-")[-1]
+
+
+def _test_name_from_image_name(image_name: str) -> str:
+    no_prefix = _remove_prefix_from_image_name(image_name)
+    return "test_" + _remove_suffix_from_image_name(no_prefix)
 
 
 @pytest.hookimpl
@@ -405,11 +415,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         # Exclude images from skipped tests where multiple images are generated
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
-            base = _image_name_from_test_name(_test_name_from_image_name(image_name))
-            parts = base.split("-")[::-1]
-            if len(parts) > 1:
-                parts.append(base)
-            base_image_name = "-".join(parts)
+            base_image_name = _remove_suffix_from_image_name(image_name) + "png"
             if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
                 unused_skipped.remove(image_name)
 
