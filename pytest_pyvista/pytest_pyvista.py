@@ -116,6 +116,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Prefix image names with the test 'module' name, the test 'package' name, or the "
         "'full' name, including the module, package, and all nested directories.",
     )
+    parser.addini(
+        "image_name_prefix",
+        "Prefix image names with the test 'module', 'package', or 'full' name. Command-line takes precedence over ini.",
+        default=None,
+    )
 
 
 class VerifyImageCache:
