@@ -35,6 +35,7 @@ def test_arguments(testdir) -> None:
 
 
 def test_image_name_prefix_warning(testdir) -> None:
+    """Test that a warning is emitted when there is no 'tests' parent dir."""
     name = "imcache.png"
     make_cached_images(testdir.tmpdir, name=name)
     testdir.makepyfile(
@@ -299,7 +300,7 @@ def test_high_variance_test(testdir) -> None:
 def test_generated_image_dir_commandline(testdir, image_name_prefix) -> None:
     """Test setting generated_image_dir via CLI option."""
     package = "package"
-    module = "test_foo.py"  # matches this test's names
+    module = "test_foo.py"
     tests = "tests"
 
     image_name = _get_image_name_with_prefix("imcache.png", package=package, module=module, option=image_name_prefix)
