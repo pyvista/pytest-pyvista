@@ -41,6 +41,9 @@ class RegressionFileNotFoundError(RegressionFileNotFound):
     """Error when regression file is not found."""
 
 
+_IMAGE_NAME_PREFIX_OPTIONS = ["none", "package", "module", "package+module", "full"]
+
+
 def pytest_addoption(parser) -> None:  # noqa: ANN001
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
     group = parser.getgroup("pyvista")
@@ -109,7 +112,7 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--image_name_prefix",
         action="store",
         default=None,
-        choices=["module", "package", "full"],
+        choices=_IMAGE_NAME_PREFIX_OPTIONS,
         help="Prefix image names with the test 'module' name, the test 'package' name, or the "
         "'full' name, including the module, package, and all nested directories.",
     )

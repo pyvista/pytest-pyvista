@@ -6,11 +6,13 @@ from enum import Enum
 import filecmp
 from pathlib import Path
 import platform
+import textwrap
 from unittest import mock
 
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.pytest_pyvista import _IMAGE_NAME_PREFIX_OPTIONS
 from pytest_pyvista.pytest_pyvista import _image_name_from_test_name
 from pytest_pyvista.pytest_pyvista import _test_name_from_image_name
 
@@ -274,11 +276,22 @@ def test_high_variance_test(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_generated_image_dir_commandline(testdir) -> None:
+@pytest.mark.parametrize("image_name_prefix", _IMAGE_NAME_PREFIX_OPTIONS)
+def test_generated_image_dir_commandline(testdir, image_name_prefix) -> None:
     """Test setting generated_image_dir via CLI option."""
-    make_cached_images(testdir.tmpdir)
-    testdir.makepyfile(
-        """
+    package = "package"
+    module = "test_foo.py"  # matches this test's names
+    tests = "tests"
+
+    image_name = _get_image_name_with_prefix("imcache.png", package=package, module=module, option=image_name_prefix)
+    make_cached_images(testdir.tmpdir, name=image_name)
+
+    dirpath = testdir.tmpdir.join(package, tests)
+    dirpath.ensure(dir=True)
+    test_file = dirpath.join(module)
+    test_file.write(
+        textwrap.dedent(
+            """
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
@@ -287,11 +300,14 @@ def test_generated_image_dir_commandline(testdir) -> None:
             plotter.add_mesh(sphere, color="red")
             plotter.show()
         """
+        )
     )
-
-    result = testdir.runpytest("--generated_image_dir", "gen_dir")
+    args = ["--generated_image_dir", "gen_dir"]
+    if image_name_prefix is not None:
+        args.extend(["--image_name_prefix", image_name_prefix])
+    result = testdir.runpytest(Path(package, tests), *args)
     assert (testdir.tmpdir / "gen_dir").isdir()
-    assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile()
+    assert (testdir.tmpdir / "gen_dir" / image_name).isfile()
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
@@ -768,6 +784,23 @@ MODULE_NAME = "test_plotting.py"
 MODULE_STEM = "test_plotting"
 TEST_NAME = "test_add_mesh"
 IMAGE_NAME = "add_mesh.png"
+
+
+def _get_image_name_with_prefix(image_name: str, package: str, module: str, option: str | None) -> str:
+    if option in {None, "none"}:
+        return image_name
+    module_stem = Path(module).stem
+    if option == "module":
+        return f"{module_stem}-{image_name}"
+    if option == "package":
+        return f"{package}-{image_name}"
+    if option == "package+module":
+        return f"{package}-{module_stem}-{image_name}"
+    if option == "full":
+        return f"{package}-{TESTS_NAME}-{module_stem}-{image_name}"
+
+    msg = f"invalid option: {option}"
+    raise RuntimeError(msg)
 
 
 @pytest.mark.parametrize(
