@@ -802,8 +802,8 @@ TESTS_NAME = "tests"
 SUBDIR_NAME = "plotting"
 MODULE_NAME = "test_plotting.py"
 MODULE_STEM = "test_plotting"
-TEST_NAME = "test_add_mesh"
-IMAGE_NAME = "add_mesh.png"
+TEST_NAME = "test_add_mesh[None-True-False]"
+IMAGE_NAME = "add_mesh[None-True-False].png"
 
 
 def _get_image_name_with_prefix(image_name: str, package: str, module: str, option: str | None) -> str:
