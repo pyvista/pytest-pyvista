@@ -415,7 +415,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         # Exclude images from skipped tests where multiple images are generated
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
-            base_image_name = _remove_suffix_from_image_name(image_name) + "png"
+            base_image_name = _remove_suffix_from_image_name(image_name) + ".png"
             if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
                 unused_skipped.remove(image_name)
 
