@@ -113,13 +113,14 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         action="store",
         default=None,
         choices=_IMAGE_NAME_PREFIX_OPTIONS,
-        help="Prefix image names with the test 'module' name, the test 'package' name, or the "
-        "'full' name, including the module, package, and all nested directories.",
+        help="Prefix image names with test 'package' name, 'module' name, 'package+module' names,"
+        "or the 'full' name, including the module, package, and all nested directories.",
     )
     parser.addini(
         "image_name_prefix",
-        "Prefix image names with the test 'module', 'package', or 'full' name. Command-line takes precedence over ini.",
         default=None,
+        help="Prefix image names with test 'package' name, 'module' name, 'package+module' names,"
+        "or the 'full' name, including the module, package, and all nested directories.",
     )
 
 

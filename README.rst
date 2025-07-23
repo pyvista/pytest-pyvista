@@ -130,6 +130,28 @@ These are the flags you can use when calling ``pytest`` in the command line:
   by default. Set this CLI flag to allow this globally, or use the test-specific flag
   by the same name below to configure this on a per-test basis.
 
+* Use ``--image_name_prefix`` to add a prefix to the test image names. By default, no
+  prefix is added and the images have the same name as the test without the ``'test'``
+  prefix. Setting this via command line will override any configuration, see below.
+  Choose one of:
+
+  * ``package`` to add the package name as a prefix. The current test module is assumed
+    to be nested inside of a ``tests`` directory, and the package name is assumed to be
+    the name of the ``tests`` parent directory.
+  * ``module`` to add the current test module's name as a prefix.
+  * ``package+module`` to add both the package name and test module name as prefixes.
+  * ``full``: including the package name, test module name, and all nested directories in
+    in between.
+
+  For example, if we have a test defined as ``def test_add_mesh(verify_image_cache):`` in
+  ``pyvista/tests/plotting/test_plotting.py``, then:
+
+  - by default, the image file is named ``add_mesh.png``
+  - with ``--image_name_prefix package``, the image file is named ``pyvista-add_mesh.png``
+  - with ``--image_name_prefix module``, the image file is named ``test_plotting-add_mesh.png``
+  - with ``--image_name_prefix package+module``, the image file is named ``pyvista-test_plotting-add_mesh.png``
+  - with ``--image_name_prefix full``, the image file is named ``pyvista-tests-plotting-test_plotting-add_mesh.png``
+
 Test specific flags
 -------------------
 These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
@@ -179,6 +201,13 @@ Similarly, configure the directory that will contain any failed test images:
 
    [tool.pytest.ini_options]
    failed_image_dir = "failed_images"
+
+Configure the image name prefix to include both the package and module names:
+
+.. code::
+
+   [tool.pytest.ini_options]
+   image_name_prefix = "package+module"
 
 Contributing
 ------------
