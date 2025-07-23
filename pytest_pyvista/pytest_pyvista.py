@@ -176,7 +176,7 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
-    image_name_prefix = None
+    image_name_prefix: str | None = None
     node_path = None
 
     def __init__(  # noqa: PLR0913
@@ -347,7 +347,7 @@ def _image_name_from_test_name(test_name: str, node_path: Path | None = None, im
     base = test_name.removeprefix("test_")
     name_parts = []
 
-    if image_name_prefix and node_path is not None:
+    if image_name_prefix not in {None, "none"} and node_path is not None:
         if image_name_prefix in {"package", "full", "package+module"}:
             # Find the `tests` dir and append its parent's name as the package
             for parent in node_path.parents:
@@ -461,7 +461,9 @@ def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, Non
     VerifyImageCache.allow_unused_generated = pytestconfig.getoption("allow_unused_generated")
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
-    VerifyImageCache.image_name_prefix = pytestconfig.getoption("image_name_prefix")
+
+    image_name_prefix: str | None = _get_option_from_config_or_ini(pytestconfig, "image_name_prefix")
+    VerifyImageCache.image_name_prefix = image_name_prefix
 
     cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir")
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir")
