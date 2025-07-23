@@ -140,7 +140,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
     the name of the ``tests`` parent directory.
   * ``module`` to add the current test module's name as a prefix.
   * ``package+module`` to add both the package name and test module name as prefixes.
-  * ``full``: including the package name, test module name, and all nested directories in
+  * ``full``: to include the package name, test module name, and all nested directories in
     in between.
 
   For example, if we have a test defined as ``def test_add_mesh(verify_image_cache):`` in
