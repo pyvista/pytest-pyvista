@@ -34,6 +34,25 @@ def test_arguments(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
+def test_image_name_prefix_warning(testdir) -> None:
+    name = "imcache.png"
+    make_cached_images(testdir.tmpdir, name=name)
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+    result = testdir.runpytest("--image_name_prefix", "package")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.stdout.fnmatch_lines("*UserWarning: Could not find 'tests' directory in path:*test_image_name_prefix_warning.py. Skipping package prefix.")
+
+
 def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red") -> Path:
     """Make image cache in `test_path/path`."""
     d = Path(test_path, path)
