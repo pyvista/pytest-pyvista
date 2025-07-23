@@ -11,6 +11,9 @@ from unittest import mock
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.pytest_pyvista import _image_name_from_test_name
+from pytest_pyvista.pytest_pyvista import _test_name_from_image_name
+
 pv.OFF_SCREEN = True
 
 
@@ -756,3 +759,32 @@ def test_disallow_unused_cache_name_mismatch(testdir, disallow_unused_cache) -> 
     else:
         result.stdout.fnmatch_lines("*[Pp]assed*")
         assert result.ret == pytest.ExitCode.OK
+
+
+PACKAGE_NAME = "pyvista"
+TESTS_NAME = "tests"
+SUBDIR_NAME = "plotting"
+MODULE_NAME = "test_plotting.py"
+MODULE_STEM = "test_plotting"
+TEST_NAME = "test_add_mesh"
+IMAGE_NAME = "add_mesh.png"
+
+
+@pytest.mark.parametrize(
+    ("image_name_prefix", "expected"),
+    [
+        (None, IMAGE_NAME),
+        ("module", f"{MODULE_STEM}-{IMAGE_NAME}"),
+        ("package", f"{PACKAGE_NAME}-{IMAGE_NAME}"),
+        ("package+module", f"{PACKAGE_NAME}-{MODULE_STEM}-{IMAGE_NAME}"),
+        ("full", f"{PACKAGE_NAME}-{TESTS_NAME}-{SUBDIR_NAME}-{MODULE_STEM}-{IMAGE_NAME}"),
+    ],
+)
+def test_image_name_from_test_name_round_trip(image_name_prefix, expected) -> None:
+    """Test converting test name to image name and vice versa."""
+    node_path = Path(PACKAGE_NAME, TESTS_NAME, SUBDIR_NAME, MODULE_NAME)
+    image_name = _image_name_from_test_name(TEST_NAME, node_path=node_path, image_name_prefix=image_name_prefix)
+    assert image_name == expected
+
+    test_name = _test_name_from_image_name(image_name)
+    assert test_name == TEST_NAME

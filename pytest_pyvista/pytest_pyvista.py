@@ -105,6 +105,14 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         action="store_true",
         help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
     )
+    group.addoption(
+        "--image_name_prefix",
+        action="store",
+        default=None,
+        choices=["module", "package", "full"],
+        help="Prefix image names with the test 'module' name, the test 'package' name, or the "
+        "'full' name, including the module, package, and all nested directories.",
+    )
 
 
 class VerifyImageCache:
@@ -165,6 +173,8 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
+    image_name_prefix = None
+    node_path = None
 
     def __init__(  # noqa: PLR0913
         self,
@@ -177,6 +187,7 @@ class VerifyImageCache:
         var_warning_value: float = 1000.0,
         generated_image_dir: str | None = None,
         failed_image_dir: str | None = None,
+        node_path: Path | None = None,
     ) -> None:
         """Initialize VerifyImageCache."""
         self.test_name = test_name
@@ -203,6 +214,8 @@ class VerifyImageCache:
 
         self.skip = False
         self.n_calls = 0
+
+        self.node_path = node_path
 
     @staticmethod
     def _is_skipped(*, skip: bool, windows_skip_image_cache: bool, macos_skip_image_cache: bool, ignore_image_cache: bool) -> bool:
@@ -236,9 +249,7 @@ class VerifyImageCache:
             allowed_error = self.error_value
             allowed_warning = self.warning_value
 
-        # cached image name. We remove the first 5 characters of the function name
-        # "test_" to get the name for the image.
-        image_name = _image_name_from_test_name(test_name)
+        image_name = _image_name_from_test_name(test_name, node_path=self.node_path, image_name_prefix=self.image_name_prefix)
         image_filename = Path(self.cache_dir, image_name)
         gen_image_filename = None if self.generated_image_dir is None else Path(self.generated_image_dir, image_name)
 
@@ -328,8 +339,34 @@ class VerifyImageCache:
             shutil.copy(cached_image, from_cache_dir / image_name)
 
 
-def _image_name_from_test_name(test_name: str) -> str:
-    return test_name[5:] + ".png"
+def _image_name_from_test_name(test_name: str, node_path: Path | None = None, image_name_prefix: str | None = None) -> str:
+    """Create image name from test name and prefix option."""
+    base = test_name.removeprefix("test_")
+    name_parts = []
+
+    if image_name_prefix and node_path is not None:
+        if image_name_prefix in {"package", "full", "package+module"}:
+            # Find the `tests` dir and append its parent's name as the package
+            for parent in node_path.parents:
+                if parent.name == "tests":
+                    package_root = parent.parent
+                    package_name = package_root.name
+
+                    if image_name_prefix in {"package", "package+module"}:
+                        name_parts.append(package_name)
+                    else:  # full
+                        # Include package + path from tests/ to the file
+                        relative_parts = node_path.relative_to(package_root.parent).with_suffix("").parts
+                        name_parts.extend(relative_parts)
+                    break
+            else:
+                msg = f"Could not find 'tests' directory in path: {node_path}. Skipping {image_name_prefix} prefix."
+                warnings.warn(msg, stacklevel=2)
+        if image_name_prefix in {"module", "package+module"}:
+            name_parts.append(node_path.stem)
+
+    name_parts.append(base)
+    return "-".join(name_parts) + ".png"
 
 
 def _test_name_from_image_name(image_name: str) -> str:
@@ -345,7 +382,7 @@ def _test_name_from_image_name(image_name: str) -> str:
                 pass  # Last part is not an integer; do nothing
         return "_".join(parts)
 
-    return "test_" + remove_suffix(image_name)
+    return "test_" + remove_suffix(image_name.split("-")[-1])
 
 
 @pytest.hookimpl
@@ -359,7 +396,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         # Exclude images from skipped tests where multiple images are generated
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
-            base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
+            base = _image_name_from_test_name(_test_name_from_image_name(image_name))
+            parts = image_name.split("-")[::-1]
+            parts.append(base)
+            base_image_name = "-".join(parts)
             if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
                 unused_skipped.remove(image_name)
 
@@ -417,12 +457,15 @@ def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, Non
     VerifyImageCache.allow_unused_generated = pytestconfig.getoption("allow_unused_generated")
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
+    VerifyImageCache.image_name_prefix = pytestconfig.getoption("image_name_prefix")
 
     cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir")
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir")
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir")
 
-    verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir)
+    verify_image_cache = VerifyImageCache(
+        request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir, node_path=request.node.path
+    )
     pyvista.global_theme.before_close_callback = verify_image_cache
 
     yield verify_image_cache
