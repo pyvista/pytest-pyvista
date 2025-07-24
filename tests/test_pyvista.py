@@ -712,7 +712,7 @@ def _unused_cache_lines(image_name: str) -> list[str]:
 def test_disallow_unused_cache(testdir, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
-    image_name = test_name + ".png"
+    image_name = "test_disallow_unused_cache-" + test_name + ".png"
     image_cache_dir = "image_cache_dir"
 
     make_cached_images(testdir.tmpdir, image_cache_dir, image_name)
@@ -734,7 +734,7 @@ def test_disallow_unused_cache(testdir, marker, skip_verify, color, stdout_lines
         """
     )
 
-    result = testdir.runpytest("--disallow_unused_cache")
+    result = testdir.runpytest("--disallow_unused_cache", "--image_name_prefix", "module")
 
     assert result.ret == exit_code
     result.stdout.fnmatch_lines(stdout_lines)

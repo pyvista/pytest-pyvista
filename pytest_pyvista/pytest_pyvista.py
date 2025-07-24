@@ -458,7 +458,12 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
 
         # Mark cached image as skipped if test was skipped during setup or execution
         if rep.when in ["call", "setup"] and rep.skipped:
-            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
+            # Get image name from test name and add to SKIPPED set
+            test_name = item.name
+            node_path = Path(str(item.fspath))
+            image_name_prefix = _get_option_from_config_or_ini(item.config, "image_name_prefix")
+            image_name = _image_name_from_test_name(test_name, node_path=node_path, image_name_prefix=image_name_prefix)
+            SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
 
         # Attach the report to the item so fixtures/finalizers can inspect it
         setattr(item, f"rep_{rep.when}", rep)
