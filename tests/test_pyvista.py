@@ -303,7 +303,7 @@ def test_generated_image_dir_commandline(testdir, image_name_prefix) -> None:
     module = "test_foo.py"
     tests = "tests"
 
-    image_name = _get_image_name_with_prefix("imcache.png", package=package, module=module, option=image_name_prefix)
+    image_name = _get_image_name_with_prefix("imcache[a-True].png", package=package, module=module, option=image_name_prefix)
     make_cached_images(testdir.tmpdir, name=image_name)
 
     dirpath = testdir.tmpdir.join(package, tests)
@@ -312,9 +312,12 @@ def test_generated_image_dir_commandline(testdir, image_name_prefix) -> None:
     test_file.write(
         textwrap.dedent(
             """
+        import pytest
         import pyvista as pv
         pv.OFF_SCREEN = True
-        def test_imcache(verify_image_cache):
+        @pytest.mark.parametrize('param_bool', [True])
+        @pytest.mark.parametrize('param_str', ['a'])
+        def test_imcache(verify_image_cache, param_bool, param_str):
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
