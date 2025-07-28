@@ -484,6 +484,27 @@ def test_reset_only_failed(testdir, reset_image_cache, add_missing_images) -> No
     assert not filecmp.cmp(filename, filename_original, shallow=False)
 
 
+def test_callback_called(testdir: pytest.Testdir) -> None:
+    """Test the callback of a Plotter.show is correctly called."""
+    make_cached_images(test_path=testdir.tmpdir)
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache, mocker):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show(before_close_callback=(m:=mocker.MagicMock()))
+
+            m.assert_called_once_with(plotter)
+        """
+    )
+
+    result = testdir.runpytest()
+    result.assert_outcomes(passed=1)
+
+
 def test_file_not_found(testdir) -> None:
     """Test RegressionFileNotFoundError is correctly raised."""
     testdir.makepyfile(
