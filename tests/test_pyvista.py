@@ -14,7 +14,7 @@ import pyvista as pv
 pv.OFF_SCREEN = True
 
 
-def test_arguments(testdir) -> None:
+def test_arguments(testdir: pytest.Testdir) -> None:
     """Test pytest arguments."""
     testdir.makepyfile(
         """
@@ -70,7 +70,7 @@ def file_has_changed(filepath: str, original_contents_path: str | None = None, o
     return content_changed or replaced
 
 
-def test_verify_image_cache(testdir) -> None:
+def test_verify_image_cache(testdir: pytest.Testdir) -> None:
     """Test regular usage of the `verify_image_cache` fixture."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -93,7 +93,7 @@ def test_verify_image_cache(testdir) -> None:
     assert not (testdir.tmpdir / "failed_image_dir").isdir()
 
 
-def test_verify_image_cache_fail_regression(testdir) -> None:
+def test_verify_image_cache_fail_regression(testdir: pytest.Testdir) -> None:
     """Test regression of the `verify_image_cache` fixture."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -118,7 +118,7 @@ def test_verify_image_cache_fail_regression(testdir) -> None:
 
 @pytest.mark.parametrize("use_generated_image_dir", [True, False])
 @pytest.mark.parametrize("allow_unused_generated", [True, False])
-def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_image_dir) -> None:
+def test_allow_unused_generated(testdir: pytest.Testdir, allow_unused_generated, use_generated_image_dir) -> None:
     """Test using `--allow_unused_generated` CLI option."""
     testdir.makepyfile(
         """
@@ -153,7 +153,7 @@ def test_allow_unused_generated(testdir, allow_unused_generated, use_generated_i
 
 @pytest.mark.parametrize("mock_platform_system", ["Darwin", None])
 @pytest.mark.parametrize("skip_type", ["skip", "ignore_image_cache", "macos_skip_image_cache"])
-def test_skip(testdir, skip_type: str, mock_platform_system: str) -> None:
+def test_skip(testdir: pytest.Testdir, skip_type: str, mock_platform_system: str) -> None:
     """Test all skip flags of `verify_image_cache`."""
     if mock_platform_system:
         # Simulate test for macOS
@@ -164,7 +164,7 @@ def test_skip(testdir, skip_type: str, mock_platform_system: str) -> None:
         _run_skip_test(testdir, skip_type)
 
 
-def _run_skip_test(testdir, skip_type: str) -> None:
+def _run_skip_test(testdir: pytest.Testdir, skip_type: str) -> None:
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
         f"""
@@ -186,7 +186,7 @@ def _run_skip_test(testdir, skip_type: str) -> None:
     result.stdout.fnmatch_lines(match)
 
 
-def test_image_cache_dir_commandline(testdir) -> None:
+def test_image_cache_dir_commandline(testdir: pytest.Testdir) -> None:
     """Test setting image_cache_dir via CLI option."""
     make_cached_images(testdir.tmpdir, "newdir")
     testdir.makepyfile(
@@ -205,7 +205,7 @@ def test_image_cache_dir_commandline(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_image_cache_dir_ini(testdir) -> None:
+def test_image_cache_dir_ini(testdir: pytest.Testdir) -> None:
     """Test setting image_cache_dir via config."""
     make_cached_images(testdir.tmpdir, "newdir")
     testdir.makepyfile(
@@ -229,7 +229,7 @@ def test_image_cache_dir_ini(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_high_variance_test(testdir) -> None:
+def test_high_variance_test(testdir: pytest.Testdir) -> None:
     """Test `skip` flag of `verify_image_cache`."""
     make_cached_images(testdir.tmpdir)
     make_cached_images(testdir.tmpdir, name="imcache_var.png")
@@ -271,7 +271,7 @@ def test_high_variance_test(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_generated_image_dir_commandline(testdir) -> None:
+def test_generated_image_dir_commandline(testdir: pytest.Testdir) -> None:
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -292,7 +292,7 @@ def test_generated_image_dir_commandline(testdir) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_generated_image_dir_ini(testdir) -> None:
+def test_generated_image_dir_ini(testdir: pytest.Testdir) -> None:
     """Test setting generated_image_dir via config."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -321,7 +321,7 @@ def test_generated_image_dir_ini(testdir) -> None:
 @pytest.mark.parametrize("reset_only_failed", [True, False])
 @pytest.mark.parametrize("force_regression_error", [True, False])
 @pytest.mark.parametrize("add_second_test", [True, False])
-def test_add_missing_images_commandline(tmp_path, testdir, reset_only_failed, force_regression_error, add_second_test) -> None:
+def test_add_missing_images_commandline(tmp_path, testdir: pytest.Testdir, reset_only_failed, force_regression_error, add_second_test) -> None:
     """Test setting add_missing_images via CLI option."""
     if force_regression_error:
         # Make a cached image (which has a red sphere) but specify a blue sphere in the test file
@@ -387,7 +387,7 @@ def test_add_missing_images_commandline(tmp_path, testdir, reset_only_failed, fo
 
 @pytest.mark.parametrize("allow_unused_generated", [True, False])
 @pytest.mark.parametrize("make_cache", [True, False])
-def test_reset_image_cache(testdir, allow_unused_generated, make_cache) -> None:
+def test_reset_image_cache(testdir: pytest.Testdir, allow_unused_generated, make_cache) -> None:
     """Test reset_image_cache  via CLI option."""
     dirname = "image_cache_dir"
     test_image_name = "imcache.png"
@@ -421,7 +421,7 @@ def test_reset_image_cache(testdir, allow_unused_generated, make_cache) -> None:
     result.stdout.fnmatch_lines("*[Pp]assed*")
 
 
-def test_cleanup(testdir) -> None:
+def test_cleanup(testdir: pytest.Testdir) -> None:
     """Test cleanup of the `verify_image_cache` fixture."""
     make_cached_images(testdir.tmpdir)
     testdir.makepyfile(
@@ -453,7 +453,7 @@ def test_cleanup(testdir) -> None:
 
 @pytest.mark.parametrize("add_missing_images", [True, False])
 @pytest.mark.parametrize("reset_image_cache", [True, False])
-def test_reset_only_failed(testdir, reset_image_cache, add_missing_images) -> None:
+def test_reset_only_failed(testdir: pytest.Testdir, reset_image_cache, add_missing_images) -> None:
     """Test usage of the `reset_only_failed` flag."""
     filename = make_cached_images(testdir.tmpdir)
     filename_original = make_cached_images(testdir.tmpdir, name="original.png")
@@ -484,7 +484,7 @@ def test_reset_only_failed(testdir, reset_image_cache, add_missing_images) -> No
     assert not filecmp.cmp(filename, filename_original, shallow=False)
 
 
-def test_file_not_found(testdir) -> None:
+def test_file_not_found(testdir: pytest.Testdir) -> None:
     """Test RegressionFileNotFoundError is correctly raised."""
     testdir.makepyfile(
         """
@@ -504,7 +504,7 @@ def test_file_not_found(testdir) -> None:
 
 
 @pytest.mark.parametrize(("outcome", "make_cache"), [("error", False), ("error", True), ("warning", True), ("success", True)])
-def test_failed_image_dir(testdir, outcome, make_cache) -> None:
+def test_failed_image_dir(testdir: pytest.Testdir, outcome, make_cache) -> None:
     """Test usage of the `failed_image_dir` option."""
     cached_image_name = "imcache.png"
     if make_cache:
@@ -568,7 +568,7 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
 @pytest.mark.parametrize("call_show", [True, False])
 @pytest.mark.parametrize("allow_useless_fixture_cli", [True, False])
 @pytest.mark.parametrize("allow_useless_fixture_attr", [True, False, None])
-def test_allow_useless_fixture(testdir, call_show, allow_useless_fixture_cli, allow_useless_fixture_attr, skip) -> None:
+def test_allow_useless_fixture(testdir: pytest.Testdir, call_show, allow_useless_fixture_cli, allow_useless_fixture_attr, skip) -> None:
     """Test error is raised if fixture is used but no images are generated."""
     if call_show:
         # Ensure there is a cached image to compare to the generated image
@@ -667,7 +667,7 @@ def _unused_cache_lines(image_name: str) -> list[str]:
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [*_unused_cache_lines("imcache.png")], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),
     ],
 )
-def test_disallow_unused_cache(testdir, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
+def test_disallow_unused_cache(testdir: pytest.Testdir, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
     image_name = test_name + ".png"
@@ -700,7 +700,7 @@ def test_disallow_unused_cache(testdir, marker, skip_verify, color, stdout_lines
 
 @pytest.mark.parametrize("skip", [True, False])
 @pytest.mark.parametrize("args", ["--disallow_unused_cache", []])
-def test_disallow_unused_cache_skip_multiple_images(testdir, skip, args) -> None:
+def test_disallow_unused_cache_skip_multiple_images(testdir: pytest.Testdir, skip, args) -> None:
     """Test skips when there are multiple calls to show() in a test."""
     make_cached_images(testdir.tmpdir, name="imcache.png")
     make_cached_images(testdir.tmpdir, name="imcache_1.png")
@@ -731,7 +731,7 @@ def test_disallow_unused_cache_skip_multiple_images(testdir, skip, args) -> None
 
 
 @pytest.mark.parametrize("disallow_unused_cache", [True, False])
-def test_disallow_unused_cache_name_mismatch(testdir, disallow_unused_cache) -> None:
+def test_disallow_unused_cache_name_mismatch(testdir: pytest.Testdir, disallow_unused_cache) -> None:
     """Test cached image doesn't match test name."""
     image_name = "im_cache.png"
     make_cached_images(testdir.tmpdir, name=image_name)
