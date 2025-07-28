@@ -756,3 +756,27 @@ def test_disallow_unused_cache_name_mismatch(testdir, disallow_unused_cache) -> 
     else:
         result.stdout.fnmatch_lines("*[Pp]assed*")
         assert result.ret == pytest.ExitCode.OK
+
+
+def test_cache_dir_relative(testdir: pytest.Testdir) -> None:
+    """Test cache dir is relative to test root."""
+    make_cached_images(testdir.tmpdir, path=(new_dir := "new_dir"))
+
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+
+        pv.OFF_SCREEN = True
+        import contextlib
+        from pathlib import Path
+
+        def test_imcache(verify_image_cache, tmp_path: Path):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            with contextlib.chdir(tmp_path):
+                plotter.show()
+        """
+    )
+    result = testdir.runpytest("--image_cache_dir", new_dir)
+    result.assert_outcomes(passed=1)
