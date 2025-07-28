@@ -26,7 +26,7 @@ def test_arguments(testdir: pytest.Testdir) -> None:
         """
     )
     result = testdir.runpytest("--reset_image_cache", "--ignore_image_cache", "--disallow_unused_cache")
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red") -> Path:
@@ -86,7 +86,7 @@ def test_verify_image_cache(testdir: pytest.Testdir) -> None:
     )
 
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
     assert (testdir.tmpdir / "image_cache_dir").isdir()
     assert not (testdir.tmpdir / "generated_image_dir").isdir()
@@ -110,7 +110,7 @@ def test_verify_image_cache_fail_regression(testdir: pytest.Testdir) -> None:
     )
 
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*[Ff]ailed*")
+    result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
     result.stdout.fnmatch_lines("*pytest_pyvista.pytest_pyvista.RegressionError:*")
     result.stdout.fnmatch_lines("*Exceeded image regression error of*")
@@ -202,7 +202,7 @@ def test_image_cache_dir_commandline(testdir: pytest.Testdir) -> None:
     )
 
     result = testdir.runpytest("--image_cache_dir", "newdir")
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 def test_image_cache_dir_ini(testdir: pytest.Testdir) -> None:
@@ -226,7 +226,7 @@ def test_image_cache_dir_ini(testdir: pytest.Testdir) -> None:
         """
     )
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 def test_high_variance_test(testdir: pytest.Testdir) -> None:
@@ -264,11 +264,11 @@ def test_high_variance_test(testdir: pytest.Testdir) -> None:
         """
     )
     result = testdir.runpytest("test_file1.py")
-    result.stdout.fnmatch_lines("*[Ff]ailed*")
+    result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
 
     result = testdir.runpytest("test_file2.py")
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 def test_generated_image_dir_commandline(testdir: pytest.Testdir) -> None:
@@ -289,7 +289,7 @@ def test_generated_image_dir_commandline(testdir: pytest.Testdir) -> None:
     result = testdir.runpytest("--generated_image_dir", "gen_dir")
     assert (testdir.tmpdir / "gen_dir").isdir()
     assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 def test_generated_image_dir_ini(testdir: pytest.Testdir) -> None:
@@ -315,7 +315,7 @@ def test_generated_image_dir_ini(testdir: pytest.Testdir) -> None:
     result = testdir.runpytest()
     assert (testdir.tmpdir / "gen_dir").isdir()
     assert (testdir.tmpdir / "gen_dir" / "imcache.png").isfile()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 @pytest.mark.parametrize("reset_only_failed", [True, False])
@@ -372,7 +372,7 @@ def test_add_missing_images_commandline(tmp_path, testdir: pytest.Testdir, reset
     else:
         expected_file = testdir.tmpdir / "image_cache_dir" / "imcache.png"
         assert expected_file.isfile()
-        result.stdout.fnmatch_lines("*[Pp]assed*")
+        result.assert_outcomes(passed=2)
         assert result.ret == pytest.ExitCode.OK
 
         # Make sure the final image in the cache matches the generated test image
@@ -418,7 +418,7 @@ def test_reset_image_cache(testdir: pytest.Testdir, allow_unused_generated, make
     # file was created or overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
     # should pass even if image doesn't match
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 def test_cleanup(testdir: pytest.Testdir) -> None:
@@ -448,7 +448,7 @@ def test_cleanup(testdir: pytest.Testdir) -> None:
     )
 
     result = testdir.runpytest()
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
 
 
 @pytest.mark.parametrize("add_missing_images", [True, False])
@@ -478,7 +478,7 @@ def test_reset_only_failed(testdir: pytest.Testdir, reset_image_cache, add_missi
         args.append("--reset_image_cache")
 
     result = testdir.runpytest(*args)
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1)
     result.stdout.fnmatch_lines("*This image will be reset in the cache.")
     # file was overwritten
     assert not filecmp.cmp(filename, filename_original, shallow=False)
@@ -597,7 +597,7 @@ def test_allow_useless_fixture(testdir: pytest.Testdir, call_show, allow_useless
     expect_failure = (not call_show and not allow_useless_fixture) and not skip
     expected_code = pytest.ExitCode.TESTS_FAILED if expect_failure else pytest.ExitCode.OK
     assert result.ret == expected_code
-    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.assert_outcomes(passed=1, errors=1 if expect_failure else 0)
     if expect_failure:
         result.stdout.fnmatch_lines(
             [
@@ -754,5 +754,5 @@ def test_disallow_unused_cache_name_mismatch(testdir: pytest.Testdir, disallow_u
         result.stdout.fnmatch_lines([*_unused_cache_lines(image_name)])
         assert result.ret == pytest.ExitCode.TESTS_FAILED
     else:
-        result.stdout.fnmatch_lines("*[Pp]assed*")
+        result.assert_outcomes(passed=1)
         assert result.ret == pytest.ExitCode.OK
