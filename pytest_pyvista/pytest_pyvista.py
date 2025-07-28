@@ -409,7 +409,7 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
 
 
 @pytest.fixture
-def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, None, None]:  # noqa: ANN001
+def verify_image_cache(request: pytest.FixtureRequest, pytestconfig: pytest.Config) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
@@ -418,11 +418,16 @@ def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, Non
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
 
-    cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir")
+    cache_dir = Path(_get_option_from_config_or_ini(pytestconfig, "image_cache_dir"))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir")
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir")
 
-    verify_image_cache = VerifyImageCache(request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir)
+    verify_image_cache = VerifyImageCache(
+        request.node.name,
+        pytestconfig.rootpath / cache_dir,
+        generated_image_dir=gen_dir,
+        failed_image_dir=failed_dir,
+    )
     pyvista.global_theme.before_close_callback = verify_image_cache
 
     yield verify_image_cache
