@@ -16,7 +16,7 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Topic :: Software Development :: Testing",
 ]
-dependencies = ["pytest>=3.5.0"]
+dependencies = ["pytest>=6.2.0"]
 dynamic = ["description", "version"]
 license = "MIT"
 license-files = ["LICENSE"]
@@ -40,7 +40,7 @@ tests = [
   "coverage==7.9.1",
   "numpy<2.3",
   "pytest-cov==6.2.1",
-  "pytest>=3.5.0",
+  "pytest>=6.2.0",
 ]
 
 [project.entry-points."pytest11"]
