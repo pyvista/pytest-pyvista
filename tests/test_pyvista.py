@@ -70,20 +70,30 @@ def file_has_changed(filepath: str, original_contents_path: str | None = None, o
     return content_changed or replaced
 
 
-def test_verify_image_cache(testdir) -> None:
+@pytest.mark.parametrize("plot_property", [True, False])
+def test_verify_image_cache(testdir, plot_property: bool) -> None:  # noqa: FBT001
     """Test regular usage of the `verify_image_cache` fixture."""
     make_cached_images(testdir.tmpdir)
-    testdir.makepyfile(
-        """
-        import pyvista as pv
-        pv.OFF_SCREEN = True
-        def test_imcache(verify_image_cache):
-            sphere = pv.Sphere()
-            plotter = pv.Plotter()
-            plotter.add_mesh(sphere, color="red")
-            plotter.show()
-        """
-    )
+
+    if not plot_property:
+        pyfile = """
+            import pyvista as pv
+            pv.OFF_SCREEN = True
+            def test_imcache(verify_image_cache):
+                sphere = pv.Sphere()
+                plotter = pv.Plotter()
+                plotter.add_mesh(sphere, color="red")
+                plotter.show()
+            """
+    else:
+        pyfile = """
+            import pyvista as pv
+            pv.OFF_SCREEN = True
+            def test_imcache(verify_image_cache):
+                pv.Sphere().plot(color="red")
+            """
+
+    testdir.makepyfile(pyfile)
 
     result = testdir.runpytest()
     result.stdout.fnmatch_lines("*[Pp]assed*")

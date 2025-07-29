@@ -438,7 +438,12 @@ def verify_image_cache(request, pytestconfig, monkeypatch: pytest.MonkeyPatch) -
     # Wrapping call to `Plotter.show` to inject the image cache callback
     def func_show(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
         key = "before_close_callback"
-        kwargs[key] = _ChainedCallbacks(kwargs.get(key, lambda *a: None), verify_image_cache)  # noqa: ARG005
+        user_callback = kwargs.get(key, lambda *a: ...)  # noqa: ARG005
+
+        if user_callback is None:  # special case encountered when using the `plot` property of pyvista objects
+            user_callback = lambda *a: ...  # noqa: ARG005, E731
+
+        kwargs[key] = _ChainedCallbacks(user_callback, verify_image_cache)
 
         old_show(*args, **kwargs)
 
