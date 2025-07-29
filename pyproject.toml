@@ -22,7 +22,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 name = "pytest_pyvista"
 python_requires = ">=3.9"
-readme = "README.rst"
+readme = "README.md"
 
 [project.urls]
 Home = "https://github.com/pyvista/pytest-pyvista"
