@@ -532,7 +532,7 @@ def test_failed_image_dir(testdir, outcome, make_cache) -> None:
     if outcome == "success":
         assert not failed_image_dir_path.isdir()
     else:
-        result.stdout.fnmatch_lines("*UserWarning: pyvista test failed image dir: failed_image_dir does not yet exist.  Creating dir.")
+        result.stdout.fnmatch_lines("*UserWarning: pyvista test failed image dir: *failed_image_dir does not yet exist.  Creating dir.")
         if make_cache:
             result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
         else:
@@ -758,25 +758,64 @@ def test_disallow_unused_cache_name_mismatch(testdir, disallow_unused_cache) -> 
         assert result.ret == pytest.ExitCode.OK
 
 
-def test_cache_dir_relative(testdir: pytest.Testdir) -> None:
-    """Test cache dir is relative to test root."""
+def test_cache_generated_dir_relative(testdir: pytest.Testdir) -> None:
+    """
+    Test that directories (cache and generated) are relative to test root
+    even when changing the working directory when calling Plotter.show().
+    """  # noqa: D205
     make_cached_images(testdir.tmpdir, path=(new_dir := "new_dir"))
 
     testdir.makepyfile(
         """
         import pyvista as pv
+        import pytest
 
         pv.OFF_SCREEN = True
         import contextlib
         from pathlib import Path
 
-        def test_imcache(verify_image_cache, tmp_path: Path):
+        def test_imcache(verify_image_cache, tmp_path: Path, pytestconfig: pytest.Config):
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
             with contextlib.chdir(tmp_path):
                 plotter.show()
+
+            assert (pytestconfig.rootpath / "generated/imcache.png").exists()
         """
     )
-    result = testdir.runpytest("--image_cache_dir", new_dir)
+    args = ["--image_cache_dir", new_dir, "--generated_image_dir", "generated"]
+    result = testdir.runpytest(*args)
+    result.assert_outcomes(passed=1)
+
+
+def test_failed_dir_relative(testdir: pytest.Testdir) -> None:
+    """
+    Test that failed directory is relative to test root
+    even when changing the working directory when calling Plotter.show().
+    """  # noqa: D205
+    make_cached_images(testdir.tmpdir, path=(new_dir := "new_dir"))
+
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        import pytest
+        from pytest_pyvista.pytest_pyvista import RegressionError
+
+        pv.OFF_SCREEN = True
+        import contextlib
+        from pathlib import Path
+
+        def test_imcache(verify_image_cache, tmp_path: Path, pytestconfig: pytest.Config):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="blue")
+            with contextlib.chdir(tmp_path), contextlib.suppress(RegressionError):
+                plotter.show()
+
+            assert (pytestconfig.rootpath / "failed/errors/from_test/imcache.png").exists()
+        """
+    )
+    args = ["--image_cache_dir", new_dir, "--failed_image_dir", "failed"]
+    result = testdir.runpytest(*args)
     result.assert_outcomes(passed=1)
