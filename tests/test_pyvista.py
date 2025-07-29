@@ -6,6 +6,7 @@ from enum import Enum
 import filecmp
 from pathlib import Path
 import platform
+import sys
 from unittest import mock
 
 import pytest
@@ -758,6 +759,7 @@ def test_disallow_unused_cache_name_mismatch(testdir, disallow_unused_cache) -> 
         assert result.ret == pytest.ExitCode.OK
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11))
 def test_cache_generated_dir_relative(testdir: pytest.Testdir) -> None:
     """
     Test that directories (cache and generated) are relative to test root
@@ -789,6 +791,7 @@ def test_cache_generated_dir_relative(testdir: pytest.Testdir) -> None:
     result.assert_outcomes(passed=1)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11))
 def test_failed_dir_relative(testdir: pytest.Testdir) -> None:
     """
     Test that failed directory is relative to test root
