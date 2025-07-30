@@ -445,7 +445,7 @@ def verify_image_cache(request, pytestconfig, monkeypatch: pytest.MonkeyPatch) -
 
         kwargs[key] = _ChainedCallbacks(user_callback, verify_image_cache)
 
-        old_show(*args, **kwargs)
+        return old_show(*args, **kwargs)
 
     old_show = Plotter.show
     monkeypatch.setattr(Plotter, "show", func_show)
