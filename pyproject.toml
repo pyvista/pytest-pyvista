@@ -41,7 +41,7 @@ tests = [
   "numpy<2.3",
   "pytest-cov==6.2.1",
   "pytest>=3.5.0",
-  "pytest_mock",
+  "pytest_mock<3.15",
 ]
 
 [project.entry-points."pytest11"]
