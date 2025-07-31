@@ -59,7 +59,9 @@ Once installed, you only need to use the command `pl.show()` in your test. The
 plugin will automatically manage the cache generation if it does not exist, and
 the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading
 PyVista, so the `pl.show()` doesn't pop up any window while testing.  By default,
-the verify_image_cache fixture should be used for each test for image comparison::
+the verify_image_cache fixture should be used for each test for image comparison:
+
+.. code-block:: python
 
     import pyvista as pv
     pv.OFF_SCREEN = True
