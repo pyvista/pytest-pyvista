@@ -48,11 +48,13 @@ Installation
 You can install "pytest-pyvista" via `pip`_ from `PyPI`_
 
 .. code:: bash 
+
   pip install pytest-pyvista
 
 Alternatively, you can also install via `conda`_ or `mamba`_ from `conda-forge`_
 
 .. code:: bash
+
   mamba install -c conda-forge pytest-pyvista
 
 Usage
