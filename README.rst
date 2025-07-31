@@ -64,7 +64,10 @@ the verify_image_cache fixture should be used for each test for image comparison
 .. code-block:: python
 
     import pyvista as pv
+
     pv.OFF_SCREEN = True
+
+
     def test_succeeds(verify_image_cache):
         pl = pyvista.Plotter()
         pl.add_mesh(pyvista.Sphere(), show_edges=True)
@@ -72,7 +75,9 @@ the verify_image_cache fixture should be used for each test for image comparison
 
 
 If most tests utilize this functionality, possibly restricted to a module,
-a wrapped version could be used::
+a wrapped version could be used
+
+.. code-block:: python
 
     @pytest.fixture(autouse=True)
     def wrapped_verify_image_cache(verify_image_cache):
@@ -80,11 +85,15 @@ a wrapped version could be used::
 
 
 If you need to use any flag inside the tests, you can modify the
-`verify_image_cache` object in the test::
+`verify_image_cache` object in the test
 
+.. code-block:: python
 
     import pyvista as pv
+
     pv.OFF_SCREEN = True
+
+
     def test_succeeds(verify_image_cache):
         verify_image_cache.windows_skip_image_cache = True
         pl = pyvista.Plotter()
@@ -163,24 +172,24 @@ section, consider configuring your test directory location to
 avoid passing command line arguments when calling ``pytest``, for example in
 ``pyproject.toml``:
 
-.. code::
+.. code-block:: toml
 
-   [tool.pytest.ini_options]
-   image_cache_dir = "tests/plotting/image_cache"
+    [tool.pytest.ini_options]
+    image_cache_dir = "tests/plotting/image_cache"
 
 Additionally, to configure the directory that will contain the generated test images:
 
-.. code::
+.. code-block:: toml
 
-   [tool.pytest.ini_options]
-   generated_image_dir = "generated_images"
+    [tool.pytest.ini_options]
+    generated_image_dir = "generated_images"
 
 Similarly, configure the directory that will contain any failed test images:
 
-.. code::
+.. code-block:: toml
 
-   [tool.pytest.ini_options]
-   failed_image_dir = "failed_images"
+    [tool.pytest.ini_options]
+    failed_image_dir = "failed_images"
 
 Contributing
 ------------
