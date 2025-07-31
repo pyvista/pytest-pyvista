@@ -117,16 +117,18 @@ These are the flags you can use when calling ``pytest`` in the command line:
   temporarily ignore regression testing, e.g. on a particular CI action.
   
 * ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
-  directory.  This will override any configuration, see below.
+  directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  This will override any configuration, see below.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
-  failures. This will override any configuration, see below.
+  failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  This will override any configuration, see below.
 
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 
-* ``--image_cache_dir <DIR>`` sets the image cache directory.  This will override any
-  configuration, see below.
+* ``--image_cache_dir <DIR>`` sets the image cache directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  This will override any configuration, see below.
 
 * ``--reset_only_failed`` reset the image cache of the failed tests only.
 
@@ -194,6 +196,8 @@ Similarly, configure the directory that will contain any failed test images:
 
     [tool.pytest.ini_options]
     failed_image_dir = "failed_images"
+
+Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
 
 Contributing
 ------------
