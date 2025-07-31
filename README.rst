@@ -45,13 +45,15 @@ pyvista version >=0.37.0 and vtk version >=9.0.0 required.
 
 Installation
 ------------
-You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
+You can install "pytest-pyvista" via `pip`_ from `PyPI`_
 
-    $ pip install pytest-pyvista
+.. code:: bash 
+  pip install pytest-pyvista
 
-Alternatively, you can also install via `conda`_ or `mamba`_ from `conda-forge`_::
+Alternatively, you can also install via `conda`_ or `mamba`_ from `conda-forge`_
 
-    $ mamba install -c conda-forge pytest-pyvista
+.. code:: bash
+  mamba install -c conda-forge pytest-pyvista
 
 Usage
 -----
