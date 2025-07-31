@@ -140,7 +140,7 @@ class VerifyImageCache:
         Name of test to save.  It is used to define the name of image cache
         file.
 
-    cache_dir : str
+    cache_dir : Path
         Directory for image cache comparisons.
 
     error_value : float, default: 500
@@ -157,8 +157,12 @@ class VerifyImageCache:
     var_warning_value : float, default 1000
         Same as warning_value but for high variance tests.
 
-    generated_image_dir : str, optional
+    generated_image_dir : Path, optional
         Directory to save generated images.  If not specified, no generated
+        images are saved.
+
+    failed_image_dir : Path, optional
+        Directory to save failed images.  If not specified, no generated
         images are saved.
 
     Examples
@@ -188,34 +192,34 @@ class VerifyImageCache:
     def __init__(  # noqa: PLR0913
         self,
         test_name: str,
-        cache_dir: str,
+        cache_dir: Path,
         *,
         error_value: float = 500.0,
         warning_value: float = 200.0,
         var_error_value: float = 1000.0,
         var_warning_value: float = 1000.0,
-        generated_image_dir: str | None = None,
-        failed_image_dir: str | None = None,
+        generated_image_dir: Path | None = None,
+        failed_image_dir: Path | None = None,
         node_path: Path | None = None,
     ) -> None:
         """Initialize VerifyImageCache."""
         self.test_name = test_name
 
+        # handle paths
+        if not cache_dir.is_dir():
+            _ensure_dir_exists(cache_dir, msg_name="cache image dir")
         self.cache_dir = cache_dir
 
-        if not Path(self.cache_dir).is_dir():
-            warnings.warn(f"pyvista test cache image dir: {self.cache_dir} does not yet exist'  Creating empty cache.", stacklevel=2)
-            Path(self.cache_dir).mkdir()
+        if generated_image_dir is not None:
+            _ensure_dir_exists(generated_image_dir, msg_name="generated image dir")
+        self.generated_image_dir = generated_image_dir
+
+        self.failed_image_dir = failed_image_dir
 
         self.error_value = error_value
         self.warning_value = warning_value
         self.var_error_value = var_error_value
         self.var_warning_value = var_warning_value
-
-        self.generated_image_dir = generated_image_dir
-        if self.generated_image_dir is not None:
-            _ensure_dir_exists(self.generated_image_dir, msg_name="generated image dir")
-        self.failed_image_dir = failed_image_dir
 
         self.high_variance_test = False
         self.windows_skip_image_cache = False
@@ -435,18 +439,22 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
     SKIPPED_CACHED_IMAGE_NAMES.clear()
 
 
-def _ensure_dir_exists(dirpath: str, msg_name: str) -> None:
+def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
     if not Path(dirpath).is_dir():
         msg = f"pyvista test {msg_name}: {dirpath} does not yet exist.  Creating dir."
         warnings.warn(msg, stacklevel=2)
         Path(dirpath).mkdir(parents=True)
 
 
-def _get_option_from_config_or_ini(pytestconfig, option: str) -> str:  # noqa: ANN001
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False):  # noqa: ANN202
     value = pytestconfig.getoption(option)
     if value is None:
         value = pytestconfig.getini(option)
-    return value
+
+    if value is None:
+        return value
+
+    return pytestconfig.rootpath / value if is_dir else value
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -470,7 +478,7 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
 
 
 @pytest.fixture
-def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, None, None]:  # noqa: ANN001
+def verify_image_cache(request: pytest.FixtureRequest, pytestconfig: pytest.Config) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
@@ -482,12 +490,12 @@ def verify_image_cache(request, pytestconfig) -> Generator[VerifyImageCache, Non
     image_name_prefix: str | None = _get_option_from_config_or_ini(pytestconfig, "image_name_prefix")
     VerifyImageCache.image_name_prefix = image_name_prefix
 
-    cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir")
-    gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir")
-    failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir")
+    cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True)
+    gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
+    failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir", is_dir=True)
 
     verify_image_cache = VerifyImageCache(
-        request.node.name, cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir, node_path=request.node.path
+        test_name=request.node.name, cache_dir=cache_dir, generated_image_dir=gen_dir, failed_image_dir=failed_dir, node_path=request.node.path
     )
     pyvista.global_theme.before_close_callback = verify_image_cache
 
