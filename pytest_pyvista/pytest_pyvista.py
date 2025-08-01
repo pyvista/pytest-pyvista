@@ -7,17 +7,17 @@ from pathlib import Path
 import platform
 import shutil
 from typing import TYPE_CHECKING
+from typing import Callable
 from typing import Literal
 from typing import cast
 import warnings
 
 import pytest
 import pyvista
+from pyvista import Plotter
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
-
-    from pyvista import Plotter
 
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
@@ -416,8 +416,23 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
         setattr(item, f"rep_{rep.when}", rep)
 
 
+class _ChainedCallbacks:
+    def __init__(self, *funcs: Callable[[Plotter], None]) -> None:
+        """Chainable callbacks for pyvista.Plotter.show method."""
+        self.funcs = funcs
+
+    def __call__(self, plotter: Plotter) -> None:
+        """Call all input functions in chain for the given Plotter instance."""
+        for f in self.funcs:
+            f(plotter)
+
+
 @pytest.fixture
-def verify_image_cache(request: pytest.FixtureRequest, pytestconfig: pytest.Config) -> Generator[VerifyImageCache, None, None]:
+def verify_image_cache(
+    request: pytest.FixtureRequest,
+    pytestconfig: pytest.Config,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
@@ -436,11 +451,23 @@ def verify_image_cache(request: pytest.FixtureRequest, pytestconfig: pytest.Conf
         generated_image_dir=gen_dir,
         failed_image_dir=failed_dir,
     )
-    pyvista.global_theme.before_close_callback = verify_image_cache
+
+    # Wrapping call to `Plotter.show` to inject the image cache callback
+    def func_show(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        key = "before_close_callback"
+        user_callback = kwargs.get(key, lambda *a: ...)  # noqa: ARG005
+
+        if user_callback is None:  # special case encountered when using the `plot` property of pyvista objects
+            user_callback = lambda *a: ...  # noqa: ARG005, E731
+
+        kwargs[key] = _ChainedCallbacks(user_callback, verify_image_cache)
+
+        return old_show(*args, **kwargs)
+
+    old_show = Plotter.show
+    monkeypatch.setattr(Plotter, "show", func_show)
 
     yield verify_image_cache
-
-    pyvista.global_theme.before_close_callback = None
 
     # Check if the fixture was not used
     # Value from fixture takes precedence over value set by CLI
