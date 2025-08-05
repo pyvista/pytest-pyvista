@@ -7,10 +7,15 @@ import filecmp
 from pathlib import Path
 import platform
 import sys
+import textwrap
 from unittest import mock
 
 import pytest
 import pyvista as pv
+
+from pytest_pyvista.pytest_pyvista import _IMAGE_NAME_PREFIX_OPTIONS
+from pytest_pyvista.pytest_pyvista import _image_name_from_test_name
+from pytest_pyvista.pytest_pyvista import _test_name_from_image_name
 
 pv.OFF_SCREEN = True
 
@@ -30,6 +35,26 @@ def test_arguments(pytester: pytest.Pytester) -> None:
     )
     result = pytester.runpytest("--reset_image_cache", "--ignore_image_cache", "--disallow_unused_cache")
     result.assert_outcomes(passed=1)
+
+
+def test_image_name_prefix_warning(testdir) -> None:
+    """Test that a warning is emitted when there is no 'tests' parent dir."""
+    name = "imcache.png"
+    make_cached_images(testdir.tmpdir, name=name)
+    testdir.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+    result = testdir.runpytest("--image_name_prefix", "package")
+    result.stdout.fnmatch_lines("*[Pp]assed*")
+    result.stdout.fnmatch_lines("*UserWarning: Could not find 'tests' directory in path:*test_image_name_prefix_warning.py. Skipping package prefix.")
 
 
 def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red") -> Path:
@@ -284,24 +309,43 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-def test_generated_image_dir_commandline(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("image_name_prefix", _IMAGE_NAME_PREFIX_OPTIONS)
+def test_generated_image_dir_commandline(pytester: pytest.Pytester, image_name_prefix) -> None:
     """Test setting generated_image_dir via CLI option."""
-    make_cached_images(pytester.path)
-    pytester.makepyfile(
-        """
+    package = "package"
+    module = "test_foo.py"
+    tests = "tests"
+
+    image_name = _get_image_name_with_prefix("imcache[a-True].png", package=package, module=module, option=image_name_prefix)
+    make_cached_images(pytester.path, name=image_name)
+
+    dirpath = pytester.path / package / tests
+    dirpath.mkdir(parents=True)
+    test_file = dirpath / module
+    test_file.write_text(
+        textwrap.dedent(
+            """
+        import pytest
         import pyvista as pv
         pv.OFF_SCREEN = True
-        def test_imcache(verify_image_cache):
+        @pytest.mark.parametrize('param_bool', [True])
+        @pytest.mark.parametrize('param_str', ['a'])
+        def test_imcache(verify_image_cache, param_bool, param_str):
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
             plotter.show()
         """
+        )
     )
+    args = ["--generated_image_dir", "gen_dir"]
+    if image_name_prefix is not None:
+        args.extend(["--image_name_prefix", image_name_prefix])
 
-    result = pytester.runpytest("--generated_image_dir", "gen_dir")
-    assert (pytester.path / "gen_dir").is_dir()
-    assert (pytester.path / "gen_dir" / "imcache.png").is_file()
+    result = pytester.runpytest(pytester.path / package / tests, *args)
+    gen_dir = pytester.path / "gen_dir"
+    assert gen_dir.is_dir()
+    assert (gen_dir / image_name).is_file()
     result.assert_outcomes(passed=1)
 
 
@@ -704,7 +748,7 @@ def _unused_cache_lines(image_name: str) -> list[str]:
 def test_disallow_unused_cache(pytester: pytest.Pytester, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
-    image_name = test_name + ".png"
+    image_name = "test_disallow_unused_cache-" + test_name + ".png"
     image_cache_dir = "image_cache_dir"
 
     make_cached_images(pytester.path, image_cache_dir, image_name)
@@ -726,7 +770,7 @@ def test_disallow_unused_cache(pytester: pytest.Pytester, marker, skip_verify, c
         """
     )
 
-    result = pytester.runpytest("--disallow_unused_cache")
+    result = pytester.runpytest("--disallow_unused_cache", "--image_name_prefix", "module")
 
     assert result.ret == exit_code
     result.stdout.fnmatch_lines(stdout_lines)
@@ -855,3 +899,49 @@ def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
     args = ["--image_cache_dir", new_dir, "--failed_image_dir", "failed"]
     result = pytester.runpytest(*args)
     result.assert_outcomes(passed=1)
+
+
+PACKAGE_NAME = "pyvista"
+TESTS_NAME = "tests"
+SUBDIR_NAME = "plotting"
+MODULE_NAME = "test_plotting.py"
+MODULE_STEM = "test_plotting"
+TEST_NAME = "test_add_mesh[None-True-False]"
+IMAGE_NAME = "add_mesh[None-True-False].png"
+
+
+def _get_image_name_with_prefix(image_name: str, package: str, module: str, option: str | None) -> str:
+    if option in {None, "none"}:
+        return image_name
+    module_stem = Path(module).stem
+    if option == "module":
+        return f"{module_stem}-{image_name}"
+    if option == "package":
+        return f"{package}-{image_name}"
+    if option == "package+module":
+        return f"{package}-{module_stem}-{image_name}"
+    if option == "full":
+        return f"{package}-{TESTS_NAME}-{module_stem}-{image_name}"
+
+    msg = f"invalid option: {option}"
+    raise RuntimeError(msg)
+
+
+@pytest.mark.parametrize(
+    ("image_name_prefix", "expected"),
+    [
+        (None, IMAGE_NAME),
+        ("module", f"{MODULE_STEM}-{IMAGE_NAME}"),
+        ("package", f"{PACKAGE_NAME}-{IMAGE_NAME}"),
+        ("package+module", f"{PACKAGE_NAME}-{MODULE_STEM}-{IMAGE_NAME}"),
+        ("full", f"{PACKAGE_NAME}-{TESTS_NAME}-{SUBDIR_NAME}-{MODULE_STEM}-{IMAGE_NAME}"),
+    ],
+)
+def test_image_name_from_test_name_round_trip(image_name_prefix, expected) -> None:
+    """Test converting test name to image name and vice versa."""
+    node_path = Path(PACKAGE_NAME, TESTS_NAME, SUBDIR_NAME, MODULE_NAME)
+    image_name = _image_name_from_test_name(TEST_NAME, node_path=node_path, image_name_prefix=image_name_prefix)
+    assert image_name == expected
+
+    test_name = _test_name_from_image_name(image_name)
+    assert test_name == TEST_NAME
