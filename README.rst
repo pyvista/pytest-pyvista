@@ -45,13 +45,17 @@ pyvista version >=0.37.0 and vtk version >=9.0.0 required.
 
 Installation
 ------------
-You can install "pytest-pyvista" via `pip`_ from `PyPI`_::
+You can install "pytest-pyvista" via `pip`_ from `PyPI`_
 
-    $ pip install pytest-pyvista
+.. code-block:: bash 
 
-Alternatively, you can also install via `conda`_ or `mamba`_ from `conda-forge`_::
+    pip install pytest-pyvista
 
-    $ mamba install -c conda-forge pytest-pyvista
+Alternatively, you can also install via `conda`_ or `mamba`_ from `conda-forge`_
+
+.. code-block:: bash
+
+    mamba install -c conda-forge pytest-pyvista
 
 Usage
 -----
@@ -59,10 +63,15 @@ Once installed, you only need to use the command `pl.show()` in your test. The
 plugin will automatically manage the cache generation if it does not exist, and
 the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading
 PyVista, so the `pl.show()` doesn't pop up any window while testing.  By default,
-the verify_image_cache fixture should be used for each test for image comparison::
+the verify_image_cache fixture should be used for each test for image comparison:
+
+.. code-block:: python
 
     import pyvista as pv
+
     pv.OFF_SCREEN = True
+
+
     def test_succeeds(verify_image_cache):
         pl = pyvista.Plotter()
         pl.add_mesh(pyvista.Sphere(), show_edges=True)
@@ -70,7 +79,9 @@ the verify_image_cache fixture should be used for each test for image comparison
 
 
 If most tests utilize this functionality, possibly restricted to a module,
-a wrapped version could be used::
+a wrapped version could be used
+
+.. code-block:: python
 
     @pytest.fixture(autouse=True)
     def wrapped_verify_image_cache(verify_image_cache):
@@ -78,11 +89,15 @@ a wrapped version could be used::
 
 
 If you need to use any flag inside the tests, you can modify the
-`verify_image_cache` object in the test::
+`verify_image_cache` object in the test
 
+.. code-block:: python
 
     import pyvista as pv
+
     pv.OFF_SCREEN = True
+
+
     def test_succeeds(verify_image_cache):
         verify_image_cache.windows_skip_image_cache = True
         pl = pyvista.Plotter()
@@ -185,24 +200,24 @@ section, consider configuring your test directory location to
 avoid passing command line arguments when calling ``pytest``, for example in
 ``pyproject.toml``:
 
-.. code::
+.. code-block:: toml
 
-   [tool.pytest.ini_options]
-   image_cache_dir = "tests/plotting/image_cache"
+    [tool.pytest.ini_options]
+    image_cache_dir = "tests/plotting/image_cache"
 
 Additionally, to configure the directory that will contain the generated test images:
 
-.. code::
+.. code-block:: toml
 
-   [tool.pytest.ini_options]
-   generated_image_dir = "generated_images"
+    [tool.pytest.ini_options]
+    generated_image_dir = "generated_images"
 
 Similarly, configure the directory that will contain any failed test images:
 
-.. code::
+.. code-block:: toml
 
-   [tool.pytest.ini_options]
-   failed_image_dir = "failed_images"
+    [tool.pytest.ini_options]
+    failed_image_dir = "failed_images"
 
 Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
 
