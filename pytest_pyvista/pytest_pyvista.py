@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fcntl
+import json
 import os
 from pathlib import Path
 import platform
@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
 from typing import cast
+import uuid
 import warnings
 
 import pytest
@@ -21,52 +22,8 @@ from pyvista import Plotter
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
-
-class _SharedFileSync:
-    """Stores stores a set of strings in a file to multiprocessing sync."""
-
-    def __init__(self, prefix: str) -> None:
-        self._prefix = prefix
-        self._cached_path: Path | None = None
-        self._data: set[str] = set()
-
-    @property
-    def _path(self) -> Path:
-        if self._cached_path is None:
-            shared_dir = Path(tempfile.gettempdir())
-            path = shared_dir / f"{self._prefix}_shared.txt"
-            self._cached_path = path
-            path.touch(exist_ok=True)
-        return self._cached_path
-
-    def add(self, name: str) -> None:
-        self._data.add(name)
-
-    def _read(self) -> set[str]:
-        if os.path.isfile(self._path):  # noqa: PTH113
-            with self._path.open() as f:
-                return {line.strip() for line in f if line.strip()}
-        return set()
-
-    def clear(self) -> None:
-        self._path.open("w").close()
-        self._data = set()
-
-    def write(self) -> None:
-        with self._path.open("a") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            for name in self._data:
-                f.write(name + "\n")
-            fcntl.flock(f, fcntl.LOCK_UN)
-        self._data.clear()
-
-    @property
-    def data(self) -> set[str]:
-        return self._read()
-
-
-VISITED_CACHED_IMAGE_NAMES = _SharedFileSync("visited_")
-SKIPPED_CACHED_IMAGE_NAMES = _SharedFileSync("skipped_")
+VISITED_CACHED_IMAGE_NAMES: set[str] = set()
+SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 
 
 class RegressionError(RuntimeError):
@@ -404,13 +361,21 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
         cached_image_names = {f.name for f in cache_path.glob("*.png")}
 
-        unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES.data - SKIPPED_CACHED_IMAGE_NAMES.data
+        image_names_dir = getattr(config, "_image_names_dir", None)
+        if image_names_dir:
+            visited_cached_image_names = _combine_temp_jsons(image_names_dir, "visited")
+            skipped_cached_image_names = _combine_temp_jsons(image_names_dir, "skipped")
+        else:
+            visited_cached_image_names = set()
+            skipped_cached_image_names = set()
+
+        unused_cached_image_names = cached_image_names - visited_cached_image_names - skipped_cached_image_names
 
         # Exclude images from skipped tests where multiple images are generated
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
             base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
-            if base_image_name in SKIPPED_CACHED_IMAGE_NAMES.data:
+            if base_image_name in skipped_cached_image_names:
                 unused_skipped.remove(image_name)
 
         if unused_skipped:
@@ -473,6 +438,14 @@ class _ChainedCallbacks:
         """Call all input functions in chain for the given Plotter instance."""
         for f in self.funcs:
             f(plotter)
+
+
+@pytest.hookimpl
+def pytest_configure(config: pytest.Config) -> None:
+    """Configure pytest session."""
+    # create a image names directory for individual or multiple workers to write to
+    config._image_names_dir = Path(tempfile.mkdtemp())  # noqa: SLF001
+    config._image_names_dir.mkdir(exist_ok=True)  # noqa: SLF001
 
 
 @pytest.fixture
@@ -540,8 +513,28 @@ def verify_image_cache(
             )
 
 
+def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
+    # Read all JSON files from temp subdir into single set
+    combined_data: set[str] = set()
+    if json_dir.exists():
+        for json_file in json_dir.glob(f"{prefix}*.json"):
+            with json_file.open() as f:
+                data = json.load(f)
+                combined_data.update(data)
+
+    return combined_data
+
+
+@pytest.hookimpl
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
-    """Ensure cached image names are written to file."""
-    # This works across multiple pytest-xdist nodes or a single non-parallel session
-    VISITED_CACHED_IMAGE_NAMES.write()
-    SKIPPED_CACHED_IMAGE_NAMES.write()
+    """Write skipped and visited image names to disk."""
+    # uses uuid and is threadsafe
+
+    image_names_dir = getattr(session.config, "_image_names_dir", None)
+    if image_names_dir:
+        visited_file = image_names_dir / f"visited_{uuid.uuid4()}_cache_names.json"
+        skipped_file = image_names_dir / f"skipped_{uuid.uuid4()}_cache_names.json"
+
+        # Fixed: Write JSON instead of plain text
+        visited_file.write_text(json.dumps(list(VISITED_CACHED_IMAGE_NAMES)))
+        skipped_file.write_text(json.dumps(list(SKIPPED_CACHED_IMAGE_NAMES)))
