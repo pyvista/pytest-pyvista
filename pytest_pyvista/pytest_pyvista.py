@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from pathlib import Path
 import platform
 import shutil
-import tempfile
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
@@ -21,10 +21,6 @@ from pyvista import Plotter
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
-    import contextlib
-
-    with contextlib.suppress(ImportError):
-        from xdist.workermanage import WorkerController
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
@@ -365,7 +361,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
         cached_image_names = {f.name for f in cache_path.glob("*.png")}
 
-        image_names_dir = Path(config.shared_directory)
+        image_names_dir = getattr(config, "image_names_dir", None)
         if image_names_dir:
             visited_cached_image_names = _combine_temp_jsons(image_names_dir, "visited")
             skipped_cached_image_names = _combine_temp_jsons(image_names_dir, "skipped")
@@ -444,28 +440,18 @@ class _ChainedCallbacks:
             f(plotter)
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    """Create a shared directory on initialization."""
-    if is_controller(config):
-        config.shared_directory = tempfile.mkdtemp()
-        Path(config.shared_directory).mkdir(exist_ok=True)
-
-
-def pytest_unconfigure(config: pytest.Config) -> None:
-    """Remove the shared directory when complete."""
-    if is_controller(config):
-        shutil.rmtree(config.shared_directory)
-
-
 @pytest.hookimpl
-def pytest_configure_node(node: WorkerController) -> None:
-    """Configure pytest nodes by adding shared directory."""
-    node.workerinput["shared_dir"] = node.config.shared_directory
+def pytest_configure(config: pytest.Config) -> None:
+    """Configure pytest session."""
+    # create a image names directory for individual or multiple workers to write to
+    if config.getoption("disallow_unused_cache"):
+        config.image_names_dir = Path(".pytest-pyvista")
+        config.image_names_dir.mkdir(exist_ok=True)
 
-
-def is_controller(config: pytest.Config) -> bool:
-    """Return if config is running in a xdist controller node or not running xdist at all."""
-    return not hasattr(config, "workerinput")
+        # ensure this directory is empty as it might be left over from a previous test
+        with contextlib.suppress(OSError):
+            for filename in config.image_names_dir.iterdir():
+                filename.unlink()
 
 
 @pytest.fixture
@@ -550,7 +536,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
     """Write skipped and visited image names to disk."""
     # uses uuid and is threadsafe
 
-    image_names_dir = Path(session.config.shared_directory)
+    image_names_dir = getattr(session.config, "image_names_dir", None)
     if image_names_dir:
         visited_file = image_names_dir / f"visited_{uuid.uuid4()}_cache_names.json"
         skipped_file = image_names_dir / f"skipped_{uuid.uuid4()}_cache_names.json"
