@@ -357,6 +357,10 @@ def _test_name_from_image_name(image_name: str) -> str:
 @pytest.hookimpl
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
     """Execute after the whole test run completes."""
+    if hasattr(config, "workerinput"):
+        # on an pytest-xdist worker node, exit early
+        return
+
     if config.getoption("disallow_unused_cache"):
         cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
         cached_image_names = {f.name for f in cache_path.glob("*.png")}
@@ -445,7 +449,7 @@ def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
-        config.image_names_dir = Path(".pytest-pyvista")
+        config.image_names_dir = Path(config.cache.makedir("pyvista"))
         config.image_names_dir.mkdir(exist_ok=True)
 
         # ensure this directory is empty as it might be left over from a previous test
@@ -520,7 +524,7 @@ def verify_image_cache(
 
 
 def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
-    # Read all JSON files from temp subdir into single set
+    # Read all JSON files from a directory and combine into single set
     combined_data: set[str] = set()
     if json_dir.exists():
         for json_file in json_dir.glob(f"{prefix}*.json"):
@@ -534,12 +538,11 @@ def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
 @pytest.hookimpl
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
     """Write skipped and visited image names to disk."""
-    # uses uuid and is threadsafe
-
     image_names_dir = getattr(session.config, "image_names_dir", None)
     if image_names_dir:
-        visited_file = image_names_dir / f"visited_{uuid.uuid4()}_cache_names.json"
-        skipped_file = image_names_dir / f"skipped_{uuid.uuid4()}_cache_names.json"
+        test_id = uuid.uuid4()
+        visited_file = image_names_dir / f"visited_{test_id}_cache_names.json"
+        skipped_file = image_names_dir / f"skipped_{test_id}_cache_names.json"
 
         # Fixed: Write JSON instead of plain text
         visited_file.write_text(json.dumps(list(VISITED_CACHED_IMAGE_NAMES)))
