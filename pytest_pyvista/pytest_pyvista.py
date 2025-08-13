@@ -58,7 +58,6 @@ class _SharedFileSync:
             for name in self._data:
                 f.write(name + "\n")
             fcntl.flock(f, fcntl.LOCK_UN)
-        self._data.clear()
 
     @property
     def data(self) -> set[str]:
