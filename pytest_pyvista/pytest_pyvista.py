@@ -49,8 +49,14 @@ class _SharedFileSync:
         return set()
 
     def clear(self) -> None:
-        self._path.open("w").close()
-        self._data = set()
+        try:
+            with self._path.open('r+') as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.truncate(0)
+                fcntl.flock(f, fcntl.LOCK_UN)
+            self._buffer.clear()
+        except OSError as e:  # pragma: no cover
+            raise RuntimeError(f"Failed to clear shared file: {e}")
 
     def write(self) -> None:
         with self._path.open("a") as f:
