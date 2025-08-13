@@ -426,7 +426,9 @@ def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
     if not Path(dirpath).is_dir():
         msg = f"pyvista test {msg_name}: {dirpath} does not yet exist.  Creating dir."
         warnings.warn(msg, stacklevel=2)
-        Path(dirpath).mkdir(parents=True)
+
+        # exist_ok to allow for multi-threading
+        Path(dirpath).mkdir(exist_ok=True, parents=True)
 
 
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False):  # noqa: ANN202
