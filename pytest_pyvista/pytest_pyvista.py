@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
 from pathlib import Path
 import platform
 import shutil
+import tempfile
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
@@ -19,9 +21,46 @@ from pyvista import Plotter
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
+_temp_file_paths: dict[str, str] = {}
 
-VISITED_CACHED_IMAGE_NAMES: set[str] = set()
-SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
+
+def _get_shared_temp_file(prefix: str = "visited_images_") -> Path:
+    if prefix not in _temp_file_paths:
+        fd, path = tempfile.mkstemp(prefix=prefix, suffix=".txt")
+        os.close(fd)
+        _temp_file_paths[prefix] = path
+    return Path(_temp_file_paths[prefix])
+
+
+def _append_visited_image(image_name: str) -> None:
+    path = _get_shared_temp_file()
+    with path.open("a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(image_name + "\n")
+        fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _append_skipped_image(image_name: str) -> None:
+    path = _get_shared_temp_file("skipped_images_")
+    with path.open("a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(image_name + "\n")
+        fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _read_shared_temp_file(prefix: str = "visited_images_") -> set[str]:
+    path = _get_shared_temp_file(prefix)
+    if os.path.isfile(path):  # noqa:PTH113
+        with path.open() as f:
+            return {line.strip() for line in f if line.strip()}
+    return set()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _clear_shared_temp_files() -> None:
+    for prefix in ("visited_images_", "skipped_images_"):
+        path = _get_shared_temp_file(prefix)
+        path.open("w").close()
 
 
 class RegressionError(RuntimeError):
@@ -252,9 +291,9 @@ class VerifyImageCache:
             macos_skip_image_cache=self.macos_skip_image_cache,
             ignore_image_cache=self.ignore_image_cache,
         ):
-            SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
+            _append_skipped_image(image_name)
             return
-        VISITED_CACHED_IMAGE_NAMES.add(image_name)
+        _append_visited_image(image_name)
 
         if not image_filename.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
@@ -358,13 +397,16 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
     if config.getoption("disallow_unused_cache"):
         cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
         cached_image_names = {f.name for f in cache_path.glob("*.png")}
-        unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES - SKIPPED_CACHED_IMAGE_NAMES
+        visited_images = _read_shared_temp_file()
+        skipped_images = _read_shared_temp_file("skipped_images_")
+
+        unused_cached_image_names = cached_image_names - visited_images - skipped_images
 
         # Exclude images from skipped tests where multiple images are generated
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
             base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
-            if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
+            if base_image_name in skipped_images:
                 unused_skipped.remove(image_name)
 
         if unused_skipped:
@@ -378,9 +420,6 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
             tr.line("These images should either be removed from the cache, or the corresponding", red=True)
             tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
             pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
-
-    VISITED_CACHED_IMAGE_NAMES.clear()
-    SKIPPED_CACHED_IMAGE_NAMES.clear()
 
 
 def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
@@ -410,7 +449,7 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
 
         # Mark cached image as skipped if test was skipped during setup or execution
         if rep.when in ["call", "setup"] and rep.skipped:
-            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
+            _append_skipped_image(_image_name_from_test_name(item.name))
 
         # Attach the report to the item so fixtures/finalizers can inspect it
         setattr(item, f"rep_{rep.when}", rep)
