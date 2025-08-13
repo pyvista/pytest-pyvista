@@ -21,46 +21,52 @@ from pyvista import Plotter
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
-_temp_file_paths: dict[str, str] = {}
+
+class _SharedFileSync:
+    """Stores stores a set of strings in a file to multiprocessing sync."""
+
+    def __init__(self, prefix: str) -> None:
+        self._prefix = prefix
+        self._cached_path: Path | None = None
+        self._data: set[str] = set()
+
+    @property
+    def _path(self) -> Path:
+        if self._cached_path is None:
+            shared_dir = Path(tempfile.gettempdir())
+            path = shared_dir / f"{self._prefix}_shared.txt"
+            self._cached_path = path
+            path.touch(exist_ok=True)
+        return self._cached_path
+
+    def add(self, name: str) -> None:
+        self._data.add(name)
+
+    def _read(self) -> set[str]:
+        if os.path.isfile(self._path):  # noqa: PTH113
+            with self._path.open() as f:
+                return {line.strip() for line in f if line.strip()}
+        return set()
+
+    def clear(self) -> None:
+        self._path.open("w").close()
+        self._data = set()
+
+    def write(self) -> None:
+        with self._path.open("a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            for name in self._data:
+                f.write(name + "\n")
+            fcntl.flock(f, fcntl.LOCK_UN)
+        self._data.clear()
+
+    @property
+    def data(self) -> set[str]:
+        return self._read()
 
 
-def _get_shared_temp_file(prefix: str = "visited_images_") -> Path:
-    if prefix not in _temp_file_paths:
-        fd, path = tempfile.mkstemp(prefix=prefix, suffix=".txt")
-        os.close(fd)
-        _temp_file_paths[prefix] = path
-    return Path(_temp_file_paths[prefix])
-
-
-def _append_visited_image(image_name: str) -> None:
-    path = _get_shared_temp_file()
-    with path.open("a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        f.write(image_name + "\n")
-        fcntl.flock(f, fcntl.LOCK_UN)
-
-
-def _append_skipped_image(image_name: str) -> None:
-    path = _get_shared_temp_file("skipped_images_")
-    with path.open("a") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        f.write(image_name + "\n")
-        fcntl.flock(f, fcntl.LOCK_UN)
-
-
-def _read_shared_temp_file(prefix: str = "visited_images_") -> set[str]:
-    path = _get_shared_temp_file(prefix)
-    if os.path.isfile(path):  # noqa:PTH113
-        with path.open() as f:
-            return {line.strip() for line in f if line.strip()}
-    return set()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _clear_shared_temp_files() -> None:
-    for prefix in ("visited_images_", "skipped_images_"):
-        path = _get_shared_temp_file(prefix)
-        path.open("w").close()
+VISITED_CACHED_IMAGE_NAMES = _SharedFileSync("visited_")
+SKIPPED_CACHED_IMAGE_NAMES = _SharedFileSync("skipped_")
 
 
 class RegressionError(RuntimeError):
@@ -291,9 +297,9 @@ class VerifyImageCache:
             macos_skip_image_cache=self.macos_skip_image_cache,
             ignore_image_cache=self.ignore_image_cache,
         ):
-            _append_skipped_image(image_name)
+            SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
             return
-        _append_visited_image(image_name)
+        VISITED_CACHED_IMAGE_NAMES.add(image_name)
 
         if not image_filename.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
@@ -397,16 +403,14 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
     if config.getoption("disallow_unused_cache"):
         cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
         cached_image_names = {f.name for f in cache_path.glob("*.png")}
-        visited_images = _read_shared_temp_file()
-        skipped_images = _read_shared_temp_file("skipped_images_")
 
-        unused_cached_image_names = cached_image_names - visited_images - skipped_images
+        unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES.data - SKIPPED_CACHED_IMAGE_NAMES.data
 
         # Exclude images from skipped tests where multiple images are generated
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
             base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
-            if base_image_name in skipped_images:
+            if base_image_name in SKIPPED_CACHED_IMAGE_NAMES.data:
                 unused_skipped.remove(image_name)
 
         if unused_skipped:
@@ -420,6 +424,9 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
             tr.line("These images should either be removed from the cache, or the corresponding", red=True)
             tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
             pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
+
+    VISITED_CACHED_IMAGE_NAMES.clear()
+    SKIPPED_CACHED_IMAGE_NAMES.clear()
 
 
 def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
@@ -451,7 +458,7 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
 
         # Mark cached image as skipped if test was skipped during setup or execution
         if rep.when in ["call", "setup"] and rep.skipped:
-            _append_skipped_image(_image_name_from_test_name(item.name))
+            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name))
 
         # Attach the report to the item so fixtures/finalizers can inspect it
         setattr(item, f"rep_{rep.when}", rep)
@@ -531,3 +538,10 @@ def verify_image_cache(
                 "Fixture `verify_image_cache` is used but no images were generated.\n"
                 "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
             )
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
+    """Ensure cached image names are written to file."""
+    # This works across multiple pytest-xdist nodes or a single non-parallel session
+    VISITED_CACHED_IMAGE_NAMES.write()
+    SKIPPED_CACHED_IMAGE_NAMES.write()
