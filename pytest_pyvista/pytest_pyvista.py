@@ -522,7 +522,7 @@ def verify_image_cache(
 def pytest_configure(config: pytest.Config) -> None:
     """Check if using doc_mode."""
     if config.getoption("doc_mode"):
-        from .pytest_doc_images import _DocTestInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocTestInfo  # noqa: PLC0415
 
         _DocTestInfo.init_dirs(config)
 
@@ -533,7 +533,7 @@ def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config
         items.clear()  # Clear previously collected items
 
         # Import the doc images module
-        module_name = "pytest_pyvista.pytest_doc_images"
+        module_name = "pytest_pyvista.doc_mode"
         doc_module = importlib.import_module(module_name)
         module_file = Path(cast("Path", doc_module.__file__))
 

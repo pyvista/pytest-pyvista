@@ -30,23 +30,23 @@ class _DocTestInfo:
 
     @classmethod
     def init_dirs(cls, config: pytest.Config) -> None:
-        must_be_specified = "{!r} must be specified when using --doc_mode"
+        must_be_specified_template = "{!r} must be specified when using --doc_mode"
+        must_be_valid_template = "{!r} must be a valid directory. Got:\n{}."
+
         option = "doc_images_dir"
         doc_images_dir = _get_option_from_config_or_ini(config, option, is_dir=True)
         if doc_images_dir is None:
-            raise ValueError(must_be_specified.format(option))
+            raise ValueError(must_be_specified_template.format(option))
         if not doc_images_dir.is_dir():
-            msg = f"'doc_images_dir' {doc_images_dir} must be a valid directory."
-            raise ValueError(msg)
+            raise ValueError(must_be_valid_template.format(option, doc_images_dir))
         cls.doc_images_dir = doc_images_dir
 
         option = "doc_image_cache_dir"
         doc_image_cache_dir = _get_option_from_config_or_ini(config, option, is_dir=True)
         if doc_image_cache_dir is None:
-            raise ValueError(must_be_specified.format(option))
+            raise ValueError(must_be_specified_template.format(option))
         if not doc_image_cache_dir.is_dir():
-            msg = f"'doc_image_cache_dir' {doc_image_cache_dir} must be a valid directory."
-            raise ValueError(msg)
+            raise ValueError(must_be_valid_template.format(option, doc_image_cache_dir))
         cls.doc_image_cache_dir = doc_image_cache_dir
 
         doc_generated_image_dir = _get_option_from_config_or_ini(config, "doc_generated_image_dir", is_dir=True)

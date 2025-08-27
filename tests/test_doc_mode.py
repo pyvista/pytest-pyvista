@@ -4,25 +4,69 @@ from __future__ import annotations
 
 import pytest
 
-from pytest_pyvista.pytest_doc_images import _preprocess_build_images
+from pytest_pyvista.doc_mode import _preprocess_build_images
 from tests.test_pyvista import make_cached_images
 
 
-def test_verify_image_cache(pytester: pytest.Pytester) -> None:
-    """Test regular usage of the `verify_image_cache` fixture."""
-    cache = "doc_image_cache_dir"
-    images = "doc_images_dir"
+def test_doc_mode(pytester: pytest.Pytester) -> None:
+    """Test regular usage of the --doc_mode."""
+    cache = "cache"
+    images = "images"
     make_cached_images(pytester.path, cache)
     make_cached_images(pytester.path, images)
     _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
 
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    assert result.ret == pytest.ExitCode.OK
+
+
+def test_cli_errors(pytester: pytest.Pytester) -> None:
+    """Test errors generated when using CLI."""
     result = pytester.runpytest("--doc_mode")
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
     result.stderr.fnmatch_lines(["*ValueError: 'doc_images_dir' must be specified when using --doc_mode"])
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images)
+    images_path = pytester.path / "images"
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
+    assert result.ret == pytest.ExitCode.INTERNAL_ERROR
+    result.stderr.fnmatch_lines(["*ValueError: 'doc_images_dir' must be a valid directory. Got:", "*/images."])
+
+    images_path.mkdir()
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
     result.stderr.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be specified when using --doc_mode"])
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
-    assert result.ret == pytest.ExitCode.OK
+    cache_path = pytester.path / "cache"
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path), "--doc_image_cache_dir", str(cache_path))
+    assert result.ret == pytest.ExitCode.INTERNAL_ERROR
+    result.stderr.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be a valid directory. Got:", "*/cache."])
+
+
+@pytest.mark.parametrize("missing", ["build", "cache"])
+def test_both_images_exist(pytester: pytest.Pytester, missing) -> None:
+    """Test when either the cache or build image is missing for the test."""
+    images_path = pytester.path / "images"
+    cache_path = pytester.path / "cache"
+    if missing == "build":
+        make_cached_images(cache_path.parent, cache_path.name)
+        _preprocess_build_images(str(cache_path), str(cache_path))
+        expected_lines = [
+            "*The image exists in the cache directory:",
+            f"*{cache_path.name}/imcache.jpg",
+            "*but is missing from the docs build directory:",
+            f"*{images_path.name}",
+        ]
+    else:
+        make_cached_images(images_path.parent, images_path.name)
+        expected_lines = [
+            "*The image exists in the docs build directory:",
+            f"*{images_path.name}",
+            "*but is missing from the cache directory:",
+            f"*{cache_path.name}",
+        ]
+
+    images_path.mkdir(exist_ok=True)
+    cache_path.mkdir(exist_ok=True)
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path)
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
