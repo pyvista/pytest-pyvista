@@ -102,3 +102,17 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     assert result.ret == pytest.ExitCode.TESTS_FAILED
 
     result.stdout.re_match_lines([r".*Failed: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"])
+
+
+def test_compare_images_warning(pytester: pytest.Pytester) -> None:
+    """Test regression error is raised."""
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path, cache, color=[255, 0, 0])
+    make_cached_images(pytester.path, images, color=[240, 0, 0])
+    _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
+
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    assert result.ret == pytest.ExitCode.OK
+
+    result.stdout.re_match_lines([r".*UserWarning: imcache Exceeded image regression warning of 200\.0 with an image error of [0-9]+\.[0-9]+"])
