@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 import platform
@@ -43,6 +44,8 @@ class RegressionFileNotFoundError(RegressionFileNotFound):
 
 def pytest_addoption(parser) -> None:  # noqa: ANN001
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
+    _add_common_pytest_options(parser)
+
     group = parser.getgroup("pyvista")
     group.addoption(
         "--reset_image_cache",
@@ -56,39 +59,9 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Prevent test failure if a generated test image has no use.",
     )
     group.addoption(
-        "--generated_image_dir",
-        action="store",
-        help="Path to dump test images from the current run.",
-    )
-    parser.addini(
-        "generated_image_dir",
-        default=None,
-        help="Path to dump test images from the current run.",
-    )
-    group.addoption(
-        "--failed_image_dir",
-        action="store",
-        help="Path to dump images from failed tests from the current run.",
-    )
-    parser.addini(
-        "failed_image_dir",
-        default=None,
-        help="Path to dump images from failed tests from the current run.",
-    )
-    group.addoption(
         "--add_missing_images",
         action="store_true",
         help="Adds images to cache if missing.",
-    )
-    group.addoption(
-        "--image_cache_dir",
-        action="store",
-        help="Path to the image cache folder.",
-    )
-    parser.addini(
-        "image_cache_dir",
-        default="image_cache_dir",
-        help="Path to the image cache folder.",
     )
     group.addoption(
         "--reset_only_failed",
@@ -104,6 +77,59 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--allow_useless_fixture",
         action="store_true",
         help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
+    )
+
+    # Doc-specific test options
+    group.addoption(
+        "--doc_mode",
+        action="store_true",
+        help="Prevent test failure if a generated test image has no use.",
+    )
+    group.addoption(
+        "--doc_images_dir",
+        action="store",
+        help="Path to the sphinx build directory.",
+    )
+    parser.addini(
+        "doc_images_dir",
+        default=None,
+        help="Path to the sphinx build directory.",
+    )
+    _add_common_pytest_options(parser, doc=True)
+
+
+def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: ANN001
+    prefix = "doc_" if doc else ""
+    group = parser.getgroup("pyvista")
+    group.addoption(
+        f"--{prefix}image_cache_dir",
+        action="store",
+        help="Path to the image cache folder.",
+    )
+    parser.addini(
+        f"{prefix}image_cache_dir",
+        default=None if doc else "image_cache_dir",
+        help="Path to the image cache folder.",
+    )
+    group.addoption(
+        f"--{prefix}generated_image_dir",
+        action="store",
+        help="Path to dump test images from the current run.",
+    )
+    parser.addini(
+        f"{prefix}generated_image_dir",
+        default=None,
+        help="Path to dump test images from the current run.",
+    )
+    group.addoption(
+        f"--{prefix}failed_image_dir",
+        action="store",
+        help="Path to dump images from failed tests from the current run.",
+    )
+    parser.addini(
+        f"{prefix}failed_image_dir",
+        default=None,
+        help="Path to dump images from failed tests from the current run.",
     )
 
 
@@ -356,7 +382,8 @@ def _test_name_from_image_name(image_name: str) -> str:
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
     """Execute after the whole test run completes."""
     if config.getoption("disallow_unused_cache"):
-        cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
+        value = _get_option_from_config_or_ini(config, "image_cache_dir")
+        cache_path = Path(cast("Path", value))
         cached_image_names = {f.name for f in cache_path.glob("*.png")}
         unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES - SKIPPED_CACHED_IMAGE_NAMES
 
@@ -390,7 +417,7 @@ def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
         Path(dirpath).mkdir(parents=True)
 
 
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False):  # noqa: ANN202
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | None:
     value = pytestconfig.getoption(option)
     if value is None:
         value = pytestconfig.getini(option)
@@ -441,7 +468,7 @@ def verify_image_cache(
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
 
-    cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True)
+    cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir", is_dir=True)
 
@@ -490,3 +517,27 @@ def verify_image_cache(
                 "Fixture `verify_image_cache` is used but no images were generated.\n"
                 "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
             )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Check if using doc_mode."""
+    if config.getoption("doc_mode"):
+        from .pytest_doc_images import _DocTestInfo  # noqa: PLC0415
+
+        _DocTestInfo.init_dirs(config)
+
+
+def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Collect tests from doc images when --doc_mode is enabled."""
+    if config.getoption("doc_mode"):
+        items.clear()  # Clear previously collected items
+
+        # Import the doc images module
+        module_name = "pytest_pyvista.pytest_doc_images"
+        doc_module = importlib.import_module(module_name)
+        module_file = Path(cast("Path", doc_module.__file__))
+
+        # Collect test items from the module
+        module_collector = pytest.Module.from_parent(parent=session, path=module_file)
+        collected_items = list(module_collector.collect())
+        items.extend(collected_items)
