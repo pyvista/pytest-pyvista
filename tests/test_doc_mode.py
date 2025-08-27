@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PIL import Image
 import pytest
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
@@ -70,3 +71,34 @@ def test_both_images_exist(pytester: pytest.Pytester, missing) -> None:
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path)
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
+
+
+def test_compare_images_with_different_sizes(pytester: pytest.Pytester) -> None:
+    """Test error is raised when there is a mismatch in image size."""
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path, cache)
+    make_cached_images(pytester.path, images)
+
+    file = pytester.path / cache / "imcache.png"
+    with Image.open(file) as im:
+        im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
+        im.save(file.with_suffix(".jpg"))
+
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.stdout.fnmatch_lines(["*Failed: RuntimeError('Input images are not the same size.')"])
+
+
+def test_compare_images_error(pytester: pytest.Pytester) -> None:
+    """Test regression error is raised."""
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path, cache, color="red")
+    make_cached_images(pytester.path, images, color="blue")
+    _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
+
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    result.stdout.re_match_lines([r".*Failed: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"])
