@@ -105,7 +105,7 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
 
 
 def test_compare_images_warning(pytester: pytest.Pytester) -> None:
-    """Test regression error is raised."""
+    """Test regression warning is issued."""
     cache = "cache"
     images = "images"
     make_cached_images(pytester.path, cache, color=[255, 0, 0])
@@ -116,3 +116,26 @@ def test_compare_images_warning(pytester: pytest.Pytester) -> None:
     assert result.ret == pytest.ExitCode.OK
 
     result.stdout.re_match_lines([r".*UserWarning: imcache Exceeded image regression warning of 200\.0 with an image error of [0-9]+\.[0-9]+"])
+
+
+@pytest.mark.parametrize("build_color", ["red", "blue"])
+def test_multiple_valid_images(pytester: pytest.Pytester, build_color) -> None:
+    """Test regression warning is issued."""
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path / cache, "imcache", name="im1.png", color="red")
+    make_cached_images(pytester.path / cache, "imcache", name="im2.png", color="blue")
+    make_cached_images(pytester.path, images, color=build_color)
+    _preprocess_build_images(str(pytester.path / cache / "imcache"), str(pytester.path / cache / "imcache"))
+
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    assert result.ret == pytest.ExitCode.OK
+
+    match = r".*UserWarning: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"
+    if build_color == "red":
+        # Comparison with first image succeeds without issue
+        result.stdout.no_re_match_line(match)
+    else:
+        # Comparison with first image fails
+        # Expect error was converted to a warning
+        result.stdout.re_match_lines([match])

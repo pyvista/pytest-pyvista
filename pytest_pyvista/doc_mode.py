@@ -148,8 +148,18 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
     [add_to_dict(path, "docs") for path in test_image_paths]
 
     # process cached images
-    cached_image_paths = _get_file_paths(str(_DocTestInfo.doc_image_cache_dir), ext="jpg")
-    [add_to_dict(path, "cached") for path in cached_image_paths]
+    cache_dir = Path(_DocTestInfo.doc_image_cache_dir)
+    cached_image_paths = _get_file_paths(str(cache_dir), ext="jpg")
+    for path in cached_image_paths:
+        # Check if we have a single image or a dir with multiple images
+        rel = Path(path).relative_to(cache_dir)
+        parts = rel.parts
+        if len(parts) > 1:  # means it's nested
+            # Use the first subdir as the test input instead of the image path
+            first_subdir = parts[0]  # one dir down from base
+            add_to_dict(str(cache_dir / first_subdir), "cached")
+        else:
+            add_to_dict(path, "cached")
 
     # flatten dict
     test_cases_list = []
@@ -178,7 +188,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def _save_failed_test_image(source_path: str, category: Literal["warnings", "errors", "flaky"]) -> None:
     """Save test image from cache or build to the failed image dir."""
     parent_dir = Path(category)
-    dest_dirname = "from_cache" if Path(source_path).parent == Path(_DocTestInfo.doc_images_dir) else "from_build"
+    dest_dirname = "from_cache" if Path(source_path).is_relative_to(_DocTestInfo.doc_image_cache_dir) else "from_build"
     Path(_DocTestInfo.doc_failed_image_dir).mkdir(exist_ok=True)
     Path(_DocTestInfo.doc_failed_image_dir, parent_dir).mkdir(exist_ok=True)
     dest_dir = Path(_DocTestInfo.doc_failed_image_dir, parent_dir, dest_dirname)
@@ -189,21 +199,48 @@ def _save_failed_test_image(source_path: str, category: Literal["warnings", "err
 
 def test_static_images(test_case: _TestCaseTuple) -> None:
     """Compare generated image with cached image."""
+    _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(*test_case)
     if fail_msg:
         _save_failed_test_image(fail_source, "errors")
         pytest.fail(fail_msg)
 
-    warn_msg, fail_msg = _test_compare_images(*test_case)
+    cached_image_paths = (
+        [test_case.cached_image_path] if Path(test_case.cached_image_path).is_file() else _get_file_paths(test_case.cached_image_path, ext="jpg")
+    )
+    current_cached_image_path = cached_image_paths[0]
+
+    warn_msg, fail_msg = _test_compare_images(
+        test_name=test_case.test_name, docs_image_path=test_case.docs_image_path, cached_image_path=current_cached_image_path
+    )
+
+    # Try again and compare with other cached images
+    if fail_msg and len(cached_image_paths) > 1:
+        # Compare build image to other known valid versions
+        for current_cached_image_path in cached_image_paths:
+            error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(current_cached_image_path))
+            if _check_compare_fail(test_case.test_name, error) is None:
+                # Convert failure into a warning
+                warn_msg = fail_msg + (
+                    f"\nTHIS IS A FLAKY TEST. It initially failed (as above) but passed when compared to:\n\t{current_cached_image_path}"
+                )
+                fail_msg = None
+                break
+        else:  # Loop completed - test still fails
+            fail_msg += (
+                "\nTHIS IS A FLAKY TEST. It initially failed (as above) and failed again for "
+                "all images in \n\t{Path(_DocTestInfo.doc_image_cache_dir, test_case.test_name)!s}."
+            )
+
     if fail_msg:
         _save_failed_test_image(test_case.docs_image_path, "errors")
-        _save_failed_test_image(test_case.cached_image_path, "errors")
+        _save_failed_test_image(current_cached_image_path, "errors")
         pytest.fail(fail_msg)
 
     if warn_msg:
         parent_dir: Literal["flaky", "warnings"] = "flaky" if Path(test_case.cached_image_path).stem in _DocTestInfo.flaky_test_cases else "warnings"
         _save_failed_test_image(test_case.docs_image_path, parent_dir)
-        _save_failed_test_image(test_case.cached_image_path, parent_dir)
+        _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)
 
 
@@ -234,6 +271,19 @@ def _test_both_images_exist(filename: str, docs_image_path: str, cached_image_pa
     return None, None
 
 
+def _warn_cached_image_path(cached_image_path: str) -> None:
+    """Warn if a subdir is used with only one cached image."""
+    if cached_image_path is not None and Path(cached_image_path).is_dir():
+        cached_images = _get_file_paths(cached_image_path, ext="jpg")
+        if len(cached_images) == 1:
+            msg = (
+                "Cached image sub-directory only contains a single image.\n"
+                f"Move the cached image directly to the cached image dir {_DocTestInfo.doc_image_cache_dir.name!r}\n"
+                f"or include more than one image in the sub-directory:\n\t{cached_image_path}"
+            )
+            warnings.warn(msg, stacklevel=2)
+
+
 def _test_compare_images(test_name: str, docs_image_path: str, cached_image_path: str) -> tuple[str | None, str | None]:
     try:
         docs_image = cast("pv.ImageData", pv.read(docs_image_path))
@@ -243,20 +293,6 @@ def _test_compare_images(test_name: str, docs_image_path: str, cached_image_path
         error = pv.compare_images(docs_image, cached_image)
         fail_msg = _check_compare_fail(test_name, error)
         warn_msg = _check_compare_warn(test_name, error)
-        # Check if test case is flaky test
-        if fail_msg and test_name in _DocTestInfo.flaky_test_cases:
-            # Compare build image to other known valid versions
-            success_path = _is_false_positive(test_name, docs_image)
-            if success_path:
-                # Convert failure into a warning
-                warn_msg = fail_msg + (f"\nTHIS IS A FLAKY TEST. It initially failed (as above) but passed when compared to:\n\t{success_path}")
-                fail_msg = None
-            else:
-                # Test still fails
-                fail_msg += (
-                    "\nTHIS IS A FLAKY TEST. It initially failed (as above) and failed again "
-                    f"for all images in \n\t{Path(_DocTestInfo.flaky_test_cases, test_name)!s}."
-                )
     except RuntimeError as e:
         warn_msg = None
         fail_msg = repr(e)
@@ -272,14 +308,4 @@ def _check_compare_fail(filename: str, error_: float, allowed_error: float = 500
 def _check_compare_warn(filename: str, error_: float, allowed_warning: float = 200.0) -> str | None:
     if error_ > allowed_warning:
         return f"{filename} Exceeded image regression warning of {allowed_warning} with an image error of {error_}"
-    return None
-
-
-def _is_false_positive(test_name: str, docs_image: pv.ImageData) -> str | None:
-    """Compare against other image in the flaky image dir."""
-    paths = _get_file_paths(str(Path(FLAKY_IMAGE_DIR, test_name)), "jpg")
-    for path in paths:
-        error = pv.compare_images(docs_image, pv.read(path))
-        if _check_compare_fail(test_name, error) is None:
-            return path
     return None
