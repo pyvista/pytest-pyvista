@@ -59,7 +59,6 @@ class _DocTestInfo:
             path = Path(tempdir.name)
         else:
             path = Path(doc_generated_image_dir)
-        _ensure_dir_exists(path, msg_name="doc generated image dir")
         cls.doc_generated_image_dir = path
 
         doc_failed_image_dir = _get_option_from_config_or_ini(config, "doc_failed_image_dir", is_dir=True)
@@ -69,7 +68,6 @@ class _DocTestInfo:
             path = Path(tempdir.name)
         else:
             path = doc_failed_image_dir
-        _ensure_dir_exists(path, msg_name="doc failed image dir")
         cls.doc_failed_image_dir = path
 
 
@@ -82,7 +80,7 @@ class _TestCaseTuple(NamedTuple):
 def _get_file_paths(dir_: str, ext: str) -> list[str]:
     """Get all paths of files with a specific extension inside a directory tree."""
     pattern = str(Path(dir_) / "**" / ("*." + ext))
-    return glob.glob(pattern, recursive=True)  # noqa: PTH207
+    return sorted(glob.glob(pattern, recursive=True))  # noqa: PTH207
 
 
 def _flatten_path(path: str) -> str:
@@ -100,7 +98,7 @@ def _preprocess_build_images(build_images_dir: str, output_dir: str) -> list[str
     input_gif = _get_file_paths(build_images_dir, ext="gif")
     input_jpg = _get_file_paths(build_images_dir, ext="jpg")
     output_paths = []
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    _ensure_dir_exists(output_dir, msg_name="doc generated image dir")
     for input_path in input_png + input_gif + input_jpg:
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
@@ -188,6 +186,8 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 def _save_failed_test_image(source_path: str, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
+    _ensure_dir_exists(_DocTestInfo.doc_failed_image_dir, msg_name="doc failed image dir")
+
     parent_dir = Path(category)
     dest_dirname = "from_cache" if Path(source_path).is_relative_to(_DocTestInfo.doc_image_cache_dir) else "from_build"
     Path(_DocTestInfo.doc_failed_image_dir).mkdir(exist_ok=True)
@@ -219,19 +219,22 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     if fail_msg and len(cached_image_paths) > 1:
         # Compare build image to other known valid versions
         msg_start = "This test has multiple cached images. It initially failed (as above)"
-        for current_cached_image_path in cached_image_paths:
-            error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(current_cached_image_path))
+        for path in cached_image_paths:
+            error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(path))
             if _check_compare_fail(test_case.test_name, error) is None:
                 # Convert failure into a warning
-                warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{current_cached_image_path}")
+                warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
                 fail_msg = None
+                current_cached_image_path = path
                 break
         else:  # Loop completed - test still fails
             fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(_DocTestInfo.doc_image_cache_dir, test_case.test_name)!s}"
 
     if fail_msg:
         _save_failed_test_image(test_case.docs_image_path, "errors")
-        _save_failed_test_image(current_cached_image_path, "errors")
+        # Save all cached images since they all failed
+        for path in cached_image_paths:
+            _save_failed_test_image(path, "errors")
         pytest.fail(fail_msg)
 
     if warn_msg:
