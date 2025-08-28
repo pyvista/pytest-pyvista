@@ -83,17 +83,17 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
     group.addoption(
         "--doc_mode",
         action="store_true",
-        help="Prevent test failure if a generated test image has no use.",
+        help="Enable documentation image testing.",
     )
     group.addoption(
         "--doc_images_dir",
         action="store",
-        help="Path to the sphinx build directory.",
+        help="Path to the documentation images.",
     )
     parser.addini(
         "doc_images_dir",
         default=None,
-        help="Path to the sphinx build directory.",
+        help="Path to the documentation images.",
     )
     _add_common_pytest_options(parser, doc=True)
 
