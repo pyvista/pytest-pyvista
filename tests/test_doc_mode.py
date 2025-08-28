@@ -142,4 +142,6 @@ def test_multiple_valid_images(pytester: pytest.Pytester, build_color, nested_su
     else:
         # Comparison with first image fails
         # Expect error was converted to a warning
-        result.stdout.re_match_lines([match])
+        result.stdout.re_match_lines(
+            [match, r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:", ".*im2.jpg"]
+        )

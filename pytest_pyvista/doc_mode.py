@@ -26,7 +26,6 @@ class _DocTestInfo:
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
     doc_failed_image_dir: Path
-    flaky_test_cases: list[str]
 
     @classmethod
     def init_dirs(cls, config: pytest.Config) -> None:
@@ -68,8 +67,6 @@ class _DocTestInfo:
             _ensure_dir_exists(doc_failed_image_dir, msg_name="doc failed image dir")
             path = doc_failed_image_dir
         cls.doc_failed_image_dir = path
-
-        cls.flaky_test_cases = [path.name for path in cls.doc_image_cache_dir.iterdir() if path.is_dir()]
 
 
 class _TestCaseTuple(NamedTuple):
@@ -185,7 +182,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         metafunc.parametrize("test_case", test_cases, ids=ids)
 
 
-def _save_failed_test_image(source_path: str, category: Literal["warnings", "errors", "flaky"]) -> None:
+def _save_failed_test_image(source_path: str, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
     parent_dir = Path(category)
     dest_dirname = "from_cache" if Path(source_path).is_relative_to(_DocTestInfo.doc_image_cache_dir) else "from_build"
@@ -218,20 +215,16 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     # Try again and compare with other cached images
     if fail_msg and len(cached_image_paths) > 1:
         # Compare build image to other known valid versions
+        msg_start = "This test has multiple cached images. It initially failed (as above)"
         for current_cached_image_path in cached_image_paths:
             error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(current_cached_image_path))
             if _check_compare_fail(test_case.test_name, error) is None:
                 # Convert failure into a warning
-                warn_msg = fail_msg + (
-                    f"\nTHIS IS A FLAKY TEST. It initially failed (as above) but passed when compared to:\n\t{current_cached_image_path}"
-                )
+                warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{current_cached_image_path}")
                 fail_msg = None
                 break
         else:  # Loop completed - test still fails
-            fail_msg += (
-                "\nTHIS IS A FLAKY TEST. It initially failed (as above) and failed again for "
-                "all images in \n\t{Path(_DocTestInfo.doc_image_cache_dir, test_case.test_name)!s}."
-            )
+            fail_msg += f"\n{msg_start} and failed again for all images in \n\t{Path(_DocTestInfo.doc_image_cache_dir, test_case.test_name)!s}."
 
     if fail_msg:
         _save_failed_test_image(test_case.docs_image_path, "errors")
@@ -240,7 +233,9 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         return
 
     if warn_msg:
-        parent_dir: Literal["flaky", "warnings"] = "flaky" if Path(test_case.cached_image_path).stem in _DocTestInfo.flaky_test_cases else "warnings"
+        parent_dir: Literal["errors_as_warnings", "warnings"] = (
+            "errors_as_warnings" if Path(test_case.cached_image_path).is_dir() else "warnings"
+        )
         _save_failed_test_image(test_case.docs_image_path, parent_dir)
         _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)
