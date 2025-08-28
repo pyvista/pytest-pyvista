@@ -189,11 +189,16 @@ def _save_failed_test_image(source_path: str, category: Literal["warnings", "err
     _ensure_dir_exists(_DocTestInfo.doc_failed_image_dir, msg_name="doc failed image dir")
 
     parent_dir = Path(category)
-    dest_dirname = "from_cache" if Path(source_path).is_relative_to(_DocTestInfo.doc_image_cache_dir) else "from_build"
+    if Path(source_path).is_relative_to(_DocTestInfo.doc_image_cache_dir):
+        rel = Path(source_path).relative_to(_DocTestInfo.doc_image_cache_dir)
+        dest_relative_dir = Path("from_cache") / rel.parent
+    else:
+        dest_relative_dir = Path("from_build")
+
     Path(_DocTestInfo.doc_failed_image_dir).mkdir(exist_ok=True)
     Path(_DocTestInfo.doc_failed_image_dir, parent_dir).mkdir(exist_ok=True)
-    dest_dir = Path(_DocTestInfo.doc_failed_image_dir, parent_dir, dest_dirname)
-    dest_dir.mkdir(exist_ok=True)
+    dest_dir = Path(_DocTestInfo.doc_failed_image_dir) / parent_dir / dest_relative_dir
+    dest_dir.mkdir(exist_ok=True, parents=True)
     dest_path = Path(dest_dir, Path(source_path).name)
     shutil.copy(source_path, dest_path)
 

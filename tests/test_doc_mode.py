@@ -148,7 +148,7 @@ ALMOST_RED = [254, 0, 0]
 
 
 @pytest.mark.parametrize("failed_image_dir", [True, False])
-@pytest.mark.parametrize("nested_subdir", [True])
+@pytest.mark.parametrize("nested_subdir", [True, False])
 @pytest.mark.parametrize(
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("green", pytest.ExitCode.TESTS_FAILED)]
 )
@@ -173,6 +173,8 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     assert result.ret == return_code
 
     partial_match = r"imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"
+    rel_subdirs = Path(subdir) / subdir if nested_subdir else subdir
+
     if build_color == ALMOST_RED:
         # Comparison with first image succeeds without issue
         result.stdout.no_re_match_line(rf".*UserWarning: {partial_match}")
@@ -192,7 +194,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         )
         # Test failed images are saved
         cached_original = blue_filename.with_suffix(".jpg")
-        from_cache = Path(failed, "errors_as_warnings", "from_cache", cached_original.name)
+        from_cache = Path(failed) / "errors_as_warnings" / "from_cache" / rel_subdirs / cached_original.name
         assert from_cache.is_file() == failed_image_dir
         if failed_image_dir:
             assert not file_has_changed(str(from_cache), str(cached_original))
@@ -216,7 +218,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         # Expect both red and blue cached images saved
         for filename in [blue_filename, red_filename]:
             cached_original = filename.with_suffix(".jpg")
-            from_cache = Path(failed, "errors", "from_cache", cached_original.name)
+            from_cache = Path(failed) / "errors" / "from_cache" / rel_subdirs / cached_original.name
             assert from_cache.is_file() == failed_image_dir
             if failed_image_dir:
                 assert not file_has_changed(str(from_cache), str(cached_original))
