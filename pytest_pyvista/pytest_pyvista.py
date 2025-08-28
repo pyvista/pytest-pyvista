@@ -536,6 +536,13 @@ def pytest_unconfigure(config: pytest.Config) -> None:  # noqa: ARG001
     _DocTestInfo._tempdirs = []  # noqa: SLF001
 
 
+def pytest_ignore_collect(path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
+    """Block regular file collection entirely when using --doc_mode."""
+    if config.getoption("doc_mode"):
+        return True
+    return None
+
+
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
     """Collect tests from doc images when --doc_mode is enabled."""
     if config.getoption("doc_mode"):
