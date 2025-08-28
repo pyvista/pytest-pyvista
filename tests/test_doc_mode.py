@@ -123,6 +123,8 @@ def test_compare_images_warning(pytester: pytest.Pytester, failed_image_dir) -> 
         args.extend(["--doc_failed_image_dir", failed])
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
+
+    # Check images saved to the failed image dir
     assert Path(failed).is_dir() == failed_image_dir
     assert Path(failed, "warnings").is_dir() == failed_image_dir
     if failed_image_dir:
@@ -140,8 +142,10 @@ def test_compare_images_warning(pytester: pytest.Pytester, failed_image_dir) -> 
 
 
 @pytest.mark.parametrize("nested_subdir", [True])
-@pytest.mark.parametrize("build_color", ["red", "blue"])
-def test_multiple_valid_images(pytester: pytest.Pytester, build_color, nested_subdir) -> None:
+@pytest.mark.parametrize(
+    ("build_color", "return_code"), [("red", pytest.ExitCode.OK), ("blue", pytest.ExitCode.OK), ("green", pytest.ExitCode.TESTS_FAILED)]
+)
+def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir) -> None:
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
@@ -154,15 +158,46 @@ def test_multiple_valid_images(pytester: pytest.Pytester, build_color, nested_su
     _preprocess_build_images(str(cache_parent / subdir), str(cache_parent / subdir))
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
-    assert result.ret == pytest.ExitCode.OK
-
-    match = r".*UserWarning: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"
+    assert result.ret == return_code
+    partial_match = r"imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"
     if build_color == "red":
         # Comparison with first image succeeds without issue
-        result.stdout.no_re_match_line(match)
-    else:
+        result.stdout.no_re_match_line(rf".*UserWarning: {partial_match}")
+    elif build_color == "blue":
         # Comparison with first image fails
         # Expect error was converted to a warning
         result.stdout.re_match_lines(
-            [match, r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:", ".*im2.jpg"]
+            [
+                rf".*UserWarning: {partial_match}",
+                r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
+                ".*im2.jpg",
+            ]
         )
+    else:  # 'green'
+        # Comparison with all cached images fails
+        result.stdout.re_match_lines(
+            [
+                rf".*Failed: {partial_match}",
+                r".*This test has multiple cached images. It initially failed \(as above\) and failed again for all images in:",
+                ".*cache/imcache",
+            ]
+        )
+
+
+def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
+    """Test that a warning is emitting for a cache subdir with only one image."""
+    cache = "cache"
+    images = "images"
+    subdir = "imcache"
+    make_cached_images(pytester.path / cache, subdir)
+    make_cached_images(pytester.path, images)
+    _preprocess_build_images(str(pytester.path / cache / subdir), str(pytester.path / cache / subdir))
+
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    assert result.ret == pytest.ExitCode.OK
+    match = [
+        ".*UserWarning: Cached image sub-directory only contains a single image.",
+        ".*Move the cached image 'cache/imcache/imcache.jpg' directly to the cached image dir 'cache'",
+        ".*or include more than one image in the sub-directory.",
+    ]
+    result.stdout.re_match_lines(match)

@@ -227,7 +227,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
                 fail_msg = None
                 break
         else:  # Loop completed - test still fails
-            fail_msg += f"\n{msg_start} and failed again for all images in \n\t{Path(_DocTestInfo.doc_image_cache_dir, test_case.test_name)!s}."
+            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(_DocTestInfo.doc_image_cache_dir, test_case.test_name)!s}"
 
     if fail_msg:
         _save_failed_test_image(test_case.docs_image_path, "errors")
@@ -273,10 +273,12 @@ def _warn_cached_image_path(cached_image_path: str) -> None:
     if cached_image_path is not None and Path(cached_image_path).is_dir():
         cached_images = _get_file_paths(cached_image_path, ext="jpg")
         if len(cached_images) == 1:
+            cache_dir = _DocTestInfo.doc_image_cache_dir
+            rel_path = Path(cache_dir.name) / Path(cached_images[0]).relative_to(cache_dir)
             msg = (
                 "Cached image sub-directory only contains a single image.\n"
-                f"Move the cached image directly to the cached image dir {_DocTestInfo.doc_image_cache_dir.name!r}\n"
-                f"or include more than one image in the sub-directory:\n\t{cached_image_path}"
+                f"Move the cached image {rel_path.as_posix()!r} directly to the cached image dir {cache_dir.name!r}\n"
+                f"or include more than one image in the sub-directory."
             )
             warnings.warn(msg, stacklevel=2)
 
