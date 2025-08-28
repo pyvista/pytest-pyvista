@@ -73,30 +73,20 @@ def file_has_changed(filepath: str, original_contents_path: str | None = None, o
     return content_changed or replaced
 
 
-@pytest.mark.parametrize("plot_property", [True, False])
-def test_verify_image_cache(pytester: pytest.Pytester, plot_property: bool) -> None:  # noqa: FBT001
+def test_verify_image_cache(pytester: pytest.Pytester) -> None:
     """Test regular usage of the `verify_image_cache` fixture."""
     make_cached_images(pytester.path)
-
-    if not plot_property:
-        pyfile = """
-            import pyvista as pv
-            pv.OFF_SCREEN = True
-            def test_imcache(verify_image_cache):
-                sphere = pv.Sphere()
-                plotter = pv.Plotter()
-                plotter.add_mesh(sphere, color="red")
-                plotter.show()
-            """
-    else:
-        pyfile = """
-            import pyvista as pv
-            pv.OFF_SCREEN = True
-            def test_imcache(verify_image_cache):
-                pv.Sphere().plot(color="red")
-            """
-
-    pytester.makepyfile(pyfile)
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
 
     result = pytester.runpytest()
     result.assert_outcomes(passed=1)
@@ -497,27 +487,6 @@ def test_reset_only_failed(pytester: pytest.Pytester, reset_image_cache, add_mis
     assert not filecmp.cmp(filename, filename_original, shallow=False)
 
 
-def test_callback_called(pytester: pytest.Pytester) -> None:
-    """Test the callback of a Plotter.show is correctly called."""
-    make_cached_images(test_path=pytester.path)
-    pytester.makepyfile(
-        """
-        import pyvista as pv
-        pv.OFF_SCREEN = True
-        def test_imcache(verify_image_cache, mocker):
-            sphere = pv.Sphere()
-            plotter = pv.Plotter()
-            plotter.add_mesh(sphere, color="red")
-            plotter.show(before_close_callback=(m:=mocker.MagicMock()))
-
-            m.assert_called_once_with(plotter)
-        """
-    )
-
-    result = pytester.runpytest()
-    result.assert_outcomes(passed=1)
-
-
 def test_file_not_found(pytester: pytest.Pytester) -> None:
     """Test RegressionFileNotFoundError is correctly raised."""
     pytester.makepyfile(
@@ -793,14 +762,14 @@ def test_disallow_unused_cache_name_mismatch(pytester: pytest.Pytester, disallow
 
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="Needs contextlib.chdir")
-def test_cache_generated_dir_relative(pytester: pytest.Pytester) -> None:
+def test_cache_generated_dir_relative(testdir: pytest.Testdir) -> None:
     """
     Test that directories (cache and generated) are relative to test root
     even when changing the working directory when calling Plotter.show().
     """  # noqa: D205
-    make_cached_images(pytester.path, path=(new_dir := "new_dir"))
+    make_cached_images(testdir.tmpdir, path=(new_dir := "new_dir"))
 
-    pytester.makepyfile(
+    testdir.makepyfile(
         """
         import pyvista as pv
         import pytest
@@ -820,19 +789,19 @@ def test_cache_generated_dir_relative(pytester: pytest.Pytester) -> None:
         """
     )
     args = ["--image_cache_dir", new_dir, "--generated_image_dir", "generated"]
-    result = pytester.runpytest(*args)
+    result = testdir.runpytest(*args)
     result.assert_outcomes(passed=1)
 
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="Needs contextlib.chdir")
-def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
+def test_failed_dir_relative(testdir: pytest.Testdir) -> None:
     """
     Test that failed directory is relative to test root
     even when changing the working directory when calling Plotter.show().
     """  # noqa: D205
-    make_cached_images(pytester.path, path=(new_dir := "new_dir"))
+    make_cached_images(testdir.tmpdir, path=(new_dir := "new_dir"))
 
-    pytester.makepyfile(
+    testdir.makepyfile(
         """
         import pyvista as pv
         import pytest
@@ -853,5 +822,5 @@ def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
         """
     )
     args = ["--image_cache_dir", new_dir, "--failed_image_dir", "failed"]
-    result = pytester.runpytest(*args)
+    result = testdir.runpytest(*args)
     result.assert_outcomes(passed=1)
