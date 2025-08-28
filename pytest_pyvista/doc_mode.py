@@ -6,6 +6,8 @@ import glob
 import os
 from pathlib import Path
 import shutil
+import tempfile
+from typing import ClassVar
 from typing import Literal
 from typing import NamedTuple
 from typing import cast
@@ -26,6 +28,7 @@ class _DocTestInfo:
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
     doc_failed_image_dir: Path
+    _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
     @classmethod
     def init_dirs(cls, config: pytest.Config) -> None:
@@ -50,22 +53,23 @@ class _DocTestInfo:
 
         doc_generated_image_dir = _get_option_from_config_or_ini(config, "doc_generated_image_dir", is_dir=True)
         if doc_generated_image_dir is None:
-            # TODO: make tempdir and clean it up post-test
-            path = Path("_generated")
-            path.mkdir(exist_ok=True)
+            # create a temp dir and keep it around until test session ends
+            tempdir = tempfile.TemporaryDirectory(prefix="pytest_doc_generated_image_dir")
+            cls._tempdirs.append(tempdir)
+            path = Path(tempdir.name)
         else:
-            _ensure_dir_exists(doc_generated_image_dir, msg_name="doc generated image dir")
             path = Path(doc_generated_image_dir)
+        _ensure_dir_exists(path, msg_name="doc generated image dir")
         cls.doc_generated_image_dir = path
 
         doc_failed_image_dir = _get_option_from_config_or_ini(config, "doc_failed_image_dir", is_dir=True)
         if doc_failed_image_dir is None:
-            # TODO: make tempdir and clean it up post-test
-            path = Path("_failed")
-            path.mkdir(exist_ok=True)
+            tempdir = tempfile.TemporaryDirectory(prefix="pytest_doc_failed_image_dir")
+            cls._tempdirs.append(tempdir)
+            path = Path(tempdir.name)
         else:
-            _ensure_dir_exists(doc_failed_image_dir, msg_name="doc failed image dir")
             path = doc_failed_image_dir
+        _ensure_dir_exists(path, msg_name="doc failed image dir")
         cls.doc_failed_image_dir = path
 
 
@@ -101,7 +105,7 @@ def _preprocess_build_images(build_images_dir: str, output_dir: str) -> list[str
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
         output_file_name = _flatten_path(os.path.relpath(input_path, build_images_dir))
-        output_file_name = Path(output_file_name).with_suffix(".jpg")
+        output_file_name = str(Path(output_file_name).with_suffix(".jpg"))
         output_path = str(Path(output_dir) / output_file_name)
         output_paths.append(output_path)
 
@@ -142,7 +146,7 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
 
     # process test images
     test_image_paths = _preprocess_build_images(str(_DocTestInfo.doc_images_dir), str(_DocTestInfo.doc_generated_image_dir))
-    [add_to_dict(path, "docs") for path in test_image_paths]
+    [add_to_dict(path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
     cache_dir = Path(_DocTestInfo.doc_image_cache_dir)
@@ -199,7 +203,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(*test_case)
     if fail_msg:
-        _save_failed_test_image(fail_source, "errors")
+        _save_failed_test_image(cast("str", fail_source), "errors")
         pytest.fail(fail_msg)
         return
 
@@ -233,9 +237,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         return
 
     if warn_msg:
-        parent_dir: Literal["errors_as_warnings", "warnings"] = (
-            "errors_as_warnings" if Path(test_case.cached_image_path).is_dir() else "warnings"
-        )
+        parent_dir: Literal["errors_as_warnings", "warnings"] = "errors_as_warnings" if Path(test_case.cached_image_path).is_dir() else "warnings"
         _save_failed_test_image(test_case.docs_image_path, parent_dir)
         _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)

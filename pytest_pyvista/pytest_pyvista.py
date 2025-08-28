@@ -527,6 +527,15 @@ def pytest_configure(config: pytest.Config) -> None:
         _DocTestInfo.init_dirs(config)
 
 
+def pytest_unconfigure(config: pytest.Config) -> None:  # noqa: ARG001
+    """Remove temporary files."""
+    from pytest_pyvista.doc_mode import _DocTestInfo  # noqa: PLC0415
+
+    for tempdir in _DocTestInfo._tempdirs:  # noqa: SLF001
+        tempdir.cleanup()
+    _DocTestInfo._tempdirs = []  # noqa: SLF001
+
+
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
     """Collect tests from doc images when --doc_mode is enabled."""
     if config.getoption("doc_mode"):
