@@ -529,11 +529,12 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_unconfigure(config: pytest.Config) -> None:  # noqa: ARG001
     """Remove temporary files."""
-    from pytest_pyvista.doc_mode import _DocTestInfo  # noqa: PLC0415
+    if config.getoption("doc_mode"):
+        from pytest_pyvista.doc_mode import _DocTestInfo  # noqa: PLC0415
 
-    for tempdir in _DocTestInfo._tempdirs:  # noqa: SLF001
-        tempdir.cleanup()
-    _DocTestInfo._tempdirs = []  # noqa: SLF001
+        for tempdir in _DocTestInfo._tempdirs:  # noqa: SLF001
+            tempdir.cleanup()
+        _DocTestInfo._tempdirs = []  # noqa: SLF001
 
 
 def pytest_ignore_collect(path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
