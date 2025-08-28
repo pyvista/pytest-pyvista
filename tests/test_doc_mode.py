@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PIL import Image
 import pytest
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
+from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images
 
 
@@ -104,18 +107,36 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines([r".*Failed: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"])
 
 
-def test_compare_images_warning(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("failed_image_dir", [True, False])
+def test_compare_images_warning(pytester: pytest.Pytester, failed_image_dir) -> None:
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
-    make_cached_images(pytester.path, cache, color=[255, 0, 0])
-    make_cached_images(pytester.path, images, color=[240, 0, 0])
+    name = "im.png"
+    make_cached_images(pytester.path, cache, name=name, color=[255, 0, 0])
+    make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
     _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
+    failed = "failed"
+    if failed_image_dir:
+        args.extend(["--doc_failed_image_dir", failed])
+    result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
+    assert Path(failed).is_dir() == failed_image_dir
+    assert Path(failed, "warnings").is_dir() == failed_image_dir
+    if failed_image_dir:
+        name = str(Path(name).with_suffix(".jpg"))
+        original = Path(cache, name)
+        from_cache = Path(failed, "warnings", "from_cache", name)
+        assert not file_has_changed(str(from_cache), str(original))
+        from_build = Path(failed, "warnings", "from_build", name)
+        assert from_build.is_file()
+        assert file_has_changed(str(from_build), str(from_cache))
 
-    result.stdout.re_match_lines([r".*UserWarning: imcache Exceeded image regression warning of 200\.0 with an image error of [0-9]+\.[0-9]+"])
+    result.stdout.re_match_lines(
+        [rf".*UserWarning: {Path(name).stem} Exceeded image regression warning of 200\.0 with an image error of [0-9]+\.[0-9]+"]
+    )
 
 
 @pytest.mark.parametrize("nested_subdir", [True])

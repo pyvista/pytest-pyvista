@@ -205,7 +205,6 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     if fail_msg:
         _save_failed_test_image(cast("str", fail_source), "errors")
         pytest.fail(fail_msg)
-        return
 
     cached_image_paths = (
         [test_case.cached_image_path] if Path(test_case.cached_image_path).is_file() else _get_file_paths(test_case.cached_image_path, ext="jpg")
@@ -234,7 +233,6 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         _save_failed_test_image(test_case.docs_image_path, "errors")
         _save_failed_test_image(current_cached_image_path, "errors")
         pytest.fail(fail_msg)
-        return
 
     if warn_msg:
         parent_dir: Literal["errors_as_warnings", "warnings"] = "errors_as_warnings" if Path(test_case.cached_image_path).is_dir() else "warnings"
