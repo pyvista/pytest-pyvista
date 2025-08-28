@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PIL import Image
@@ -12,7 +13,8 @@ from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images
 
 
-def test_doc_mode(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("generated_image_dir", [True, False])
+def test_doc_mode(pytester: pytest.Pytester, generated_image_dir) -> None:
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     images = "images"
@@ -20,8 +22,16 @@ def test_doc_mode(pytester: pytest.Pytester) -> None:
     make_cached_images(pytester.path, images)
     _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
+    generated = "generated"
+    if generated_image_dir:
+        args.extend(["--doc_generated_image_dir", generated])
+    result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
+
+    if generated_image_dir:
+        assert Path(generated).is_dir()
+        assert os.listdir(generated) == ["imcache.jpg"]  # noqa: PTH208
 
 
 def test_cli_errors(pytester: pytest.Pytester) -> None:
