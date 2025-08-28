@@ -118,15 +118,19 @@ def test_compare_images_warning(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines([r".*UserWarning: imcache Exceeded image regression warning of 200\.0 with an image error of [0-9]+\.[0-9]+"])
 
 
+@pytest.mark.parametrize("nested_subdir", [True])
 @pytest.mark.parametrize("build_color", ["red", "blue"])
-def test_multiple_valid_images(pytester: pytest.Pytester, build_color) -> None:
+def test_multiple_valid_images(pytester: pytest.Pytester, build_color, nested_subdir) -> None:
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
-    make_cached_images(pytester.path / cache, "imcache", name="im1.png", color="red")
-    make_cached_images(pytester.path / cache, "imcache", name="im2.png", color="blue")
+    subdir = "imcache"
+    cache_parent = pytester.path / cache
+    cache_parent = cache_parent / subdir if nested_subdir else cache_parent
+    make_cached_images(cache_parent, subdir, name="im1.png", color="red")
+    make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
     make_cached_images(pytester.path, images, color=build_color)
-    _preprocess_build_images(str(pytester.path / cache / "imcache"), str(pytester.path / cache / "imcache"))
+    _preprocess_build_images(str(cache_parent / subdir), str(cache_parent / subdir))
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.OK
