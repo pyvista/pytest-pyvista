@@ -208,7 +208,7 @@ When executed, the test will first pre-process the build images. The images are:
 #. Resized to a maximum of 400x400 pixels.
 #. Renamed so that each file's parent directories are included in the name.
 #. Saved as JPEG images with in a temporary directory. The directory is flat with no
-   subdirectories.
+   sub-directories.
 
    .. note::
       These temporary images may be saved using the ``--doc_generated_image_dir`` flag.
@@ -245,7 +245,7 @@ Can be replaced with multiple versions of the image:
 
 .. note::
 
-   The image names in subdirecties can be arbitrary, e.g. ``0.jpg`` or
+   The image names in sub-directories can be arbitrary, e.g. ``0.jpg`` or
    ``foo.jpg``, and can even be nested in sub-sub-directories (the names
    of sub-sub-directories can also be arbitrary).
 
