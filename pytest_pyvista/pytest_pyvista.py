@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import os
 from pathlib import Path
 import platform
@@ -10,6 +12,7 @@ from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
 from typing import cast
+import uuid
 import warnings
 
 import pytest
@@ -18,7 +21,6 @@ from pyvista import Plotter
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
-
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
@@ -355,16 +357,29 @@ def _test_name_from_image_name(image_name: str) -> str:
 @pytest.hookimpl
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
     """Execute after the whole test run completes."""
+    if hasattr(config, "workerinput"):
+        # on an pytest-xdist worker node, exit early
+        return
+
     if config.getoption("disallow_unused_cache"):
         cache_path = Path(_get_option_from_config_or_ini(config, "image_cache_dir"))
         cached_image_names = {f.name for f in cache_path.glob("*.png")}
-        unused_cached_image_names = cached_image_names - VISITED_CACHED_IMAGE_NAMES - SKIPPED_CACHED_IMAGE_NAMES
+
+        image_names_dir = getattr(config, "image_names_dir", None)
+        if image_names_dir:
+            visited_cached_image_names = _combine_temp_jsons(image_names_dir, "visited")
+            skipped_cached_image_names = _combine_temp_jsons(image_names_dir, "skipped")
+        else:
+            visited_cached_image_names = set()
+            skipped_cached_image_names = set()
+
+        unused_cached_image_names = cached_image_names - visited_cached_image_names - skipped_cached_image_names
 
         # Exclude images from skipped tests where multiple images are generated
         unused_skipped = unused_cached_image_names.copy()
         for image_name in unused_cached_image_names:
             base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name))
-            if base_image_name in SKIPPED_CACHED_IMAGE_NAMES:
+            if base_image_name in skipped_cached_image_names:
                 unused_skipped.remove(image_name)
 
         if unused_skipped:
@@ -387,7 +402,9 @@ def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
     if not Path(dirpath).is_dir():
         msg = f"pyvista test {msg_name}: {dirpath} does not yet exist.  Creating dir."
         warnings.warn(msg, stacklevel=2)
-        Path(dirpath).mkdir(parents=True)
+
+        # exist_ok to allow for multi-threading
+        Path(dirpath).mkdir(exist_ok=True, parents=True)
 
 
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False):  # noqa: ANN202
@@ -425,6 +442,20 @@ class _ChainedCallbacks:
         """Call all input functions in chain for the given Plotter instance."""
         for f in self.funcs:
             f(plotter)
+
+
+@pytest.hookimpl
+def pytest_configure(config: pytest.Config) -> None:
+    """Configure pytest session."""
+    # create a image names directory for individual or multiple workers to write to
+    if config.getoption("disallow_unused_cache"):
+        config.image_names_dir = Path(config.cache.makedir("pyvista"))
+        config.image_names_dir.mkdir(exist_ok=True)
+
+        # ensure this directory is empty as it might be left over from a previous test
+        with contextlib.suppress(OSError):
+            for filename in config.image_names_dir.iterdir():
+                filename.unlink()
 
 
 @pytest.fixture
@@ -490,3 +521,29 @@ def verify_image_cache(
                 "Fixture `verify_image_cache` is used but no images were generated.\n"
                 "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
             )
+
+
+def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
+    # Read all JSON files from a directory and combine into single set
+    combined_data: set[str] = set()
+    if json_dir.exists():
+        for json_file in json_dir.glob(f"{prefix}*.json"):
+            with json_file.open() as f:
+                data = json.load(f)
+                combined_data.update(data)
+
+    return combined_data
+
+
+@pytest.hookimpl
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
+    """Write skipped and visited image names to disk."""
+    image_names_dir = getattr(session.config, "image_names_dir", None)
+    if image_names_dir:
+        test_id = uuid.uuid4()
+        visited_file = image_names_dir / f"visited_{test_id}_cache_names.json"
+        skipped_file = image_names_dir / f"skipped_{test_id}_cache_names.json"
+
+        # Fixed: Write JSON instead of plain text
+        visited_file.write_text(json.dumps(list(VISITED_CACHED_IMAGE_NAMES)))
+        skipped_file.write_text(json.dumps(list(SKIPPED_CACHED_IMAGE_NAMES)))
