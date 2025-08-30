@@ -35,7 +35,7 @@ def test_arguments(pytester: pytest.Pytester) -> None:
 def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red") -> Path:
     """Make image cache in `test_path/path`."""
     d = Path(test_path, path)
-    d.mkdir(exist_ok=True)
+    d.mkdir(exist_ok=True, parents=True)
     sphere = pv.Sphere()
     plotter = pv.Plotter()
     plotter.add_mesh(sphere, color=color)
