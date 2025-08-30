@@ -218,7 +218,7 @@ The tests have three main modes of failure:
 
 #.  An image is in the cache but is missing from the build.
 #.  An image is in the build but is missing from the cache.
-#.  The error threshold when comparing two images is exceed.
+#.  The error threshold when comparing two images is exceeded.
 
 .. note::
    Use the ``--doc_failed_image_dir`` flag to save copies of the images for
