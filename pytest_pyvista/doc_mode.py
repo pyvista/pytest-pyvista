@@ -98,7 +98,7 @@ def _preprocess_build_images(build_images_dir: str, output_dir: str) -> list[str
     input_gif = _get_file_paths(build_images_dir, ext="gif")
     input_jpg = _get_file_paths(build_images_dir, ext="jpg")
     output_paths = []
-    _ensure_dir_exists(output_dir, msg_name="doc generated image dir")
+    Path(output_dir).mkdir(exist_ok=True)
     for input_path in input_png + input_gif + input_jpg:
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
