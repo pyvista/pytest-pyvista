@@ -32,43 +32,31 @@ class _DocTestInfo:
 
     @classmethod
     def init_dirs(cls, config: pytest.Config) -> None:
-        must_be_specified_template = "{!r} must be specified when using --doc_mode"
-        must_be_valid_template = "{!r} must be a valid directory. Got:\n{}."
+        def require_existing_dir(option: str) -> Path:
+            """Fetch a required directory option and ensure it's valid."""
+            path = _get_option_from_config_or_ini(config, option, is_dir=True)
+            if path is None:
+                msg = f"{option!r} must be specified when using --doc_mode"
+                raise ValueError(msg)
+            if not path.is_dir():
+                msg = f"{option!r} must be a valid directory. Got:\n{path}."
+                raise ValueError(msg)
+            return path
 
-        option = "doc_images_dir"
-        doc_images_dir = _get_option_from_config_or_ini(config, option, is_dir=True)
-        if doc_images_dir is None:
-            raise ValueError(must_be_specified_template.format(option))
-        if not doc_images_dir.is_dir():
-            raise ValueError(must_be_valid_template.format(option, doc_images_dir))
-        cls.doc_images_dir = doc_images_dir
+        def optional_dir_with_temp(option: str, prefix: str) -> Path:
+            """Fetch an optional directory option or create a TemporaryDirectory if missing."""
+            path = _get_option_from_config_or_ini(config, option, is_dir=True)
+            if path is None:
+                tempdir = tempfile.TemporaryDirectory(prefix=prefix)
+                cls._tempdirs.append(tempdir)
+                return Path(tempdir.name)
+            return Path(path)
 
-        option = "doc_image_cache_dir"
-        doc_image_cache_dir = _get_option_from_config_or_ini(config, option, is_dir=True)
-        if doc_image_cache_dir is None:
-            raise ValueError(must_be_specified_template.format(option))
-        if not doc_image_cache_dir.is_dir():
-            raise ValueError(must_be_valid_template.format(option, doc_image_cache_dir))
-        cls.doc_image_cache_dir = doc_image_cache_dir
+        cls.doc_images_dir = require_existing_dir("doc_images_dir")
+        cls.doc_image_cache_dir = require_existing_dir("doc_image_cache_dir")
 
-        doc_generated_image_dir = _get_option_from_config_or_ini(config, "doc_generated_image_dir", is_dir=True)
-        if doc_generated_image_dir is None:
-            # create a temp dir and keep it around until test session ends
-            tempdir = tempfile.TemporaryDirectory(prefix="pytest_doc_generated_image_dir")
-            cls._tempdirs.append(tempdir)
-            path = Path(tempdir.name)
-        else:
-            path = Path(doc_generated_image_dir)
-        cls.doc_generated_image_dir = path
-
-        doc_failed_image_dir = _get_option_from_config_or_ini(config, "doc_failed_image_dir", is_dir=True)
-        if doc_failed_image_dir is None:
-            tempdir = tempfile.TemporaryDirectory(prefix="pytest_doc_failed_image_dir")
-            cls._tempdirs.append(tempdir)
-            path = Path(tempdir.name)
-        else:
-            path = doc_failed_image_dir
-        cls.doc_failed_image_dir = path
+        cls.doc_generated_image_dir = optional_dir_with_temp("doc_generated_image_dir", prefix="pytest_doc_generated_image_dir")
+        cls.doc_failed_image_dir = optional_dir_with_temp("doc_failed_image_dir", prefix="pytest_doc_failed_image_dir")
 
 
 class _TestCaseTuple(NamedTuple):
