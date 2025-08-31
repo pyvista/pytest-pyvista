@@ -109,12 +109,18 @@ jobs:
           pip list
 
       - name: Unit Testing
-        run: xvfb-run coverage run --branch --source=pytest_pyvista -m pytest --verbose -n2
+        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2
       - uses: codecov/codecov-action@v5
         if: matrix.python-version == '3.9'
         name: "Upload coverage to CodeCov"
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Combine coverage
+        run: |
+          coverage combine
+          coverage report
+          coverage xml
 
       - name: Upload distribution artifacts
         if: matrix.python-version == '3.12'
