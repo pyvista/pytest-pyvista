@@ -109,7 +109,7 @@ jobs:
           pip list
 
       - name: Unit Testing
-        run: xvfb-run coverage run --branch --source=pytest_pyvista -m pytest --verbose -n2
+        run: xvfb-run coverage run --branch --source=pytest_pyvista -m pytest --verbose
       - uses: codecov/codecov-action@v5
         if: matrix.python-version == '3.9'
         name: "Upload coverage to CodeCov"
@@ -188,7 +188,7 @@ jobs:
         working-directory: pyvista
 
       - name: Unit Testing
-        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache
+        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache -n2
         working-directory: pyvista
 
       - name: Upload generated image artifact
