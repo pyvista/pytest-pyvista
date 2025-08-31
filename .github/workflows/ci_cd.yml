@@ -108,16 +108,22 @@ jobs:
           which python
           pip list
 
+      # run unit testing with both parallel and without parallel flags but
+      # using `--parallel-mode` flag to ensure coverage files are unique, see
+      # https://coverage.readthedocs.io/en/latest/cmd.html
       - name: Unit Testing
+        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+      - name: Unit Testing with parallel flag
         run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2
+
+      - name: Combine coverage
+        run: coverage combine || true
+
       - uses: codecov/codecov-action@v5
         if: matrix.python-version == '3.9'
         name: "Upload coverage to CodeCov"
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Combine coverage
-        run: coverage combine || true
 
       - name: Upload distribution artifacts
         if: matrix.python-version == '3.12'
