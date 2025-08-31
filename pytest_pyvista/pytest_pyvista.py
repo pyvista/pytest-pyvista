@@ -475,9 +475,9 @@ class _ChainedCallbacks:
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
     if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocTestInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
-        _DocTestInfo.init_dirs(config)
+        _DocModeInfo.init_dirs(config)
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
@@ -584,11 +584,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
     if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocTestInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
-        for tempdir in _DocTestInfo._tempdirs:  # noqa: SLF001
+        for tempdir in _DocModeInfo._tempdirs:  # noqa: SLF001
             tempdir.cleanup()
-        _DocTestInfo._tempdirs = []  # noqa: SLF001
+        _DocModeInfo._tempdirs = []  # noqa: SLF001
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001

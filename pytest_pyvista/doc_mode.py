@@ -22,7 +22,7 @@ from .pytest_pyvista import _get_option_from_config_or_ini
 MAX_IMAGE_DIM = 400  # pixels
 
 
-class _DocTestInfo:
+class _DocModeInfo:
     doc_images_dir: Path
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
@@ -130,11 +130,11 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
         test_cases_dict[test_name].setdefault(key, filepath)
 
     # process test images
-    test_image_paths = _preprocess_build_images(str(_DocTestInfo.doc_images_dir), str(_DocTestInfo.doc_generated_image_dir))
+    test_image_paths = _preprocess_build_images(str(_DocModeInfo.doc_images_dir), str(_DocModeInfo.doc_generated_image_dir))
     [add_to_dict(path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
-    cache_dir = Path(_DocTestInfo.doc_image_cache_dir)
+    cache_dir = Path(_DocModeInfo.doc_image_cache_dir)
     cached_image_paths = _get_file_paths(str(cache_dir), ext="jpg")
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
@@ -173,18 +173,18 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 def _save_failed_test_image(source_path: str, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
-    _DocTestInfo.doc_failed_image_dir.mkdir(exist_ok=True)
+    _DocModeInfo.doc_failed_image_dir.mkdir(exist_ok=True)
 
     parent_dir = Path(category)
-    if Path(source_path).is_relative_to(_DocTestInfo.doc_image_cache_dir):
-        rel = Path(source_path).relative_to(_DocTestInfo.doc_image_cache_dir)
+    if Path(source_path).is_relative_to(_DocModeInfo.doc_image_cache_dir):
+        rel = Path(source_path).relative_to(_DocModeInfo.doc_image_cache_dir)
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
         dest_relative_dir = Path("from_build")
 
-    Path(_DocTestInfo.doc_failed_image_dir).mkdir(exist_ok=True)
-    Path(_DocTestInfo.doc_failed_image_dir, parent_dir).mkdir(exist_ok=True)
-    dest_dir = Path(_DocTestInfo.doc_failed_image_dir) / parent_dir / dest_relative_dir
+    Path(_DocModeInfo.doc_failed_image_dir).mkdir(exist_ok=True)
+    Path(_DocModeInfo.doc_failed_image_dir, parent_dir).mkdir(exist_ok=True)
+    dest_dir = Path(_DocModeInfo.doc_failed_image_dir) / parent_dir / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
     dest_path = Path(dest_dir, Path(source_path).name)
     shutil.copy(source_path, dest_path)
@@ -220,7 +220,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
                 current_cached_image_path = path
                 break
         else:  # Loop completed - test still fails
-            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(_DocTestInfo.doc_image_cache_dir, test_case.test_name)!s}"
+            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(_DocModeInfo.doc_image_cache_dir, test_case.test_name)!s}"
 
     if fail_msg:
         _save_failed_test_image(test_case.docs_image_path, "errors")
@@ -243,13 +243,13 @@ def _test_both_images_exist(filename: str, docs_image_path: str, cached_image_pa
             exists = "cache"
             missing = "docs build"
             exists_path = cached_image_path
-            missing_path = _DocTestInfo.doc_images_dir
+            missing_path = _DocModeInfo.doc_images_dir
         else:
             source_path = docs_image_path
             exists = "docs build"
             missing = "cache"
-            exists_path = _DocTestInfo.doc_images_dir
-            missing_path = _DocTestInfo.doc_image_cache_dir
+            exists_path = _DocModeInfo.doc_images_dir
+            missing_path = _DocModeInfo.doc_image_cache_dir
 
         msg = (
             f"Test setup failed for test image:\n"
@@ -268,7 +268,7 @@ def _warn_cached_image_path(cached_image_path: str) -> None:
     if cached_image_path is not None and Path(cached_image_path).is_dir():
         cached_images = _get_file_paths(cached_image_path, ext="jpg")
         if len(cached_images) == 1:
-            cache_dir = _DocTestInfo.doc_image_cache_dir
+            cache_dir = _DocModeInfo.doc_image_cache_dir
             rel_path = Path(cache_dir.name) / Path(cached_images[0]).relative_to(cache_dir)
             msg = (
                 "Cached image sub-directory only contains a single image.\n"
