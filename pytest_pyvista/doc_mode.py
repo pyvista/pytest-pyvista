@@ -17,7 +17,6 @@ from PIL import Image
 import pytest
 import pyvista as pv
 
-from .pytest_pyvista import _ensure_dir_exists
 from .pytest_pyvista import _get_option_from_config_or_ini
 
 MAX_IMAGE_DIM = 400  # pixels
@@ -174,7 +173,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 def _save_failed_test_image(source_path: str, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
-    _ensure_dir_exists(_DocTestInfo.doc_failed_image_dir, msg_name="doc failed image dir")
+    _DocTestInfo.doc_failed_image_dir.mkdir(exist_ok=True)
 
     parent_dir = Path(category)
     if Path(source_path).is_relative_to(_DocTestInfo.doc_image_cache_dir):
