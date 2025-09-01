@@ -855,3 +855,29 @@ def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
     args = ["--image_cache_dir", new_dir, "--failed_image_dir", "failed"]
     result = pytester.runpytest(*args)
     result.assert_outcomes(passed=1)
+
+
+def test_auto_close(pytester: pytest.Pytester) -> None:
+    """Test when using auto_close=False."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_auto_close(verify_image_cache):
+            verify_image_cache.skip = True
+            pl = pv.Plotter()
+            pl.show(auto_close=False)
+            assert pl._before_close_callback is not None
+            pl.close()
+
+        def test_auto_close_2(verify_image_cache, mocker):
+            verify_image_cache.skip = True
+            plotter = pv.Plotter()
+            plotter.show(auto_close=False, before_close_callback=(m:=mocker.MagicMock()))
+            plotter.close()
+            m.assert_called_once_with(plotter)
+        """
+    )
+
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=2)
