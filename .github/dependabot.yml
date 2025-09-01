@@ -25,3 +25,4 @@ updates:
       actions:
         patterns:
           - "*"
+    rebase-strategy: "disabled"
