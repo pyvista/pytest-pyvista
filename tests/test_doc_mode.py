@@ -7,10 +7,12 @@ from pathlib import Path
 
 from PIL import Image
 import pytest
+import pyvista as pv
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images
+from tests.test_pyvista import make_multiple_cached_images
 
 
 @pytest.mark.parametrize("generated_image_dir", [True, False])
@@ -256,3 +258,27 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
         ".*or include more than one image in the sub-directory.",
     ]
     result.stdout.re_match_lines(match)
+
+
+def test_multiple_cache_images_parallel(pytester: pytest.Pytester) -> None:
+    """Ensure that doc_mode works with multiple workers."""
+    cache = "cache"
+    images = "images"
+
+    n_images = 50
+    make_multiple_cached_images(pytester.path, cache, n_images=n_images)
+    image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images)
+
+    _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
+
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2")
+    assert result.ret == pytest.ExitCode.OK
+
+    # replace a single image with a different image
+    img_idx = 34
+    pv.Cube().plot(screenshot=image_filenames[img_idx])
+
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2")
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    assert f"imcache{img_idx} Exceeded image regression error" in str(result.stdout)
