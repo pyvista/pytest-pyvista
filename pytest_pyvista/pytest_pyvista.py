@@ -491,7 +491,15 @@ def verify_image_cache(
         if user_callback is None:  # special case encountered when using the `plot` property of pyvista objects
             user_callback = lambda *a: ...  # noqa: ARG005, E731
 
-        kwargs[key] = _ChainedCallbacks(user_callback, verify_image_cache)
+        # Set kwargs to None in order to get the callback from the
+        # global theme one which is patched by the current callback.
+        # This is done to make sure that the weak ref `_before_close_callback` is not dead
+        # when using `auto_close=False` on the plotter
+        # See https://github.com/pyvista/pytest-pyvista/issues/172
+        callback = _ChainedCallbacks(user_callback, verify_image_cache)
+        kwargs[key] = None
+
+        monkeypatch.setattr(pyvista.global_theme, "before_close_callback", callback)
 
         return old_show(*args, **kwargs)
 
