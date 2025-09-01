@@ -171,7 +171,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch
+      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch maint/close_plotter --single-branch
 
       - name: upgrade pip
         run: pip install --upgrade pip
