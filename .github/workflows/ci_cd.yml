@@ -112,9 +112,9 @@ jobs:
       # using `--parallel-mode` flag to ensure coverage files are unique, see
       # https://coverage.readthedocs.io/en/latest/cmd.html
       - name: Unit Testing
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose --disallow_unused_cache
+        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
       - name: Unit Testing with parallel flag
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2 --disallow_unused_cache
+        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2
 
       - name: Combine coverage
         run: coverage combine || true
