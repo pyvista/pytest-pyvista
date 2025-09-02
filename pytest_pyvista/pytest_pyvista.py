@@ -216,7 +216,7 @@ class VerifyImageCache:
         skip_macos = platform.system() == "Darwin" and macos_skip_image_cache
         return skip or ignore_image_cache or skip_windows or skip_macos
 
-    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912
+    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912, PLR0915
         """
         Either store or validate an image.
 
@@ -246,6 +246,9 @@ class VerifyImageCache:
         # "test_" to get the name for the image.
         image_name = _image_name_from_test_name(test_name)
         image_filename = Path(self.cache_dir, image_name)
+
+        cached_image_paths = _get_file_paths(image_filename, ext="jpg") if image_filename.is_dir() else [image_filename]
+        current_cached_image = cached_image_paths[0]
         gen_image_filename = None if self.generated_image_dir is None else Path(self.generated_image_dir, image_name)
 
         if VerifyImageCache._is_skipped(
@@ -258,7 +261,7 @@ class VerifyImageCache:
             return
         VISITED_CACHED_IMAGE_NAMES.add(image_name)
 
-        if not image_filename.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
+        if not current_cached_image.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
 
             # Save images as needed before error
@@ -268,53 +271,79 @@ class VerifyImageCache:
                 self._save_failed_test_images("error", plotter, image_name)
 
             remove_plotter_close_callback()
-            msg = f"{image_filename} does not exist in image cache"
+            msg = f"{current_cached_image} does not exist in image cache"
             raise RegressionFileNotFoundError(msg)
 
-        if (self.add_missing_images and not image_filename.is_file()) or (self.reset_image_cache and not self.reset_only_failed):
-            plotter.screenshot(image_filename)
+        if (self.add_missing_images and not current_cached_image.is_file()) or (self.reset_image_cache and not self.reset_only_failed):
+            plotter.screenshot(current_cached_image)
 
         if gen_image_filename is not None:
             plotter.screenshot(gen_image_filename)
 
-        if not Path(image_filename).is_file() and self.allow_unused_generated:
+        if not Path(current_cached_image).is_file() and self.allow_unused_generated:
             # Test image has been generated, but cached image does not exist
             # The generated image is considered unused, so exit safely before image
             # comparison to avoid a FileNotFoundError
             return
 
-        if self.failed_image_dir is not None and not Path(image_filename).is_file():
+        if self.failed_image_dir is not None and not Path(current_cached_image).is_file():
             # Image comparison will fail, so save image before error
             self._save_failed_test_images("error", plotter, image_name)
             remove_plotter_close_callback()
 
-        error = pyvista.compare_images(str(image_filename), plotter)
+        warn_msg, fail_msg = _test_compare_images(
+            test_name=test_name,
+            test_image=plotter,
+            cached_image=str(current_cached_image),
+            allowed_error=allowed_error,
+            allowed_warning=allowed_warning,
+        )
 
-        if error > allowed_error:
+        # Try again and compare with other cached images
+        if fail_msg and len(cached_image_paths) > 1:
+            # Compare build image to other known valid versions
+            msg_start = "This test has multiple cached images. It initially failed (as above)"
+            for path in cached_image_paths:
+                error = pyvista.compare_images(plotter, current_cached_image)
+                if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
+                    # Convert failure into a warning
+                    warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
+                    fail_msg = None
+                    current_cached_image = path
+                    break
+            else:  # Loop completed - test still fails
+                fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(self.cache_dir, test_name)!s}"
+
+        if fail_msg:
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
             if self.reset_only_failed:
                 warnings.warn(
-                    f"{test_name} Exceeded image regression error of "
-                    f"{allowed_error} with an image error equal to: {error}"
-                    f"\nThis image will be reset in the cache.",
+                    f"{fail_msg}\nThis image will be reset in the cache.",
                     stacklevel=2,
                 )
-                plotter.screenshot(image_filename)
+                plotter.screenshot(current_cached_image)
             else:
                 remove_plotter_close_callback()
-                msg = f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error}"
-                raise RegressionError(msg)
-        if error > allowed_warning:
-            if self.failed_image_dir is not None:
-                self._save_failed_test_images("warning", plotter, image_name)
-            warnings.warn(f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error}", stacklevel=2)
+                raise RegressionError(fail_msg)
 
-    def _save_failed_test_images(self, error_or_warning: Literal["error", "warning"], plotter: Plotter, image_name: str) -> None:
+        if warn_msg:
+            parent_dir: Literal["errors_as_warning", "warning"] = "errors_as_warning" if image_filename.is_dir() else "warning"
+            if self.failed_image_dir is not None:
+                self._save_failed_test_images(parent_dir, plotter, image_name, cache_image_path=current_cached_image)
+            warnings.warn(warn_msg, stacklevel=2)
+
+    def _save_failed_test_images(
+        self,
+        error_or_warning: Literal["error", "warning", "errors_as_warning"],
+        plotter: Plotter,
+        image_name: str,
+        cache_image_path: Path | None = None,
+    ) -> None:
         """Save test image from cache and from test to the failed image dir."""
 
         def _make_failed_test_image_dir(
-            errors_or_warnings: Literal["errors", "warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
+            errors_or_warnings: Literal["errors", "warnings", "errors_as_warnings"], from_cache_or_test: Literal["from_cache", "from_test"]
         ) -> Path:
             # Check was done earlier to verify this is not None
             failed_image_dir = cast("str", self.failed_image_dir)
@@ -323,15 +352,18 @@ class VerifyImageCache:
             dest_dir.mkdir(exist_ok=True, parents=True)
             return dest_dir
 
-        error_dirname = cast("Literal['errors', 'warnings']", error_or_warning + "s")
+        error_dirname = cast("Literal['errors', 'warnings', 'errors_as_warnings']", error_or_warning + "s")
 
         from_test_dir = _make_failed_test_image_dir(error_dirname, "from_test")
         plotter.screenshot(from_test_dir / image_name)
 
-        cached_image = Path(self.cache_dir, image_name)
+        cached_image = Path(self.cache_dir, image_name) if cache_image_path is None else cache_image_path
         if cached_image.is_file():
             from_cache_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
             shutil.copy(cached_image, from_cache_dir / image_name)
+        elif cached_image.is_dir():
+            # Future: Save all images with relative dirs to cache
+            ...
 
 
 def _image_name_from_test_name(test_name: str) -> str:
@@ -352,6 +384,38 @@ def _test_name_from_image_name(image_name: str) -> str:
         return "_".join(parts)
 
     return "test_" + remove_suffix(image_name)
+
+
+def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
+    """Get all paths of files with a specific extension inside a directory tree."""
+    pattern = str(dir_ / "**" / ("*." + ext))
+    return sorted(Path().rglob(pattern))
+
+
+def _test_compare_images(
+    test_name: str, test_image: str | pyvista.Plotter, cached_image: str | pyvista.Plotter, allowed_error: float, allowed_warning: float
+) -> tuple[str | None, str | None]:
+    try:
+        # Check if test should fail or warn
+        error = pyvista.compare_images(test_image, cached_image)
+        fail_msg = _check_compare_fail(test_name, error, allowed_error)
+        warn_msg = _check_compare_warn(test_name, error, allowed_warning)
+    except RuntimeError as e:
+        warn_msg = None
+        fail_msg = repr(e)
+    return warn_msg, fail_msg
+
+
+def _check_compare_fail(test_name: str, error_: float, allowed_error: float) -> str | None:
+    if error_ > allowed_error:
+        return f"{test_name} Exceeded image regression error of {allowed_error} with an image error equal to: {error_}"
+    return None
+
+
+def _check_compare_warn(test_name: str, error_: float, allowed_warning: float) -> str | None:
+    if error_ > allowed_warning:
+        return f"{test_name} Exceeded image regression warning of {allowed_warning} with an image error of {error_}"
+    return None
 
 
 @pytest.hookimpl
