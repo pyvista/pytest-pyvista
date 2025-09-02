@@ -35,7 +35,7 @@ def test_arguments(pytester: pytest.Pytester) -> None:
 def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red") -> Path:
     """Make image cache in `test_path/path`."""
     d = Path(test_path, path)
-    d.mkdir(exist_ok=True)
+    d.mkdir(exist_ok=True, parents=True)
     sphere = pv.Sphere()
     plotter = pv.Plotter()
     plotter.add_mesh(sphere, color=color)
@@ -566,7 +566,6 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache) -> Non
     if outcome == "success":
         assert not failed_image_dir_path.is_dir()
     else:
-        result.stdout.fnmatch_lines("*UserWarning: pyvista test failed image dir: *failed_image_dir does not yet exist.  Creating dir.")
         if make_cache:
             result.stdout.fnmatch_lines(f"*Exceeded image regression {outcome}*")
         else:
@@ -881,3 +880,95 @@ def test_auto_close(pytester: pytest.Pytester) -> None:
 
     result = pytester.runpytest()
     result.assert_outcomes(passed=2)
+
+
+ALMOST_BLUE = [0, 0, 254]
+ALMOST_RED = [254, 0, 0]
+
+
+@pytest.mark.parametrize("failed_image_dir", [True, False])
+@pytest.mark.parametrize("nested_subdir", [True, False])
+@pytest.mark.parametrize(
+    ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("'green'", pytest.ExitCode.TESTS_FAILED)]
+)
+def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir) -> None:
+    """Test regression warning is issued."""
+    cache = "cache"
+    name = "imcache.png"
+    subdir = Path(name).stem
+    cache_parent = pytester.path / cache
+    cache_parent = cache_parent / subdir if nested_subdir else cache_parent
+    red_filename = make_cached_images(cache_parent, subdir, name="im1.png", color="red")
+    blue_filename = make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
+
+    pyfile = f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color={build_color})
+            plotter.show()
+        """
+    pytester.makepyfile(pyfile)
+
+    args = ["--image_cache_dir", cache]
+    failed = "failed"
+    if failed_image_dir:
+        args.extend(["--failed_image_dir", failed])
+    result = pytester.runpytest(*args)
+    assert result.ret == return_code
+
+    partial_match = r"imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"
+    rel_subdirs = Path(subdir) / subdir if nested_subdir else subdir
+
+    if build_color == ALMOST_RED:
+        # Comparison with first image succeeds without issue
+        result.stdout.no_re_match_line(rf".*UserWarning: {partial_match}")
+
+        # Test no images are saved
+        assert not Path(failed).is_dir()
+
+    elif build_color == ALMOST_BLUE:
+        # Comparison with first image fails
+        # Expect error was converted to a warning
+        result.stdout.re_match_lines(
+            [
+                rf".*UserWarning: {partial_match}",
+                r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
+                ".*im2.png",
+            ]
+        )
+        # Test failed images are saved
+        from_cache = Path(failed) / "errors_as_warnings" / "from_cache" / rel_subdirs / blue_filename.name
+        assert from_cache.is_file() == failed_image_dir
+        if failed_image_dir:
+            assert not file_has_changed(str(from_cache), str(blue_filename))
+
+        from_test = Path(failed, "errors_as_warnings", "from_test", name)
+        assert from_test.is_file() == failed_image_dir
+        if failed_image_dir:
+            assert file_has_changed(str(from_test), str(from_cache))
+
+    else:  # 'green'
+        # Comparison with all cached images fails
+        result.stdout.re_match_lines(
+            [
+                rf".*RegressionError: {partial_match}",
+                r".*This test has multiple cached images. It initially failed \(as above\) and failed again for all images in:",
+                ".*cache/imcache",
+            ]
+        )
+
+        # Test failed images are saved
+        # Expect both red and blue cached images saved
+        for filename in [blue_filename, red_filename]:
+            from_cache = Path(failed) / "errors" / "from_cache" / rel_subdirs / filename.name
+            assert from_cache.is_file() == failed_image_dir
+            if failed_image_dir:
+                assert not file_has_changed(str(from_cache), str(filename))
+
+        from_test = Path(failed, "errors", "from_test", name)
+        assert from_test.is_file() == failed_image_dir
+        if failed_image_dir:
+            assert file_has_changed(str(from_test), str(from_cache))

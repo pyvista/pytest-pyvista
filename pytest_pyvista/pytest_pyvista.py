@@ -246,8 +246,9 @@ class VerifyImageCache:
         # "test_" to get the name for the image.
         image_name = _image_name_from_test_name(test_name)
         image_filename = Path(self.cache_dir, image_name)
+        image_dirname = Path(self.cache_dir, Path(image_name).stem)
 
-        cached_image_paths = _get_file_paths(image_filename, ext="jpg") if image_filename.is_dir() else [image_filename]
+        cached_image_paths = _get_file_paths(image_dirname, ext="png") if image_dirname.is_dir() else [image_filename]
         current_cached_image = cached_image_paths[0]
         gen_image_filename = None if self.generated_image_dir is None else Path(self.generated_image_dir, image_name)
 
@@ -291,8 +292,9 @@ class VerifyImageCache:
             self._save_failed_test_images("error", plotter, image_name)
             remove_plotter_close_callback()
 
+        test_name_no_prefix = test_name.removeprefix("test_")
         warn_msg, fail_msg = _test_compare_images(
-            test_name=test_name,
+            test_name=test_name_no_prefix,
             test_image=plotter,
             cached_image=str(current_cached_image),
             allowed_error=allowed_error,
@@ -304,7 +306,7 @@ class VerifyImageCache:
             # Compare build image to other known valid versions
             msg_start = "This test has multiple cached images. It initially failed (as above)"
             for path in cached_image_paths:
-                error = pyvista.compare_images(plotter, current_cached_image)
+                error = pyvista.compare_images(plotter, str(path))
                 if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
                     # Convert failure into a warning
                     warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
@@ -312,7 +314,7 @@ class VerifyImageCache:
                     current_cached_image = path
                     break
             else:  # Loop completed - test still fails
-                fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(self.cache_dir, test_name)!s}"
+                fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(self.cache_dir, test_name_no_prefix)!s}"
 
         if fail_msg:
             if self.failed_image_dir is not None:
@@ -328,7 +330,7 @@ class VerifyImageCache:
                 raise RegressionError(fail_msg)
 
         if warn_msg:
-            parent_dir: Literal["errors_as_warning", "warning"] = "errors_as_warning" if image_filename.is_dir() else "warning"
+            parent_dir: Literal["errors_as_warning", "warning"] = "errors_as_warning" if image_dirname.is_dir() else "warning"
             if self.failed_image_dir is not None:
                 self._save_failed_test_images(parent_dir, plotter, image_name, cache_image_path=current_cached_image)
             warnings.warn(warn_msg, stacklevel=2)
@@ -347,10 +349,16 @@ class VerifyImageCache:
         ) -> Path:
             # Check was done earlier to verify this is not None
             failed_image_dir = cast("str", self.failed_image_dir)
-            _ensure_dir_exists(failed_image_dir, msg_name="failed image dir")
             dest_dir = Path(failed_image_dir, errors_or_warnings, from_cache_or_test)
             dest_dir.mkdir(exist_ok=True, parents=True)
             return dest_dir
+
+        def _save_single_cache_image(path: Path) -> None:
+            rel = Path(path).relative_to(self.cache_dir)
+            from_cache_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
+            dest_path = from_cache_dir / rel
+            dest_path.parent.mkdir(exist_ok=True, parents=True)
+            shutil.copy(path, dest_path)
 
         error_dirname = cast("Literal['errors', 'warnings', 'errors_as_warnings']", error_or_warning + "s")
 
@@ -359,11 +367,12 @@ class VerifyImageCache:
 
         cached_image = Path(self.cache_dir, image_name) if cache_image_path is None else cache_image_path
         if cached_image.is_file():
-            from_cache_dir = _make_failed_test_image_dir(error_dirname, "from_cache")
-            shutil.copy(cached_image, from_cache_dir / image_name)
-        elif cached_image.is_dir():
-            # Future: Save all images with relative dirs to cache
-            ...
+            # Save single cache file
+            _save_single_cache_image(cached_image)
+        elif (image_dir := cached_image.with_suffix("")).is_dir():
+            # Save multiple cached files
+            for path in _get_file_paths(image_dir, ext="png"):
+                _save_single_cache_image(path)
 
 
 def _image_name_from_test_name(test_name: str) -> str:
@@ -388,8 +397,7 @@ def _test_name_from_image_name(image_name: str) -> str:
 
 def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
     """Get all paths of files with a specific extension inside a directory tree."""
-    pattern = str(dir_ / "**" / ("*." + ext))
-    return sorted(Path().rglob(pattern))
+    return sorted(dir_.rglob(f"*.{ext}"))
 
 
 def _test_compare_images(
