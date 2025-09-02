@@ -287,11 +287,6 @@ class VerifyImageCache:
             # comparison to avoid a FileNotFoundError
             return
 
-        if self.failed_image_dir is not None and not Path(current_cached_image).is_file():
-            # Image comparison will fail, so save image before error
-            self._save_failed_test_images("error", plotter, image_name)
-            remove_plotter_close_callback()
-
         test_name_no_prefix = test_name.removeprefix("test_")
         warn_msg, fail_msg = _test_compare_images(
             test_name=test_name_no_prefix,
@@ -403,14 +398,10 @@ def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
 def _test_compare_images(
     test_name: str, test_image: str | pyvista.Plotter, cached_image: str | pyvista.Plotter, allowed_error: float, allowed_warning: float
 ) -> tuple[str | None, str | None]:
-    try:
-        # Check if test should fail or warn
-        error = pyvista.compare_images(test_image, cached_image)
-        fail_msg = _check_compare_fail(test_name, error, allowed_error)
-        warn_msg = _check_compare_warn(test_name, error, allowed_warning)
-    except RuntimeError as e:
-        warn_msg = None
-        fail_msg = repr(e)
+    # Check if test should fail or warn
+    error = pyvista.compare_images(test_image, cached_image)
+    fail_msg = _check_compare_fail(test_name, error, allowed_error)
+    warn_msg = _check_compare_warn(test_name, error, allowed_warning)
     return warn_msg, fail_msg
 
 
