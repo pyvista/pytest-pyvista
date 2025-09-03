@@ -155,7 +155,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
   generated images are saved as ``generated_image_dir/<test_name>.png``; with this
   option enabled, they are instead saved as
   ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has
-  the format `<system>_<python-version>_<pyvista-version>_<vtk-version>`. This can
+  the format ``<system>_<python-version>_<pyvista-version>_<vtk-version>``. This can
   be useful for providing context about how an image was generated.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
