@@ -59,7 +59,7 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
 
 
 @pytest.mark.parametrize("missing", ["build", "cache"])
-def test_both_images_exist(pytester: pytest.Pytester, missing) -> None:
+def test_both_images_exist(pytester: pytest.Pytester, missing: str) -> None:
     """Test when either the cache or build image is missing for the test."""
     images_path = pytester.path / "images"
     cache_path = pytester.path / "cache"
@@ -120,7 +120,7 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
 
 
 @pytest.mark.parametrize("failed_image_dir", [True, False])
-def test_compare_images_warning(pytester: pytest.Pytester, failed_image_dir) -> None:
+def test_compare_images_warning(pytester: pytest.Pytester, failed_image_dir: bool) -> None:
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
