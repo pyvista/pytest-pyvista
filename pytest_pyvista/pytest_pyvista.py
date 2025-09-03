@@ -68,6 +68,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Path to dump test images from the current run.",
     )
     group.addoption(
+        "--generated_image_name",
+        action="store",
+        help="Save generated images to sub-directories and with the given image name.",
+    )
+    group.addoption(
         "--failed_image_dir",
         action="store",
         help="Path to dump images from failed tests from the current run.",
@@ -123,7 +128,7 @@ class VerifyImageCache:
     ----------
     test_name : str
         Name of test to save.  It is used to define the name of image cache
-        file.
+        file or sub-directory.
 
     cache_dir : Path
         Directory for image cache comparisons.
@@ -171,6 +176,7 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
+    generated_image_name = None
 
     def __init__(  # noqa: PLR0913
         self,
@@ -250,7 +256,6 @@ class VerifyImageCache:
 
         cached_image_paths = _get_file_paths(image_dirname, ext="png") if image_dirname.is_dir() else [image_filename]
         current_cached_image = cached_image_paths[0]
-        gen_image_filename = None if self.generated_image_dir is None else Path(self.generated_image_dir, image_name)
 
         if VerifyImageCache._is_skipped(
             skip=self.skip,
@@ -266,8 +271,8 @@ class VerifyImageCache:
             # Raise error since the cached image does not exist and will not be added later
 
             # Save images as needed before error
-            if gen_image_filename is not None:
-                plotter.screenshot(gen_image_filename)
+            if self.generated_image_dir is not None:
+                self._save_generated_image(plotter, image_name=image_name)
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
 
@@ -278,8 +283,8 @@ class VerifyImageCache:
         if (self.add_missing_images and not current_cached_image.is_file()) or (self.reset_image_cache and not self.reset_only_failed):
             plotter.screenshot(current_cached_image)
 
-        if gen_image_filename is not None:
-            plotter.screenshot(gen_image_filename)
+        if self.generated_image_dir is not None:
+            self._save_generated_image(plotter, image_name=image_name)
 
         if not Path(current_cached_image).is_file() and self.allow_unused_generated:
             # Test image has been generated, but cached image does not exist
@@ -330,6 +335,16 @@ class VerifyImageCache:
                 self._save_failed_test_images(parent_dir, plotter, image_name, cache_image_path=current_cached_image)
             warnings.warn(warn_msg, stacklevel=2)
 
+    def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
+        parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
+        generated_image_path = (
+            parent / image_name
+            if self.generated_image_name is None
+            else parent / Path(image_name).with_suffix("") / Path(self.generated_image_name).with_suffix(".png")
+        )
+        generated_image_path.parent.mkdir(exist_ok=True, parents=True)
+        plotter.screenshot(generated_image_path)
+
     def _save_failed_test_images(
         self,
         error_or_warning: Literal["error", "warning", "errors_as_warning"],
@@ -358,7 +373,7 @@ class VerifyImageCache:
         error_dirname = cast("Literal['errors', 'warnings', 'errors_as_warnings']", error_or_warning + "s")
 
         from_test_dir = _make_failed_test_image_dir(error_dirname, "from_test")
-        plotter.screenshot(from_test_dir / image_name)
+        self._save_generated_image(plotter, image_name=image_name, parent_dir=from_test_dir)
 
         cached_image = Path(self.cache_dir, image_name) if cache_image_path is None else cache_image_path
         if cached_image.is_file():
@@ -534,6 +549,7 @@ def verify_image_cache(
     VerifyImageCache.allow_unused_generated = pytestconfig.getoption("allow_unused_generated")
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
+    VerifyImageCache.generated_image_name = pytestconfig.getoption("generated_image_name")
 
     cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True)
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)

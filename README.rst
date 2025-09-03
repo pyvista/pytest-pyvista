@@ -120,6 +120,14 @@ These are the flags you can use when calling ``pytest`` in the command line:
   directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
   This will override any configuration, see below.
 
+* ``--generated_image_name <NAME>`` saves all generated images with the specified name.
+  Instead of saving each generated image directly inside of the ``generated_image_dir``
+  with the file path ``generated_image_dir/<test_name>.png``, images are instead saved
+  in separate sub-directories ``<generated_image_dir>/<test_name>/<generated_image_name>.png``.
+  The image name can be arbitrary, but may be useful for including metadata about how
+  the image was generated, e.g. use name ``vtk9.5`` if generating images with vtk
+  version 9.5.
+
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
   failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
