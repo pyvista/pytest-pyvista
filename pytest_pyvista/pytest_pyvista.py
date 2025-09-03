@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import sys
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
@@ -18,12 +19,28 @@ import warnings
 import pytest
 import pyvista
 from pyvista import Plotter
+import vtkmodules
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
+
+
+def _get_env_info() -> str:
+    system = platform.system()
+    if system == "Darwin":
+        system = "macOS"
+
+    return "_".join(
+        [
+            f"{system}-{platform.release()}",
+            f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            f"pyvista-{pyvista.__version__}",
+            f"vtk-{vtkmodules.__version__}",
+        ]
+    )
 
 
 class RegressionError(RuntimeError):
@@ -69,6 +86,8 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
     )
     group.addoption(
         "--generated_image_name",
+        nargs="?",
+        const=_get_env_info(),
         action="store",
         help="Save generated images to sub-directories and with the given image name.",
     )

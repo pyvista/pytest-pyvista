@@ -12,6 +12,8 @@ from unittest import mock
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.pytest_pyvista import _get_env_info
+
 pv.OFF_SCREEN = True
 
 pytest_plugins = "pytester"
@@ -284,7 +286,7 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-@pytest.mark.parametrize("generated_image_name", ["gen.image.png"])
+@pytest.mark.parametrize("generated_image_name", ["gen_image", "gen.image.png", "default", None])
 def test_generated_image_dir_commandline(pytester: pytest.Pytester, generated_image_name) -> None:
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(pytester.path)
@@ -301,7 +303,12 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generated_im
     )
     args = ["--generated_image_dir", "gen_dir"]
     if generated_image_name:
-        args.extend(["--generated_image_name", generated_image_name])
+        args.append("--generated_image_name")
+        if generated_image_name == "default":
+            generated_image_name = _get_env_info()
+        else:
+            args.append(generated_image_name)
+
     result = pytester.runpytest(*args)
     assert (pytester.path / "gen_dir").is_dir()
     if generated_image_name:

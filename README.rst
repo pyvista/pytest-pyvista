@@ -125,8 +125,8 @@ These are the flags you can use when calling ``pytest`` in the command line:
   with the file path ``generated_image_dir/<test_name>.png``, images are instead saved
   in separate sub-directories ``<generated_image_dir>/<test_name>/<generated_image_name>.png``.
   The image name can be arbitrary, but may be useful for including metadata about how
-  the image was generated, e.g. use name ``vtk9.5`` if generating images with vtk
-  version 9.5.
+  the image was generated. If this option is used without arguments, then a default name
+  is used with the format `<system>_<python-version>_<pyvista-version>_<vtk-version>`.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
