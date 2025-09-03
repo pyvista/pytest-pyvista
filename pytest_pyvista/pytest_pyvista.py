@@ -338,9 +338,7 @@ class VerifyImageCache:
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
         generated_image_path = (
-            parent / image_name
-            if self.generated_image_name is None
-            else parent / Path(image_name).with_suffix("") / Path(self.generated_image_name).with_suffix(".png")
+            parent / image_name if self.generated_image_name is None else parent / Path(image_name).with_suffix("") / self.generated_image_name
         )
         generated_image_path.parent.mkdir(exist_ok=True, parents=True)
         plotter.screenshot(generated_image_path)
@@ -549,7 +547,12 @@ def verify_image_cache(
     VerifyImageCache.allow_unused_generated = pytestconfig.getoption("allow_unused_generated")
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
-    VerifyImageCache.generated_image_name = pytestconfig.getoption("generated_image_name")
+    generated_image_name = pytestconfig.getoption("generated_image_name")
+    if generated_image_name is not None:
+        # Normalize to include extension
+        generated_image_name = generated_image_name.removesuffix(".png")
+        generated_image_name += ".png"
+    VerifyImageCache.generated_image_name = generated_image_name
 
     cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True)
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)

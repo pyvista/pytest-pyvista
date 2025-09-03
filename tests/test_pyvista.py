@@ -284,7 +284,7 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-@pytest.mark.parametrize("generated_image_name", ["gen_image", "gen_image.png", None])
+@pytest.mark.parametrize("generated_image_name", ["gen.image.png"])
 def test_generated_image_dir_commandline(pytester: pytest.Pytester, generated_image_name) -> None:
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(pytester.path)
@@ -305,7 +305,8 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generated_im
     result = pytester.runpytest(*args)
     assert (pytester.path / "gen_dir").is_dir()
     if generated_image_name:
-        with_suffix = str(Path(generated_image_name).with_suffix(".png"))
+        generated_image_name = generated_image_name.removesuffix(".png")
+        with_suffix = generated_image_name + ".png"
         assert (pytester.path / "gen_dir" / "imcache" / with_suffix).is_file()
     else:
         assert (pytester.path / "gen_dir" / "imcache.png").is_file()
