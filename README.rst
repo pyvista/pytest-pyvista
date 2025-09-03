@@ -114,13 +114,16 @@ multiple "valid" cache images in the sub-directory. For example, a
 single cached image:
 
 .. code-block:: bash
+
     cache/my_image.jpg
 
 Can be replaced with multiple versions of the image:
 
 .. code-block:: bash
+
     cache/my_image/0.jpg
     cache/my_image/1.jpg
+
 .. note::
 
    - The sub-directory name should match the name of the test.
