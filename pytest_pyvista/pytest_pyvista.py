@@ -43,6 +43,9 @@ def _get_env_info() -> str:
     )
 
 
+ENV_INFO = _get_env_info()
+
+
 class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria."""
 
@@ -85,11 +88,9 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Path to dump test images from the current run.",
     )
     group.addoption(
-        "--generated_image_name",
-        nargs="?",
-        const=_get_env_info(),
-        action="store",
-        help="Save generated images to sub-directories and with the given image name.",
+        "--generate_subdirs",
+        action="store_true",
+        help="Save generated images to sub-directories.",
     )
     group.addoption(
         "--failed_image_dir",
@@ -195,7 +196,7 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
-    generated_image_name = None
+    generate_subdirs = None
 
     def __init__(  # noqa: PLR0913
         self,
@@ -356,9 +357,7 @@ class VerifyImageCache:
 
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
-        generated_image_path = (
-            parent / image_name if self.generated_image_name is None else parent / Path(image_name).with_suffix("") / self.generated_image_name
-        )
+        generated_image_path = parent / Path(image_name).with_suffix("") / (ENV_INFO + ".png") if self.generate_subdirs else parent / image_name
         generated_image_path.parent.mkdir(exist_ok=True, parents=True)
         plotter.screenshot(generated_image_path)
 
@@ -566,12 +565,7 @@ def verify_image_cache(
     VerifyImageCache.allow_unused_generated = pytestconfig.getoption("allow_unused_generated")
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
-    generated_image_name = pytestconfig.getoption("generated_image_name")
-    if generated_image_name is not None:
-        # Normalize to include extension
-        generated_image_name = generated_image_name.removesuffix(".png")
-        generated_image_name += ".png"
-    VerifyImageCache.generated_image_name = generated_image_name
+    VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
 
     cache_dir = _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True)
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
