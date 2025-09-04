@@ -205,4 +205,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: generated_images
-          path: pyvista/gen_dir
+          path: pyvista/tests/gen_dir
