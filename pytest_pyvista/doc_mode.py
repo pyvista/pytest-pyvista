@@ -15,8 +15,12 @@ from PIL import Image
 import pytest
 import pyvista as pv
 
+from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
+from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
+from .pytest_pyvista import _check_compare_fail
 from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_option_from_config_or_ini
+from .pytest_pyvista import _test_compare_images
 
 MAX_IMAGE_DIM = 400  # pixels
 
@@ -196,7 +200,11 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     current_cached_image_path = cached_image_paths[0]
 
     warn_msg, fail_msg = _test_compare_images(
-        test_name=test_case.test_name, docs_image_path=test_case.docs_image_path, cached_image_path=current_cached_image_path
+        test_name=test_case.test_name,
+        test_image=test_case.docs_image_path,
+        cached_image=current_cached_image_path,
+        allowed_error=DEFAULT_ERROR_THRESHOLD,
+        allowed_warning=DEFAULT_WARNING_THRESHOLD,
     )
 
     # Try again and compare with other cached images
@@ -205,7 +213,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         msg_start = "This test has multiple cached images. It initially failed (as above)"
         for path in cached_image_paths:
             error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(path))
-            if _check_compare_fail(test_case.test_name, error) is None:
+            if _check_compare_fail(test_case.test_name, error, allowed_error=DEFAULT_ERROR_THRESHOLD) is None:
                 # Convert failure into a warning
                 warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
                 fail_msg = None
@@ -268,30 +276,3 @@ def _warn_cached_image_path(cached_image_path: Path) -> None:
                 f"or include more than one image in the sub-directory."
             )
             warnings.warn(msg, stacklevel=2)
-
-
-def _test_compare_images(test_name: str, docs_image_path: Path, cached_image_path: Path) -> tuple[str | None, str | None]:
-    try:
-        docs_image = cast("pv.ImageData", pv.read(docs_image_path))
-        cached_image = cast("pv.ImageData", pv.read(cached_image_path))
-
-        # Check if test should fail or warn
-        error = pv.compare_images(docs_image, cached_image)
-        fail_msg = _check_compare_fail(test_name, error)
-        warn_msg = _check_compare_warn(test_name, error)
-    except RuntimeError as e:
-        warn_msg = None
-        fail_msg = repr(e)
-    return warn_msg, fail_msg
-
-
-def _check_compare_fail(filename: str, error_: float, allowed_error: float = 500.0) -> str | None:
-    if error_ > allowed_error:
-        return f"{filename} Exceeded image regression error of {allowed_error} with an image error equal to: {error_}"
-    return None
-
-
-def _check_compare_warn(filename: str, error_: float, allowed_warning: float = 200.0) -> str | None:
-    if error_ > allowed_warning:
-        return f"{filename} Exceeded image regression warning of {allowed_warning} with an image error of {error_}"
-    return None
