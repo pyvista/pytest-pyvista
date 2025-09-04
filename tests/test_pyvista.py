@@ -327,6 +327,9 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_sub
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
+            verify_image_cache.env_info.prefix = 'prefix'
+            verify_image_cache.env_info.vtk = False
+            verify_image_cache.env_info.suffix = 'suffix'
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
@@ -340,8 +343,15 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_sub
     result = pytester.runpytest(*args)
     assert (pytester.path / "gen_dir").is_dir()
     if generate_subdirs:
-        with_suffix = str(_EnvInfo()) + ".png"
-        assert (pytester.path / "gen_dir" / "imcache" / with_suffix).is_file()
+        subdir = pytester.path / "gen_dir" / "imcache"
+        assert subdir.is_dir()
+        paths = list(subdir.iterdir())
+        assert len(paths) == 1
+        image_path = paths[0]
+        assert image_path.suffix == ".png"
+        assert image_path.name.startswith("prefix")
+        assert image_path.stem.endswith("suffix")
+        assert "vtk" not in image_path.name
     else:
         assert (pytester.path / "gen_dir" / "imcache.png").is_file()
     result.assert_outcomes(passed=1)
@@ -1044,6 +1054,7 @@ def test_env_info_exclude(name: str, value: str) -> None:
     """Test removing parts of the env info."""
     info = str(_EnvInfo(**{name: False}))
     assert value not in info
+    assert "__" not in info
 
 
 def test_env_info_prefix_suffix() -> None:

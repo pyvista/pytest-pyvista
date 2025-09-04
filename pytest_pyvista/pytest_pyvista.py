@@ -44,14 +44,8 @@ class _EnvInfo:
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
-        return "_".join(
-            [
-                f"{self.prefix}{'_' if self.prefix else ''}{system_version}",
-                f"{python_version}",
-                f"{pyvista_version}",
-                f"{vtk_version}{'_' if self.suffix else ''}{self.suffix}",
-            ]
-        )
+        values = [f"{self.prefix}", f"{system_version}", f"{python_version}", f"{pyvista_version}", f"{vtk_version}", f"{self.suffix}"]
+        return "_".join(val for val in values if val)
 
     @staticmethod
     def _get_system() -> str:
