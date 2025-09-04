@@ -10,13 +10,15 @@ import pytest
 import pyvista as pv
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
+from pytest_pyvista.pytest_pyvista import _get_env_info
 from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images
 from tests.test_pyvista import make_multiple_cached_images
 
 
+@pytest.mark.parametrize("generate_subdirs", [True, False])
 @pytest.mark.parametrize("generated_image_dir", [True, False])
-def test_doc_mode(pytester: pytest.Pytester, generated_image_dir) -> None:
+def test_doc_mode(pytester: pytest.Pytester, *, generated_image_dir: bool, generate_subdirs: bool) -> None:
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     images = "images"
@@ -28,12 +30,20 @@ def test_doc_mode(pytester: pytest.Pytester, generated_image_dir) -> None:
     generated = "generated"
     if generated_image_dir:
         args.extend(["--doc_generated_image_dir", generated])
+    if generate_subdirs:
+        args.append("--generate_subdirs")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
     if generated_image_dir:
+        expected_name = "imcache.jpg"
         assert Path(generated).is_dir()
-        assert os.listdir(generated) == ["imcache.jpg"]  # noqa: PTH208
+        if generate_subdirs:
+            subdir = Path(generated / Path(expected_name).with_suffix(""))
+            assert subdir.is_dir()
+            assert os.listdir(subdir) == [_get_env_info() + Path(expected_name).suffix]  # noqa: PTH208
+        else:
+            assert os.listdir(generated) == [expected_name]  # noqa: PTH208
 
 
 def test_cli_errors(pytester: pytest.Pytester) -> None:
@@ -58,6 +68,7 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
     result.stderr.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be a valid directory. Got:", "*/cache."])
 
 
+# Future: Parametrize with multiple cache images and generate_subdirs
 @pytest.mark.parametrize("missing", ["build", "cache"])
 def test_both_images_exist(pytester: pytest.Pytester, missing: str) -> None:
     """Test when either the cache or build image is missing for the test."""
@@ -119,6 +130,7 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines([r".*Failed: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"])
 
 
+# Future: @pytest.mark.parametrize("generate_subdirs", [True, False])
 @pytest.mark.parametrize("failed_image_dir", [True, False])
 def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: bool) -> None:
     """Test regression warning is issued."""
@@ -159,6 +171,7 @@ ALMOST_BLUE = [0, 0, 254]
 ALMOST_RED = [254, 0, 0]
 
 
+# Future: @pytest.mark.parametrize("generate_subdirs", [True, False])
 @pytest.mark.parametrize("failed_image_dir", [True, False])
 @pytest.mark.parametrize("nested_subdir", [True, False])
 @pytest.mark.parametrize(

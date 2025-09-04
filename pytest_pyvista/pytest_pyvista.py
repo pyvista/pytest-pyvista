@@ -225,7 +225,7 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
-    generate_subdirs = None
+    generate_subdirs: bool = False
 
     def __init__(  # noqa: PLR0913
         self,
@@ -386,8 +386,7 @@ class VerifyImageCache:
 
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
-        generated_image_path = parent / Path(image_name).with_suffix("") / (ENV_INFO + ".png") if self.generate_subdirs else parent / image_name
-        generated_image_path.parent.mkdir(exist_ok=True, parents=True)
+        generated_image_path = _get_generated_image_path(parent=parent, image_name=image_name, generate_subdirs=self.generate_subdirs)
         plotter.screenshot(generated_image_path)
 
     def _save_failed_test_images(
@@ -448,6 +447,13 @@ def _test_name_from_image_name(image_name: str) -> str:
         return "_".join(parts)
 
     return "test_" + remove_suffix(image_name)
+
+
+def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_subdirs: bool) -> Path:
+    name = Path(image_name)
+    generated_image_path = parent / name.with_suffix("") / (ENV_INFO + name.suffix) if generate_subdirs else parent / name
+    generated_image_path.parent.mkdir(exist_ok=True, parents=True)
+    return generated_image_path
 
 
 def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
@@ -581,7 +587,7 @@ def pytest_configure(config: pytest.Config) -> None:
     if config.getoption("doc_mode"):
         from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
-        _DocModeInfo.init_dirs(config)
+        _DocModeInfo.init_from_config(config)
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
