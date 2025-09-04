@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import glob
-import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -17,6 +15,7 @@ from PIL import Image
 import pytest
 import pyvista as pv
 
+from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_option_from_config_or_ini
 
 MAX_IMAGE_DIM = 400  # pixels
@@ -49,7 +48,7 @@ class _DocModeInfo:
                 tempdir = tempfile.TemporaryDirectory(prefix=prefix)
                 cls._tempdirs.append(tempdir)
                 return Path(tempdir.name)
-            return Path(path)
+            return path
 
         cls.doc_images_dir = require_existing_dir("doc_images_dir")
         cls.doc_image_cache_dir = require_existing_dir("doc_image_cache_dir")
@@ -60,21 +59,15 @@ class _DocModeInfo:
 
 class _TestCaseTuple(NamedTuple):
     test_name: str
-    docs_image_path: str
-    cached_image_path: str
+    docs_image_path: Path
+    cached_image_path: Path
 
 
-def _get_file_paths(dir_: str, ext: str) -> list[str]:
-    """Get all paths of files with a specific extension inside a directory tree."""
-    pattern = str(Path(dir_) / "**" / ("*." + ext))
-    return sorted(glob.glob(pattern, recursive=True))  # noqa: PTH207
+def _flatten_path(path: Path) -> Path:
+    return Path("_".join(path.parts))
 
 
-def _flatten_path(path: str) -> str:
-    return "_".join(os.path.split(path))[1:]
-
-
-def _preprocess_build_images(build_images_dir: str, output_dir: str) -> list[str]:
+def _preprocess_build_images(build_images_dir: Path, output_dir: Path) -> list[Path]:
     """
     Read images from the build dir, resize them, and save as JPG to a flat output dir.
 
@@ -85,13 +78,13 @@ def _preprocess_build_images(build_images_dir: str, output_dir: str) -> list[str
     input_gif = _get_file_paths(build_images_dir, ext="gif")
     input_jpg = _get_file_paths(build_images_dir, ext="jpg")
     output_paths = []
-    Path(output_dir).mkdir(exist_ok=True)
+    output_dir.mkdir(exist_ok=True)
     for input_path in input_png + input_gif + input_jpg:
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
-        output_file_name = _flatten_path(os.path.relpath(input_path, build_images_dir))
-        output_file_name = str(Path(output_file_name).with_suffix(".jpg"))
-        output_path = str(Path(output_dir) / output_file_name)
+        output_file_name = _flatten_path(input_path.relative_to(build_images_dir))
+        output_file_name = output_file_name.with_suffix(".jpg")
+        output_path = output_dir / output_file_name
         output_paths.append(output_path)
 
         # Ensure image size is max 400x400 and save to output
@@ -116,13 +109,13 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
     """
     test_cases_dict: dict = {}
 
-    def add_to_dict(filepath: str, key: str) -> None:
+    def add_to_dict(filepath: Path, key: str) -> None:
         # Function for stuffing image paths into a dict.
         # We use a dict to allow for any entry to be made based on image path alone.
         # This way, we can defer checking for any mismatch between the cached and docs
         # images to test time.
         nonlocal test_cases_dict
-        test_name = Path(filepath).stem
+        test_name = filepath.stem
         try:
             test_cases_dict[test_name]
         except KeyError:
@@ -130,20 +123,20 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
         test_cases_dict[test_name].setdefault(key, filepath)
 
     # process test images
-    test_image_paths = _preprocess_build_images(str(_DocModeInfo.doc_images_dir), str(_DocModeInfo.doc_generated_image_dir))
+    test_image_paths = _preprocess_build_images(_DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir)
     [add_to_dict(path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
-    cache_dir = Path(_DocModeInfo.doc_image_cache_dir)
-    cached_image_paths = _get_file_paths(str(cache_dir), ext="jpg")
+    cache_dir = _DocModeInfo.doc_image_cache_dir
+    cached_image_paths = _get_file_paths(cache_dir, ext="jpg")
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
-        rel = Path(path).relative_to(cache_dir)
+        rel = path.relative_to(cache_dir)
         parts = rel.parts
         if len(parts) > 1:  # means it's nested
             # Use the first subdir as the test input instead of the image path
             first_subdir = parts[0]  # one dir down from base
-            add_to_dict(str(cache_dir / first_subdir), "cached")
+            add_to_dict(cache_dir / first_subdir, "cached")
         else:
             add_to_dict(path, "cached")
 
@@ -171,35 +164,34 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         metafunc.parametrize("test_case", test_cases, ids=ids)
 
 
-def _save_failed_test_image(source_path: str, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
+def _save_failed_test_image(source_path: Path, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
     _DocModeInfo.doc_failed_image_dir.mkdir(exist_ok=True)
 
-    parent_dir = Path(category)
-    if Path(source_path).is_relative_to(_DocModeInfo.doc_image_cache_dir):
-        rel = Path(source_path).relative_to(_DocModeInfo.doc_image_cache_dir)
+    if source_path.is_relative_to(_DocModeInfo.doc_image_cache_dir):
+        rel = source_path.relative_to(_DocModeInfo.doc_image_cache_dir)
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
         dest_relative_dir = Path("from_build")
 
-    Path(_DocModeInfo.doc_failed_image_dir).mkdir(exist_ok=True)
-    Path(_DocModeInfo.doc_failed_image_dir, parent_dir).mkdir(exist_ok=True)
-    dest_dir = Path(_DocModeInfo.doc_failed_image_dir) / parent_dir / dest_relative_dir
+    dest_dir = _DocModeInfo.doc_failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
-    dest_path = Path(dest_dir, Path(source_path).name)
+    dest_path = dest_dir / source_path.name
     shutil.copy(source_path, dest_path)
 
 
 def test_static_images(test_case: _TestCaseTuple) -> None:
     """Compare generated image with cached image."""
     _warn_cached_image_path(test_case.cached_image_path)
-    fail_msg, fail_source = _test_both_images_exist(*test_case)
+    fail_msg, fail_source = _test_both_images_exist(
+        filename=test_case.test_name, docs_image_path=test_case.docs_image_path, cached_image_path=test_case.cached_image_path
+    )
     if fail_msg:
-        _save_failed_test_image(cast("str", fail_source), "errors")
+        _save_failed_test_image(cast("Path", fail_source), "errors")
         pytest.fail(fail_msg)
 
     cached_image_paths = (
-        [test_case.cached_image_path] if Path(test_case.cached_image_path).is_file() else _get_file_paths(test_case.cached_image_path, ext="jpg")
+        [test_case.cached_image_path] if test_case.cached_image_path.is_file() else _get_file_paths(test_case.cached_image_path, ext="jpg")
     )
     current_cached_image_path = cached_image_paths[0]
 
@@ -220,7 +212,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
                 current_cached_image_path = path
                 break
         else:  # Loop completed - test still fails
-            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(_DocModeInfo.doc_image_cache_dir, test_case.test_name)!s}"
+            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocModeInfo.doc_image_cache_dir / test_case.test_name!s}"
 
     if fail_msg:
         _save_failed_test_image(test_case.docs_image_path, "errors")
@@ -230,13 +222,13 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         pytest.fail(fail_msg)
 
     if warn_msg:
-        parent_dir: Literal["errors_as_warnings", "warnings"] = "errors_as_warnings" if Path(test_case.cached_image_path).is_dir() else "warnings"
+        parent_dir: Literal["errors_as_warnings", "warnings"] = "errors_as_warnings" if test_case.cached_image_path.is_dir() else "warnings"
         _save_failed_test_image(test_case.docs_image_path, parent_dir)
         _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)
 
 
-def _test_both_images_exist(filename: str, docs_image_path: str, cached_image_path: str) -> tuple[str | None, str | None]:
+def _test_both_images_exist(filename: str, docs_image_path: Path, cached_image_path: Path) -> tuple[str | None, Path | None]:
     if docs_image_path is None or cached_image_path is None:
         if docs_image_path is None:
             source_path = cached_image_path
@@ -263,13 +255,13 @@ def _test_both_images_exist(filename: str, docs_image_path: str, cached_image_pa
     return None, None
 
 
-def _warn_cached_image_path(cached_image_path: str) -> None:
+def _warn_cached_image_path(cached_image_path: Path) -> None:
     """Warn if a subdir is used with only one cached image."""
-    if cached_image_path is not None and Path(cached_image_path).is_dir():
+    if cached_image_path is not None and cached_image_path.is_dir():
         cached_images = _get_file_paths(cached_image_path, ext="jpg")
         if len(cached_images) == 1:
             cache_dir = _DocModeInfo.doc_image_cache_dir
-            rel_path = Path(cache_dir.name) / Path(cached_images[0]).relative_to(cache_dir)
+            rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)
             msg = (
                 "Cached image sub-directory only contains a single image.\n"
                 f"Move the cached image {rel_path.as_posix()!r} directly to the cached image dir {cache_dir.name!r}\n"
@@ -278,7 +270,7 @@ def _warn_cached_image_path(cached_image_path: str) -> None:
             warnings.warn(msg, stacklevel=2)
 
 
-def _test_compare_images(test_name: str, docs_image_path: str, cached_image_path: str) -> tuple[str | None, str | None]:
+def _test_compare_images(test_name: str, docs_image_path: Path, cached_image_path: Path) -> tuple[str | None, str | None]:
     try:
         docs_image = cast("pv.ImageData", pv.read(docs_image_path))
         cached_image = cast("pv.ImageData", pv.read(cached_image_path))

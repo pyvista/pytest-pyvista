@@ -22,7 +22,7 @@ def test_doc_mode(pytester: pytest.Pytester, generated_image_dir) -> None:
     images = "images"
     make_cached_images(pytester.path, cache)
     make_cached_images(pytester.path, images)
-    _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
+    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
     generated = "generated"
@@ -65,7 +65,7 @@ def test_both_images_exist(pytester: pytest.Pytester, missing: str) -> None:
     cache_path = pytester.path / "cache"
     if missing == "build":
         make_cached_images(cache_path.parent, cache_path.name)
-        _preprocess_build_images(str(cache_path), str(cache_path))
+        _preprocess_build_images(cache_path, cache_path)
         expected_lines = [
             "*The image exists in the cache directory:",
             f"*{cache_path.name}/imcache.jpg",
@@ -111,7 +111,7 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     images = "images"
     make_cached_images(pytester.path, cache, color="red")
     make_cached_images(pytester.path, images, color="blue")
-    _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
+    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -120,14 +120,14 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
 
 
 @pytest.mark.parametrize("failed_image_dir", [True, False])
-def test_compare_images_warning(pytester: pytest.Pytester, failed_image_dir: bool) -> None:
+def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: bool) -> None:
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
     name = "im.png"
     make_cached_images(pytester.path, cache, name=name, color=[255, 0, 0])
     make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
-    _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
+    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
     failed = "failed"
@@ -175,7 +175,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     red_filename = make_cached_images(cache_parent, subdir, name="im1.png", color="red")
     blue_filename = make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
     build_filename = make_cached_images(pytester.path, images, name=name, color=build_color)
-    _preprocess_build_images(str(cache_parent / subdir), str(cache_parent / subdir))
+    _preprocess_build_images(cache_parent / subdir, cache_parent / subdir)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
     failed = "failed"
@@ -248,7 +248,7 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     subdir = "imcache"
     make_cached_images(pytester.path / cache, subdir)
     make_cached_images(pytester.path, images)
-    _preprocess_build_images(str(pytester.path / cache / subdir), str(pytester.path / cache / subdir))
+    _preprocess_build_images(pytester.path / cache / subdir, pytester.path / cache / subdir)
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.OK
@@ -269,7 +269,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester) -> None:
     make_multiple_cached_images(pytester.path, cache, n_images=n_images)
     image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images)
 
-    _preprocess_build_images(str(pytester.path / cache), str(pytester.path / cache))
+    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2")
     assert result.ret == pytest.ExitCode.OK
