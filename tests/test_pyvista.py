@@ -1041,7 +1041,7 @@ def test_env_info() -> None:
     assert any(m.startswith("_pyvista-") for m in matches), f"No pyvista version found in {info}"
     assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
 
-    expected_runner = "-hosted" in info if os.environ.get("CI", None) else "local"
+    expected_runner = "-hosted" if os.environ.get("CI", None) else "local"
     assert expected_runner in info
 
 
