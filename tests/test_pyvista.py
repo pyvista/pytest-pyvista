@@ -6,9 +6,11 @@ from enum import Enum
 import filecmp
 from pathlib import Path
 import platform
+import shutil
 import sys
 from unittest import mock
 
+import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 
@@ -44,6 +46,35 @@ def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", co
     filename = d / name
     plotter.screenshot(filename)
     return filename
+
+
+def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int = 10, name: str = "imcache{index}.png") -> list[Path]:
+    """Make image cache in `test_path/path` consisting of several images."""
+    colors = list(plt.rcParams["axes.prop_cycle"].by_key()["color"])
+
+    d = Path(test_path, path)
+    d.mkdir(exist_ok=True, parents=True)
+
+    color_to_file = {}
+    mesh = pv.Sphere()
+
+    filenames = []
+    for ii in range(n_images):
+        color = colors[ii % len(colors)]
+        filename = d / name.format(index=ii)
+
+        if color in color_to_file:
+            # don't regenerate images when that color already exists
+            shutil.copy(color_to_file[color], filename)
+        else:
+            plotter = pv.Plotter(off_screen=True)
+            plotter.add_mesh(mesh, color=color)
+            plotter.screenshot(filename)
+            color_to_file[color] = filename
+
+        filenames.append(filename)
+
+    return filenames
 
 
 def get_path_inode(path: str | Path) -> int:
