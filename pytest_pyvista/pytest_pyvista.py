@@ -354,7 +354,7 @@ class VerifyImageCache:
         if fail_msg and len(cached_image_paths) > 1:
             # Compare build image to other known valid versions
             msg_start = "This test has multiple cached images. It initially failed (as above)"
-            for path in cached_image_paths:
+            for path in cached_image_paths[1:]:
                 error = pyvista.compare_images(plotter, str(path))
                 if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
                     # Convert failure into a warning

@@ -211,7 +211,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     if fail_msg and len(cached_image_paths) > 1:
         # Compare build image to other known valid versions
         msg_start = "This test has multiple cached images. It initially failed (as above)"
-        for path in cached_image_paths:
+        for path in cached_image_paths[1:]:
             error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(path))
             if _check_compare_fail(test_case.test_name, error, allowed_error=DEFAULT_ERROR_THRESHOLD) is None:
                 # Convert failure into a warning
