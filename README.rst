@@ -128,7 +128,7 @@ Can be replaced with multiple versions of the image:
 
    - The sub-directory name should match the name of the test.
    - The image names in sub-directories can be arbitrary, e.g. ``0.jpg`` or
-   ``foo.jpg``.
+     ``foo.jpg``.
    - Nested sub-directories are also supported, and their names can also be arbitrary.
    - Use the ``--generate_subdirs`` flag to automatically generate test images in a
      sub-directory format.
