@@ -28,6 +28,9 @@ if TYPE_CHECKING:  # pragma: no cover
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 
+DEFAULT_ERROR_THRESHOLD: float = 500.0
+DEFAULT_WARNING_THRESHOLD: float = 200.0
+
 
 def _get_env_info() -> str:
     system = platform.system()
@@ -229,8 +232,8 @@ class VerifyImageCache:
         test_name: str,
         cache_dir: Path,
         *,
-        error_value: float = 500.0,
-        warning_value: float = 200.0,
+        error_value: float = DEFAULT_ERROR_THRESHOLD,
+        warning_value: float = DEFAULT_WARNING_THRESHOLD,
         var_error_value: float = 1000.0,
         var_warning_value: float = 1000.0,
         generated_image_dir: Path | None = None,
@@ -342,7 +345,7 @@ class VerifyImageCache:
         warn_msg, fail_msg = _test_compare_images(
             test_name=test_name_no_prefix,
             test_image=plotter,
-            cached_image=str(current_cached_image),
+            cached_image=current_cached_image,
             allowed_error=allowed_error,
             allowed_warning=allowed_warning,
         )
@@ -351,7 +354,7 @@ class VerifyImageCache:
         if fail_msg and len(cached_image_paths) > 1:
             # Compare build image to other known valid versions
             msg_start = "This test has multiple cached images. It initially failed (as above)"
-            for path in cached_image_paths:
+            for path in cached_image_paths[1:]:
                 error = pyvista.compare_images(plotter, str(path))
                 if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
                     # Convert failure into a warning
@@ -453,12 +456,19 @@ def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
 
 
 def _test_compare_images(
-    test_name: str, test_image: str | pyvista.Plotter, cached_image: str | pyvista.Plotter, allowed_error: float, allowed_warning: float
+    test_name: str, test_image: Path | pyvista.Plotter, cached_image: Path | pyvista.Plotter, allowed_error: float, allowed_warning: float
 ) -> tuple[str | None, str | None]:
-    # Check if test should fail or warn
-    error = pyvista.compare_images(test_image, cached_image)
-    fail_msg = _check_compare_fail(test_name, error, allowed_error)
-    warn_msg = _check_compare_warn(test_name, error, allowed_warning)
+    def _path_as_string(image: Path | pyvista.Plotter) -> str | pyvista.Plotter:
+        return str(image) if isinstance(image, Path) else image
+
+    try:
+        # Check if test should fail or warn
+        error = pyvista.compare_images(_path_as_string(test_image), _path_as_string(cached_image))
+        fail_msg = _check_compare_fail(test_name, error, allowed_error)
+        warn_msg = _check_compare_warn(test_name, error, allowed_warning)
+    except RuntimeError as e:
+        warn_msg = None
+        fail_msg = repr(e)
     return warn_msg, fail_msg
 
 
