@@ -1016,15 +1016,10 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             assert file_has_changed(str(from_test), str(from_cache))
 
 
-def _get_system() -> str:
-    system = platform.system()
-    return "macOS" if system == "Darwin" else system
-
-
 def test_env_info() -> None:
     """Test env info dataclass."""
     info = str(_EnvInfo())
-    system = _get_system()
+    system = _EnvInfo._get_system()  # noqa:SLF001
     assert info.startswith(system + "-")
 
     # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
@@ -1036,7 +1031,15 @@ def test_env_info() -> None:
     assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
 
 
-@pytest.mark.parametrize(("name", "value"), [("python", "python"), ("vtk", "vtk"), ("system", _get_system()), ("pyvista", "pyvista")])
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("python", "python"),
+        ("vtk", "vtk"),
+        ("system", _EnvInfo._get_system()),  # noqa: SLF001
+        ("pyvista", "pyvista"),
+    ],
+)
 def test_env_info_exclude(name: str, value: str) -> None:
     """Test removing parts of the env info."""
     info = str(_EnvInfo(**{name: False}))

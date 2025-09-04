@@ -40,10 +40,7 @@ class _EnvInfo:
     suffix: str = ""
 
     def __repr__(self) -> str:
-        system = platform.system()
-        if system == "Darwin":
-            system = "macOS"
-        system_version = f"{system}-{platform.release()}" if self.system else ""
+        system_version = f"{_EnvInfo._get_system()}-{platform.release()}" if self.system else ""
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
@@ -55,6 +52,11 @@ class _EnvInfo:
                 f"{vtk_version}{'_' if self.suffix else ''}{self.suffix}",
             ]
         )
+
+    @staticmethod
+    def _get_system() -> str:
+        system = platform.system()
+        return "macOS" if system == "Darwin" else system
 
 
 class RegressionError(RuntimeError):
