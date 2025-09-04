@@ -6,6 +6,7 @@ from enum import Enum
 import filecmp
 from pathlib import Path
 import platform
+import re
 import shutil
 import sys
 from unittest import mock
@@ -14,7 +15,7 @@ import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 
-from pytest_pyvista.pytest_pyvista import _get_env_info
+from pytest_pyvista.pytest_pyvista import _EnvInfo
 
 pv.OFF_SCREEN = True
 
@@ -339,7 +340,7 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_sub
     result = pytester.runpytest(*args)
     assert (pytester.path / "gen_dir").is_dir()
     if generate_subdirs:
-        with_suffix = _get_env_info() + ".png"
+        with_suffix = str(_EnvInfo()) + ".png"
         assert (pytester.path / "gen_dir" / "imcache" / with_suffix).is_file()
     else:
         assert (pytester.path / "gen_dir" / "imcache.png").is_file()
@@ -1013,3 +1014,45 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_test), str(from_cache))
+
+
+def _get_system() -> str:
+    system = platform.system()
+    return "macOS" if system == "Darwin" else system
+
+
+def test_env_info() -> None:
+    """Test env info dataclass."""
+    info = str(_EnvInfo())
+    system = _get_system()
+    assert info.startswith(system + "-")
+
+    # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
+    pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
+    matches = re.findall(pattern, info)
+
+    assert any(m.startswith("_py-") for m in matches), f"No pyvista version found in {info}"
+    assert any(m.startswith("_pyvista-") for m in matches), f"No pyvista version found in {info}"
+    assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
+
+
+@pytest.mark.parametrize(("name", "value"), [("python", "python"), ("vtk", "vtk"), ("system", _get_system()), ("pyvista", "pyvista")])
+def test_env_info_exclude(name: str, value: str) -> None:
+    """Test removing parts of the env info."""
+    info = str(_EnvInfo(**{name: False}))
+    assert value not in info
+
+
+def test_env_info_prefix_suffix() -> None:
+    """Test env info dataclass prefix and suffix."""
+    text = "foobar"
+    default = str(_EnvInfo())
+    sep = "_"
+    assert not default.startswith(sep)
+    assert not default.endswith(sep)
+
+    with_prefix = str(_EnvInfo(prefix=text))
+    assert f"{text}{sep}{default}" == with_prefix
+
+    with_suffix = str(_EnvInfo(suffix=text))
+    assert f"{default}{sep}{text}" == with_suffix

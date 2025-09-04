@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import dataclass
 import importlib
 import json
 import os
@@ -29,22 +30,31 @@ VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 
 
-def _get_env_info() -> str:
-    system = platform.system()
-    if system == "Darwin":
-        system = "macOS"
+@dataclass
+class _EnvInfo:
+    prefix: str = ""
+    system: bool = True
+    python: bool = True
+    pyvista: bool = True
+    vtk: bool = True
+    suffix: str = ""
 
-    return "_".join(
-        [
-            f"{system}-{platform.release()}",
-            f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-            f"pyvista-{pyvista.__version__}",
-            f"vtk-{vtkmodules.__version__}",
-        ]
-    )
-
-
-ENV_INFO = _get_env_info()
+    def __repr__(self) -> str:
+        system = platform.system()
+        if system == "Darwin":
+            system = "macOS"
+        system_version = f"{system}-{platform.release()}" if self.system else ""
+        python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
+        pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
+        vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
+        return "_".join(
+            [
+                f"{self.prefix}{'_' if self.prefix else ''}{system_version}",
+                f"{python_version}",
+                f"{pyvista_version}",
+                f"{vtk_version}{'_' if self.suffix else ''}{self.suffix}",
+            ]
+        )
 
 
 class RegressionError(RuntimeError):
@@ -83,7 +93,7 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
     group.addoption(
         "--generate_subdirs",
         action="store_true",
-        help="Save generated images to sub-directories.",
+        help="Save generated images to sub-directories. The image names are determined by the environment info.",
     )
     group.addoption(
         "--add_missing_images",
@@ -223,6 +233,7 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
     generate_subdirs = None
+    env_info: _EnvInfo
 
     def __init__(  # noqa: PLR0913
         self,
@@ -383,7 +394,9 @@ class VerifyImageCache:
 
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
-        generated_image_path = parent / Path(image_name).with_suffix("") / (ENV_INFO + ".png") if self.generate_subdirs else parent / image_name
+        generated_image_path = (
+            parent / Path(image_name).with_suffix("") / (str(self.env_info) + ".png") if self.generate_subdirs else parent / image_name
+        )
         generated_image_path.parent.mkdir(exist_ok=True, parents=True)
         plotter.screenshot(generated_image_path)
 
@@ -598,6 +611,7 @@ def verify_image_cache(
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
+    VerifyImageCache.env_info = _EnvInfo()
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
