@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import Enum
 import filecmp
+import os
 from pathlib import Path
 import platform
 import re
@@ -1040,14 +1041,18 @@ def test_env_info() -> None:
     assert any(m.startswith("_pyvista-") for m in matches), f"No pyvista version found in {info}"
     assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
 
+    expected_runner = "-hosted" in info if os.environ.get("CI", None) else "local"
+    assert expected_runner in info
+
 
 @pytest.mark.parametrize(
     ("name", "value"),
     [
-        ("python", "python"),
-        ("vtk", "vtk"),
         ("system", _EnvInfo._get_system()),  # noqa: SLF001
+        ("python", "python"),
         ("pyvista", "pyvista"),
+        ("vtk", "vtk"),
+        ("runner", "-hosted" if os.environ.get("CI", None) else "local"),
     ],
 )
 def test_env_info_exclude(name: str, value: str) -> None:
