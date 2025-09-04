@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import sys
 from typing import TYPE_CHECKING
@@ -29,10 +30,7 @@ if TYPE_CHECKING:  # pragma: no cover
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 
-try:
-    _GPU_VENDOR = pyvista.GPUInfo().vendor
-except Exception:  # noqa: BLE001 # pragma: no cover
-    _GPU_VENDOR = "UNKNOWN"
+_GPU_VENDOR: list[str] = [""]  # Use a list so we can mutate the string globally
 
 
 @dataclass
@@ -51,7 +49,7 @@ class _EnvInfo:
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
-        gpu = f"gpu-{_GPU_VENDOR}" if self.gpu else ""
+        gpu = f"gpu-{_EnvInfo._gpu_vendor()}" if self.gpu else ""
         runner = os.environ.get("RUNNER_ENVIRONMENT", "local-hosted") if self.runner else ""
 
         values = [
@@ -70,6 +68,39 @@ class _EnvInfo:
     def _get_system() -> str:
         system = platform.system()
         return "macOS" if system == "Darwin" else system
+
+    @staticmethod
+    def _gpu_vendor() -> str:  # pragma: no cover
+        # Get cached value
+        if _GPU_VENDOR[0]:
+            return _GPU_VENDOR[0]
+
+        try:
+            vendor = pyvista.GPUInfo().vendor
+        except Exception:  # noqa: BLE001
+            vendor = "UNKNOWN"
+
+        # Try to shorten vendor string
+        lower = vendor.lower()
+        if lower.startswith(nv := "nvidia"):
+            text = nv
+        elif lower.startswith(amd := "amd"):
+            text = amd
+        elif lower.startswith(ati := "ati"):
+            text = ati
+        elif lower.startswith(mesa := "mesa"):
+            text = mesa
+        else:
+            text = vendor
+        # Shorten original string and remove whitespace
+        vendor = vendor[: len(text)].replace(" ", "")
+        # Remove all potentially invalid/undesired filename characters
+        disallowed = r'[\\/:*?"<>|\s.\x00]'
+        vendor = re.sub(disallowed, "", vendor)
+
+        # Cache the value globally
+        _GPU_VENDOR[0] = vendor
+        return _GPU_VENDOR[0]
 
 
 class RegressionError(RuntimeError):
