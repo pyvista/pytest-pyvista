@@ -105,6 +105,39 @@ If you need to use any flag inside the tests, you can modify the
         pl.show()
 
 
+Specifying multiple cache images
+================================
+The cache directory is typically flat with no sub-directories. However,
+it is possible to specify multiple cache images for a single test by
+including a sub-directory with the same name as the test, and including
+multiple "valid" cache images in the sub-directory. For example, a
+single cached image:
+
+.. code-block:: bash
+
+    cache/my_image.jpg
+
+Can be replaced with multiple versions of the image:
+
+.. code-block:: bash
+
+    cache/my_image/0.jpg
+    cache/my_image/1.jpg
+
+.. note::
+
+   - The sub-directory name should match the name of the test.
+   - The image names in sub-directories can be arbitrary, e.g. ``0.jpg`` or
+     ``foo.jpg``.
+   - Nested sub-directories are also supported, and their names can also be arbitrary.
+   - Use the ``--generate_subdirs`` flag to automatically generate test images in a
+     sub-directory format.
+
+When there are multiple images, the test will initially compare the build image
+to the first cached image. If that comparison fails, the build image is then
+compared to all other cached images for that test. The test is successful if one
+of the comparisons is successful, though a warning is still issued.
+
 Global flags
 ------------
 These are the flags you can use when calling ``pytest`` in the command line:
@@ -119,6 +152,14 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
   directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
   This will override any configuration, see below.
+
+* ``--generate_subdirs`` saves generated test images in separate sub-directories
+  instead of saving them directly to the ``generated_image_dir``. Without this option,
+  generated images are saved as ``generated_image_dir/<test_name>.png``; with this
+  option enabled, they are instead saved as
+  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has
+  the format ``<system>_<python-version>_<pyvista-version>_<vtk-version>``. This can
+  be useful for providing context about how an image was generated.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
