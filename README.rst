@@ -153,7 +153,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
   directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
   This will override any configuration, see below.
 
-* ``--generate_subdirs <NAME>`` saves generated test images in separate sub-directories
+* ``--generate_subdirs`` saves generated test images in separate sub-directories
   instead of saving them directly to the ``generated_image_dir``. Without this option,
   generated images are saved as ``generated_image_dir/<test_name>.png``; with this
   option enabled, they are instead saved as
