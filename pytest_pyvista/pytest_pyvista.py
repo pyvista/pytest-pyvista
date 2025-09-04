@@ -29,6 +29,11 @@ if TYPE_CHECKING:  # pragma: no cover
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 
+try:
+    _GPU_VENDOR = pyvista.GPUInfo().vendor
+except Exception:  # noqa: BLE001 # pragma: no cover
+    _GPU_VENDOR = "UNKNOWN"
+
 
 @dataclass
 class _EnvInfo:
@@ -37,6 +42,7 @@ class _EnvInfo:
     python: bool = True
     pyvista: bool = True
     vtk: bool = True
+    gpu: bool = True
     runner: bool = True
     suffix: str = ""
 
@@ -45,8 +51,19 @@ class _EnvInfo:
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
-        runner = os.environ.get("RUNNER_ENVIRONMENT", "local") if self.runner else ""
-        values = [f"{self.prefix}", f"{system_version}", f"{python_version}", f"{pyvista_version}", f"{vtk_version}", f"{runner}", f"{self.suffix}"]
+        gpu = f"gpu-{_GPU_VENDOR}" if self.gpu else ""
+        runner = os.environ.get("RUNNER_ENVIRONMENT", "local-hosted") if self.runner else ""
+
+        values = [
+            f"{self.prefix}",
+            f"{system_version}",
+            f"{python_version}",
+            f"{pyvista_version}",
+            f"{vtk_version}",
+            f"{gpu}",
+            f"{runner}",
+            f"{self.suffix}",
+        ]
         return "_".join(val for val in values if val)
 
     @staticmethod
