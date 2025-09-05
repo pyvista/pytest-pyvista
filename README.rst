@@ -168,8 +168,8 @@ These are the flags you can use when calling ``pytest`` in the command line:
   option enabled, they are instead saved as
   ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has the format
   ``<system>_<python-version>_<pyvista-version>_<vtk-version>_<gpu-vendor>_<host>``.
-  This can be useful for providing context about how an image was generated. See
-  :ref:`Test specific flags` for customizing the info.
+  This can be useful for providing context about how an image was generated. See the
+  ``Test specific flags`` section for customizing the info.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
