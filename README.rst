@@ -233,7 +233,7 @@ in the beginning of your test function.
 
         # NOTE: Default values are shown
         info.prefix: str = ""  # Add a custom prefix
-        info.os: bool = True  # Show/hide the os (e.g. ubuntu, macOS)
+        info.os: bool = True  # Show/hide the os version (e.g. ubuntu, macOS)
         info.python: bool = True  # Show/hide the python version
         info.pyvista: bool = True  # Show/hide the pyvista version
         info.vtk: bool = True  # Show/hide the vtk version
