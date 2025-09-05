@@ -70,14 +70,14 @@ class _EnvInfo:
         return "macOS" if system == "Darwin" else system
 
     @staticmethod
-    def _gpu_vendor() -> str:  # pragma: no cover
+    def _gpu_vendor() -> str:
         # Get cached value
         if _GPU_VENDOR[0]:
             return _GPU_VENDOR[0]
 
         try:
             vendor = pyvista.GPUInfo().vendor
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001  # pragma: no cover
             vendor = "UNKNOWN"
 
         # Try to shorten vendor string
