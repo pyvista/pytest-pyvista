@@ -1033,7 +1033,7 @@ def test_env_info() -> None:
     os_info = _EnvInfo._get_os()  # noqa:SLF001
     assert " " not in info
     assert info.startswith(os_info[0] + "-" + os_info[1])
-    if os.environ.get("CI") and platform.system() == "Linux" and sys.version_info >= (3, 10):
+    if platform.system() == "Linux" and sys.version_info >= (3, 10):
         assert info.startswith("ubuntu")
 
     # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
@@ -1045,7 +1045,12 @@ def test_env_info() -> None:
     assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
 
     assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI"])
-    assert any(host in info for host in ["self-hosted", "github-hosted", "local-hosted"])
+
+    if os.environ.get("CI", None):
+        assert "no-CI" not in info
+        assert "CI" in info
+    else:
+        assert "no-CI" in info
 
 
 @pytest.mark.parametrize(
@@ -1053,11 +1058,11 @@ def test_env_info() -> None:
     [
         ("os", _EnvInfo._get_os()[0]),  # noqa: SLF001
         ("machine", platform.machine()),
+        ("gpu", "gpu-"),
         ("python", "py-"),
         ("pyvista", "pyvista-"),
         ("vtk", "vtk-"),
-        ("gpu", "gpu-"),
-        ("host", "-hosted"),
+        ("ci", "-CI"),
     ],
 )
 def test_env_info_exclude(name: str, value: str) -> None:
