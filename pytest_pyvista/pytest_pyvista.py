@@ -53,7 +53,7 @@ class _EnvInfo:
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
-        ci = f"{'' if os.environ.get('CI', None) else 'no'}-CI" if self.ci else ""
+        ci = f"{'' if os.environ.get('CI', None) else 'no-'}CI" if self.ci else ""
 
         values = [
             f"{self.prefix}",

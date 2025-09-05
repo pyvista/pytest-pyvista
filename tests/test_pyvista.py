@@ -1040,9 +1040,9 @@ def test_env_info() -> None:
     pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
     matches = re.findall(pattern, info)
 
-    assert any(m.startswith("_py-") for m in matches), f"No pyvista version found in {info}"
-    assert any(m.startswith("_pyvista-") for m in matches), f"No pyvista version found in {info}"
-    assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
+    assert any(m.startswith("_py-") for m in matches)
+    assert any(m.startswith("_pyvista-") for m in matches)
+    assert any(m.startswith("_vtk-") for m in matches)
 
     assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI"])
 
@@ -1062,7 +1062,7 @@ def test_env_info() -> None:
         ("python", "py-"),
         ("pyvista", "pyvista-"),
         ("vtk", "vtk-"),
-        ("ci", "-CI"),
+        ("ci", "CI"),
     ],
 )
 def test_env_info_exclude(name: str, value: str) -> None:
@@ -1075,6 +1075,8 @@ def test_env_info_exclude(name: str, value: str) -> None:
     info = str(_EnvInfo(**{name: False}))
     assert value not in info
     assert "__" not in info
+    assert "_-" not in info
+    assert "-_" not in info
 
 
 def test_env_info_prefix_suffix() -> None:
