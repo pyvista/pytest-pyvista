@@ -222,8 +222,8 @@ in the beginning of your test function.
   flag takes precedence over the global flag by the same name (see above).
 
 * ``env_info``: Dataclass for controlling the environment info used to name the generated
-  test image when the ``--generate_dirs`` option is used. The info can be test-specific or
-  can be modified globally by wrapping the ``verify_image_cache`` fixture, e.g.:
+  test image(s) when the ``--generate_dirs`` option is used. The info can be test-specific
+  or can be modified globally by wrapping the ``verify_image_cache`` fixture, e.g.:
 
   .. code-block:: python
 
