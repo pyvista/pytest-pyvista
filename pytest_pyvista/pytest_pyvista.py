@@ -299,7 +299,6 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
     generate_subdirs = None
-    env_info: _EnvInfo
 
     def __init__(  # noqa: PLR0913
         self,
@@ -315,6 +314,7 @@ class VerifyImageCache:
     ) -> None:
         """Initialize VerifyImageCache."""
         self.test_name = test_name
+        self.env_info: str | _EnvInfo = _EnvInfo()
 
         # handle paths
         if not cache_dir.is_dir():
@@ -677,7 +677,6 @@ def verify_image_cache(
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
-    VerifyImageCache.env_info = _EnvInfo()
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
