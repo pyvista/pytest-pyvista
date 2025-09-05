@@ -187,7 +187,8 @@ jobs:
         run: pip install --upgrade pip
 
       - name: Install pyvista with testing requirements
-        run: pip install -ve /tmp/pyvista --group test
+        run: pip install -ve . --group test
+        working-directory: /tmp/pyvista
 
       - name: Install pytest-pyvista
         run: pip install -ve .  --upgrade
