@@ -229,9 +229,8 @@ in the beginning of your test function.
 
     @pytest.fixture(autouse=True)
     def wrapped_verify_image_cache(verify_image_cache):
+        # Customize the environment info (NOTE: Default values are shown)
         info = verify_image_cache.env_info
-
-        # NOTE: Default values are shown
         info.prefix: str = ""  # Add a custom prefix
         info.os: bool = True  # Show/hide the os version (e.g. ubuntu, macOS, Windows)
         info.machine: bool = True  # Show/hide the machine info (e.g. arm64)
@@ -241,6 +240,9 @@ in the beginning of your test function.
         info.vtk: bool = True  # Show/hide the vtk version
         info.ci: bool = True  # Show/hide if generated in CI
         info.suffix: str = ""  # Add a custom suffix
+
+        # Alternatively, set a custom string
+        verify_image_cache.env_info = 'my_custom_string'
 
         return verify_image_cache
 

@@ -320,18 +320,23 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
+@pytest.mark.parametrize(
+    "env_info",
+    [
+        "prefix_suffix",
+        _EnvInfo(prefix="prefix", os=False, machine=False, gpu=False, python=False, pyvista=False, vtk=False, ci=False, suffix="suffix"),
+    ],
+)
 @pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_subdirs) -> None:
+def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_subdirs, env_info) -> None:
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(pytester.path)
     pytester.makepyfile(
-        """
+        f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
-            verify_image_cache.env_info.prefix = 'prefix'
-            verify_image_cache.env_info.vtk = False
-            verify_image_cache.env_info.suffix = 'suffix'
+            verify_image_cache.env_info = '{env_info}'
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
@@ -350,10 +355,7 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_sub
         paths = list(subdir.iterdir())
         assert len(paths) == 1
         image_path = paths[0]
-        assert image_path.suffix == ".png"
-        assert image_path.name.startswith("prefix")
-        assert image_path.stem.endswith("suffix")
-        assert "vtk" not in image_path.name
+        assert image_path.name == "prefix_suffix.png"
     else:
         assert (pytester.path / "gen_dir" / "imcache.png").is_file()
     result.assert_outcomes(passed=1)
