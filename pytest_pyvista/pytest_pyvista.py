@@ -59,10 +59,10 @@ class _EnvInfo:
             f"{self.prefix}",
             f"{os_version}",
             f"{machine}",
+            f"{gpu}",
             f"{python_version}",
             f"{pyvista_version}",
             f"{vtk_version}",
-            f"{gpu}",
             f"{host}",
             f"{self.suffix}",
         ]
