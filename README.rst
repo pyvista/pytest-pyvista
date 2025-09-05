@@ -234,6 +234,7 @@ in the beginning of your test function.
         # NOTE: Default values are shown
         info.prefix: str = ""  # Add a custom prefix
         info.os: bool = True  # Show/hide the os version (e.g. ubuntu, macOS)
+        info.machine: bool = True  # Show/hide the machine info (e.g. arm64)
         info.python: bool = True  # Show/hide the python version
         info.pyvista: bool = True  # Show/hide the pyvista version
         info.vtk: bool = True  # Show/hide the vtk version

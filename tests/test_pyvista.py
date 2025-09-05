@@ -1052,15 +1052,21 @@ def test_env_info() -> None:
     ("name", "value"),
     [
         ("os", _EnvInfo._get_os()[0]),  # noqa: SLF001
-        ("python", "python"),
-        ("pyvista", "pyvista"),
-        ("vtk", "vtk"),
-        ("gpu", "gpu"),
-        ("host", "hosted"),
+        ("machine", platform.machine()),
+        ("python", "py-"),
+        ("pyvista", "pyvista-"),
+        ("vtk", "vtk-"),
+        ("gpu", "gpu-"),
+        ("host", "-hosted"),
     ],
 )
 def test_env_info_exclude(name: str, value: str) -> None:
     """Test removing parts of the env info."""
+    # Sanity check to ensure the value is there ordinarily
+    info = str(_EnvInfo())
+    assert value in info
+
+    # Test it's excluded
     info = str(_EnvInfo(**{name: False}))
     assert value not in info
     assert "__" not in info
