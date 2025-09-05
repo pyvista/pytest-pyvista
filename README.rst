@@ -231,13 +231,13 @@ in the beginning of your test function.
     def wrapped_verify_image_cache(verify_image_cache):
         info = verify_image_cache.env_info
 
-        # NOTE: Default values are show
+        # NOTE: Default values are shown
         info.prefix: str = ""  # Add a custom prefix
-        info.system: bool = True  # Show/hide the system platform
+        info.system: bool = True  # Show/hide the system platform (e.g. Linux)
         info.python: bool = True  # Show/hide the python version
         info.pyvista: bool = True  # Show/hide the pyvista version
         info.vtk: bool = True  # Show/hide the vtk version
-        info.gpu: bool = True  # Show/hide the gpu vendor
+        info.gpu: bool = True  # Show/hide the gpu vendor (e.g. NVIDIA)
         info.host: bool = True  # Show/hide the host (e.g self-hosted, github-hosted)
         info.suffix: str = ""  # Add a custom suffix
 
