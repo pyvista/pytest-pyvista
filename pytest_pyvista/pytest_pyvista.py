@@ -68,12 +68,9 @@ class _EnvInfo:
     @staticmethod
     def _get_os() -> tuple[str, str]:
         system = platform.system()
-        if system == "Linux":
-            import distro  # noqa: PLC0415
 
-            return distro.id(), distro.version()
-        os = "macOS" if system == "Darwin" else system
-        return os, platform.release()
+        name = platform.freedesktop_os_release()["ID"] if system == "Linux" else "macOS" if system == "Darwin" else system
+        return name, platform.release()
 
     @staticmethod
     def _gpu_vendor() -> str:

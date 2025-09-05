@@ -167,7 +167,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
   generated images are saved as ``generated_image_dir/<test_name>.png``; with this
   option enabled, they are instead saved as
   ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has the format
-  ``<system>_<python-version>_<pyvista-version>_<vtk-version>_<gpu-vendor>_<host>``.
+  ``<os>_<python-version>_<pyvista-version>_<vtk-version>_<gpu-vendor>_<host>``.
   This can be useful for providing context about how an image was generated. See the
   ``Test specific flags`` section for customizing the info.
 
