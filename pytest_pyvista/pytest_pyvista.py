@@ -82,16 +82,16 @@ class _EnvInfo:
 
         # Try to shorten vendor string
         lower = vendor.lower()
-        if lower.startswith(nv := "nvidia"):
+        if lower.startswith(nv := "nvidia"):  # pragma: no cover
             text = nv
-        elif lower.startswith(amd := "amd"):
+        elif lower.startswith(amd := "amd"):  # pragma: no cover
             text = amd
-        elif lower.startswith(ati := "ati"):
+        elif lower.startswith(ati := "ati"):  # pragma: no cover
             text = ati
         elif lower.startswith(mesa := "mesa"):
             text = mesa
         else:
-            text = vendor
+            text = vendor  # pragma: no cover
         # Shorten original string and remove whitespace
         vendor = vendor[: len(text)].replace(" ", "")
         # Remove all potentially invalid/undesired filename characters
