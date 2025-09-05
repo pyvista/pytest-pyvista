@@ -176,33 +176,36 @@ jobs:
     runs-on: ubuntu-22.04 # matching pyvista
     steps:
       - uses: actions/checkout@v5
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch
+      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch /tmp/pyvista
 
       - name: upgrade pip
         run: pip install --upgrade pip
+
       - name: Install pyvista with testing requirements
         run: pip install -ve . --group test
-        working-directory: pyvista
+        working-directory: /tmp/pyvista
+
       - name: Install pytest-pyvista
         run: pip install -ve .  --upgrade
+
       - name: Software Report
         run: |
-          xvfb-run python -c "import pyvista; print(pyvista.Report()); from pyvista import examples; print('User data path:', examples.USER_DATA_PATH)"
+          xvfb-run python -c "import pyvista; print(pyvista.Report())"
           which python
           pip list
-        working-directory: pyvista
 
       - name: Unit Testing
-        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting/test_plotting.py -n2
-        working-directory: pyvista
+        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache -n2
+        working-directory: /tmp/pyvista
 
       - name: Upload generated image artifact
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
           name: generated_images
-          path: pyvista/gen_dir
+          path: /tmp/pyvista/gen_dir
