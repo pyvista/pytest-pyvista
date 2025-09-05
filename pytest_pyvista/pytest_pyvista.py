@@ -72,11 +72,10 @@ class _EnvInfo:
     def _get_os() -> tuple[str, str]:
         system = platform.system()
         if system == "Linux":
-            if hasattr(platform, "freedesktop_os_release"):
-                # Available python 3.10+
+            try:
                 name = platform.freedesktop_os_release()["ID"]
                 version = platform.freedesktop_os_release()["VERSION_ID"]
-            else:
+            except AttributeError:
                 name = system
                 version = platform.release()
             return name, version
