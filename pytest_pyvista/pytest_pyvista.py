@@ -71,8 +71,15 @@ class _EnvInfo:
     @staticmethod
     def _get_os() -> tuple[str, str]:
         system = platform.system()
-
-        name = platform.freedesktop_os_release()["ID"] if system == "Linux" else "macOS" if system == "Darwin" else system
+        if system == "Linux":
+            if hasattr(platform, "freedesktop_os_release"):
+                name = platform.freedesktop_os_release()["ID"]
+                version = platform.freedesktop_os_release()["VERSION_ID"]
+            else:
+                name = system
+                version = platform.release()
+            return name, version
+        name = "macOS" if system == "Darwin" else system
         return name, platform.release()
 
     @staticmethod
