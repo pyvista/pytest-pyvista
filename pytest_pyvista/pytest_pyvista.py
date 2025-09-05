@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
+from functools import cached_property
 import importlib
 import json
 import os
@@ -30,8 +31,6 @@ if TYPE_CHECKING:  # pragma: no cover
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 
-_GPU_VENDOR: list[str] = [""]  # Use a list so we can mutate the string globally
-
 
 @dataclass
 class _EnvInfo:
@@ -46,10 +45,9 @@ class _EnvInfo:
     suffix: str = ""
 
     def __repr__(self) -> str:
-        os_info = _EnvInfo._get_os()
-        os_version = f"{os_info[0]}-{os_info[1]}" if self.os else ""
+        os_version = f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}" if self.os else ""
         machine = f"{platform.machine()}" if self.machine else ""
-        gpu = f"gpu-{_EnvInfo._gpu_vendor()}" if self.gpu else ""
+        gpu = f"gpu-{_SYSTEM_PROPERTIES.gpu_vendor}" if self.gpu else ""
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
@@ -68,6 +66,20 @@ class _EnvInfo:
         ]
         return "_".join(val for val in values if val)
 
+
+class _SystemProperties:
+    @cached_property
+    def os_name(self) -> str:
+        return _SystemProperties._get_os()[0]
+
+    @cached_property
+    def os_version(self) -> str:
+        return _SystemProperties._get_os()[1]
+
+    @cached_property
+    def gpu_vendor(self) -> str:
+        return _SystemProperties._gpu_vendor()
+
     @staticmethod
     def _get_os() -> tuple[str, str]:
         system = platform.system()
@@ -84,10 +96,6 @@ class _EnvInfo:
 
     @staticmethod
     def _gpu_vendor() -> str:
-        # Get cached value
-        if _GPU_VENDOR[0]:
-            return _GPU_VENDOR[0]
-
         try:
             vendor = pyvista.GPUInfo().vendor
         except Exception:  # noqa: BLE001  # pragma: no cover
@@ -109,11 +117,10 @@ class _EnvInfo:
         vendor = vendor[: len(text)].replace(" ", "")
         # Remove all potentially invalid/undesired filename characters
         disallowed = r'[\\/:*?"<>|\s.\x00]'
-        vendor = re.sub(disallowed, "", vendor)
+        return re.sub(disallowed, "", vendor)
 
-        # Cache the value globally
-        _GPU_VENDOR[0] = vendor
-        return _GPU_VENDOR[0]
+
+_SYSTEM_PROPERTIES = _SystemProperties()
 
 
 class RegressionError(RuntimeError):

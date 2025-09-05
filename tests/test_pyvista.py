@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 
 pv.OFF_SCREEN = True
@@ -1030,9 +1031,8 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
 def test_env_info() -> None:
     """Test env info dataclass."""
     info = str(_EnvInfo())
-    os_info = _EnvInfo._get_os()  # noqa:SLF001
     assert " " not in info
-    assert info.startswith(os_info[0] + "-" + os_info[1])
+    assert info.startswith(f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}")
     if platform.system() == "Linux" and sys.version_info >= (3, 10):
         assert info.startswith("ubuntu")
 
@@ -1056,7 +1056,7 @@ def test_env_info() -> None:
 @pytest.mark.parametrize(
     ("name", "value"),
     [
-        ("os", _EnvInfo._get_os()[0]),  # noqa: SLF001
+        ("os", _SYSTEM_PROPERTIES.os_name),
         ("machine", platform.machine()),
         ("gpu", "gpu-"),
         ("python", "py-"),
