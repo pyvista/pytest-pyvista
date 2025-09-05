@@ -73,6 +73,7 @@ class _EnvInfo:
         system = platform.system()
         if system == "Linux":
             if hasattr(platform, "freedesktop_os_release"):
+                # Available python 3.10+
                 name = platform.freedesktop_os_release()["ID"]
                 version = platform.freedesktop_os_release()["VERSION_ID"]
             else:

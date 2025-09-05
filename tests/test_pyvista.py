@@ -1033,7 +1033,7 @@ def test_env_info() -> None:
     os_info = _EnvInfo._get_os()  # noqa:SLF001
     assert " " not in info
     assert info.startswith(os_info[0] + "-" + os_info[1])
-    if os.environ.get("CI") and platform.system() == "Linux":
+    if os.environ.get("CI") and platform.system() == "Linux" and sys.version_info >= (3, 10):
         assert info.startswith("ubuntu")
 
     # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
