@@ -41,7 +41,7 @@ class _EnvInfo:
     pyvista: bool = True
     vtk: bool = True
     gpu: bool = True
-    runner: bool = True
+    host: bool = True
     suffix: str = ""
 
     def __repr__(self) -> str:
@@ -50,7 +50,7 @@ class _EnvInfo:
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
         gpu = f"gpu-{_EnvInfo._gpu_vendor()}" if self.gpu else ""
-        runner = os.environ.get("RUNNER_ENVIRONMENT", "local-hosted") if self.runner else ""
+        host = os.environ.get("RUNNER_ENVIRONMENT", "local-hosted") if self.host else ""
 
         values = [
             f"{self.prefix}",
@@ -59,7 +59,7 @@ class _EnvInfo:
             f"{pyvista_version}",
             f"{vtk_version}",
             f"{gpu}",
-            f"{runner}",
+            f"{host}",
             f"{self.suffix}",
         ]
         return "_".join(val for val in values if val)

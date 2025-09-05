@@ -1042,7 +1042,7 @@ def test_env_info() -> None:
     assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
 
     assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI"])
-    assert any(hosted in info for hosted in ["self-hosted", "github-hosted", "local-hosted"])
+    assert any(host in info for host in ["self-hosted", "github-hosted", "local-hosted"])
 
 
 @pytest.mark.parametrize(
@@ -1053,7 +1053,7 @@ def test_env_info() -> None:
         ("pyvista", "pyvista"),
         ("vtk", "vtk"),
         ("gpu", "gpu"),
-        ("runner", "hosted"),
+        ("host", "hosted"),
     ],
 )
 def test_env_info_exclude(name: str, value: str) -> None:

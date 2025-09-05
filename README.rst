@@ -166,9 +166,10 @@ These are the flags you can use when calling ``pytest`` in the command line:
   instead of saving them directly to the ``generated_image_dir``. Without this option,
   generated images are saved as ``generated_image_dir/<test_name>.png``; with this
   option enabled, they are instead saved as
-  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has
-  the format ``<system>_<python-version>_<pyvista-version>_<vtk-version>``. This can
-  be useful for providing context about how an image was generated.
+  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has the format
+  ``<system>_<python-version>_<pyvista-version>_<vtk-version>_<gpu-vendor>_<host>``.
+  This can be useful for providing context about how an image was generated. See
+  :ref:`Test specific flags` for customizing the info.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
@@ -219,6 +220,28 @@ in the beginning of your test function.
 * ``allow_useless_fixture``: Set this flag to ``True`` to prevent test failure when the
   ``verify_image_cache`` fixture is used but no images are generated. The value of this
   flag takes precedence over the global flag by the same name (see above).
+
+* ``env_info``: Dataclass for controlling the environment info used to name the generated
+  test image when the ``--generate_dirs`` option is used. The info can be test-specific or
+  can be modified globally by wrapping the ``verify_image_cache`` fixture, e.g.:
+
+  .. code-block:: python
+
+    @pytest.fixture(autouse=True)
+    def wrapped_verify_image_cache(verify_image_cache):
+        info = verify_image_cache.env_info
+
+        # NOTE: Default values are show
+        info.prefix: str = ""  # Add a custom prefix
+        info.system: bool = True  # Show/hide the system platform
+        info.python: bool = True  # Show/hide the python version
+        info.pyvista: bool = True  # Show/hide the pyvista version
+        info.vtk: bool = True  # Show/hide the vtk version
+        info.gpu: bool = True  # Show/hide the gpu vendor
+        info.host: bool = True  # Show/hide the host (e.g self-hosted, github-hosted)
+        info.suffix: str = ""  # Add a custom suffix
+
+        return verify_image_cache
 
 Documentation image tests
 -------------------------
