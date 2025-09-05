@@ -1051,7 +1051,7 @@ def test_env_info() -> None:
 @pytest.mark.parametrize(
     ("name", "value"),
     [
-        ("system", _EnvInfo._get_os()),  # noqa: SLF001
+        ("os", _EnvInfo._get_os()[0]),  # noqa: SLF001
         ("python", "python"),
         ("pyvista", "pyvista"),
         ("vtk", "vtk"),

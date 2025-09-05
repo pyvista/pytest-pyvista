@@ -36,7 +36,7 @@ _GPU_VENDOR: list[str] = [""]  # Use a list so we can mutate the string globally
 @dataclass
 class _EnvInfo:
     prefix: str = ""
-    system: bool = True
+    os: bool = True
     python: bool = True
     pyvista: bool = True
     vtk: bool = True
@@ -46,7 +46,7 @@ class _EnvInfo:
 
     def __repr__(self) -> str:
         os_info = _EnvInfo._get_os()
-        os_version = f"{os_info[0]}-{os_info[1]}" if self.system else ""
+        os_version = f"{os_info[0]}-{os_info[1]}" if self.os else ""
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
