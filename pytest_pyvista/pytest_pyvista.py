@@ -45,7 +45,8 @@ class _EnvInfo:
     suffix: str = ""
 
     def __repr__(self) -> str:
-        system_version = f"{_EnvInfo._get_system()}-{platform.release()}" if self.system else ""
+        os_info = _EnvInfo._get_os()
+        os_version = f"{os_info[0]}-{os_info[1]}" if self.system else ""
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
         vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
@@ -54,7 +55,7 @@ class _EnvInfo:
 
         values = [
             f"{self.prefix}",
-            f"{system_version}",
+            f"{os_version}",
             f"{python_version}",
             f"{pyvista_version}",
             f"{vtk_version}",
@@ -65,9 +66,14 @@ class _EnvInfo:
         return "_".join(val for val in values if val)
 
     @staticmethod
-    def _get_system() -> str:
+    def _get_os() -> tuple[str, str]:
         system = platform.system()
-        return "macOS" if system == "Darwin" else system
+        if system == "Linux":
+            import distro  # noqa: PLC0415
+
+            return distro.id(), distro.version()
+        os = "macOS" if system == "Darwin" else system
+        return os, platform.release()
 
     @staticmethod
     def _gpu_vendor() -> str:

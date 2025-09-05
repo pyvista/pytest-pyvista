@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import Enum
 import filecmp
+import os
 from pathlib import Path
 import platform
 import re
@@ -1029,9 +1030,11 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
 def test_env_info() -> None:
     """Test env info dataclass."""
     info = str(_EnvInfo())
-    system = _EnvInfo._get_system()  # noqa:SLF001
+    os_info = _EnvInfo._get_os()  # noqa:SLF001
     assert " " not in info
-    assert info.startswith(system + "-")
+    assert info.startswith(os_info[0] + "-" + os_info[1])
+    if os.environ.get("CI") and platform.system() == "Linux":
+        assert info.startswith("ubuntu")
 
     # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
     pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
@@ -1048,7 +1051,7 @@ def test_env_info() -> None:
 @pytest.mark.parametrize(
     ("name", "value"),
     [
-        ("system", _EnvInfo._get_system()),  # noqa: SLF001
+        ("system", _EnvInfo._get_os()),  # noqa: SLF001
         ("python", "python"),
         ("pyvista", "pyvista"),
         ("vtk", "vtk"),
