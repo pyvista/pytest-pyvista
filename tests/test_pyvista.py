@@ -1030,6 +1030,7 @@ def test_env_info() -> None:
     """Test env info dataclass."""
     info = str(_EnvInfo())
     system = _EnvInfo._get_system()  # noqa:SLF001
+    assert " " not in info
     assert info.startswith(system + "-")
 
     # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
@@ -1040,8 +1041,8 @@ def test_env_info() -> None:
     assert any(m.startswith("_pyvista-") for m in matches), f"No pyvista version found in {info}"
     assert any(m.startswith("_vtk-") for m in matches), f"No vtk version found in {info}"
 
-    assert "gpu-" in info
-    assert "-hosted" in info
+    assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI"])
+    assert any(hosted in info for hosted in ["self-hosted", "github-hosted", "local-hosted"])
 
 
 @pytest.mark.parametrize(
