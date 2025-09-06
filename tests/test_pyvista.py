@@ -1039,8 +1039,11 @@ def test_env_info() -> None:
     info = str(_EnvInfo())
     assert " " not in info
     assert info.startswith(f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}")
-    if platform.system() == "Linux" and sys.version_info >= (3, 10):
-        assert info.startswith("ubuntu")
+    if platform.system() == "Linux":
+        if sys.version_info >= (3, 10):
+            assert info.startswith("ubuntu")
+        else:
+            assert info.startswith("Linux")
 
     # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
     pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
@@ -1125,6 +1128,7 @@ def test_gpu_vendor_unknown(mocker: MockerFixture) -> None:
     assert _SystemProperties._gpu_vendor() == "unknown"  # noqa: SLF001
 
 
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="Missing freedesktop_os_release")
 def test_os_linux_freedesktop(mocker: MockerFixture) -> None:
     """Test system properties for Linux."""
     mocker.patch("platform.system", return_value="Linux")
