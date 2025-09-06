@@ -99,7 +99,7 @@ class _SystemProperties:
         try:
             vendor = pyvista.GPUInfo().vendor
         except Exception:  # noqa: BLE001  # pragma: no cover
-            vendor = "UNKNOWN"
+            return "unknown"
 
         # Try to shorten vendor string
         lower = vendor.lower()
