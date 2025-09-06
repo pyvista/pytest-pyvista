@@ -1110,7 +1110,7 @@ def test_env_info_prefix_suffix() -> None:
         ('Unknown\\/:*?"<>| \t\n\r\v\f\x00Vendor', "UnknownVendor"),
     ],
 )
-def test_gpu_vendor(mocker: MockerFixture, vendor, expected) -> None:
+def test_gpu_vendor(mocker: MockerFixture, vendor: str, expected: str) -> None:
     """Test vendor name processing."""
     mock_gpuinfo = mocker.patch("pyvista.GPUInfo")
     mock_gpuinfo.return_value.vendor = vendor
@@ -1123,3 +1123,39 @@ def test_gpu_vendor_unknown(mocker: MockerFixture) -> None:
     """Test exception from GPUInfo is handled properly."""
     mocker.patch("pyvista.GPUInfo", side_effect=RuntimeError("fail"))
     assert _SystemProperties._gpu_vendor() == "unknown"  # noqa: SLF001
+
+
+def test_os_linux_freedesktop(mocker: MockerFixture) -> None:
+    """Test system properties for Linux."""
+    mocker.patch("platform.system", return_value="Linux")
+    mocker.patch(
+        "platform.freedesktop_os_release",
+        return_value={
+            "ID": "ubuntu",
+            "VERSION_ID": "22.04",
+        },
+    )
+
+    result = _SystemProperties._get_os()  # noqa: SLF001
+    assert result == ("ubuntu", "22.04")
+
+
+@pytest.mark.parametrize(
+    ("system", "release", "expected"),
+    [
+        ("Darwin", "24.6.0", ("macOS", "24.6.0")),
+        ("Windows", "10", ("Windows", "10")),
+    ],
+)
+def test_os_darwin_windows(
+    mocker: MockerFixture,
+    system: str,
+    release: str,
+    expected: tuple[str, str],
+) -> None:
+    """Test system properties for macOS and Windows."""
+    mocker.patch("platform.system", return_value=system)
+    mocker.patch("platform.release", return_value=release)
+
+    result = _SystemProperties._get_os()  # noqa: SLF001
+    assert result == expected
