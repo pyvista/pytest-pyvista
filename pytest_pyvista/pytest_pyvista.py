@@ -98,16 +98,16 @@ class _SystemProperties:
     def _gpu_vendor() -> str:
         try:
             vendor = pyvista.GPUInfo().vendor
-        except Exception:  # noqa: BLE001  # pragma: no cover
+        except Exception:  # noqa: BLE001
             return "unknown"
 
         # Try to shorten vendor string
         lower = vendor.lower()
-        if lower.startswith(nv := "nvidia"):  # pragma: no cover
+        if lower.startswith(nv := "nvidia"):
             text = nv
-        elif lower.startswith(amd := "amd"):  # pragma: no cover
+        elif lower.startswith(amd := "amd"):
             text = amd
-        elif lower.startswith(ati := "ati"):  # pragma: no cover
+        elif lower.startswith(ati := "ati"):
             text = ati
         elif lower.startswith(mesa := "mesa"):
             text = mesa

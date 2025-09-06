@@ -10,6 +10,7 @@ import platform
 import re
 import shutil
 import sys
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import matplotlib.pyplot as plt
@@ -18,7 +19,10 @@ import pyvista as pv
 
 from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
 from pytest_pyvista.pytest_pyvista import _EnvInfo
+from pytest_pyvista.pytest_pyvista import _SystemProperties
 
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
 pv.OFF_SCREEN = True
 
 pytest_plugins = "pytester"
@@ -1094,3 +1098,28 @@ def test_env_info_prefix_suffix() -> None:
 
     with_suffix = str(_EnvInfo(suffix=text))
     assert f"{default}{sep}{text}" == with_suffix
+
+
+@pytest.mark.parametrize(
+    ("vendor", "expected"),
+    [
+        ("NVIDIA Corporation", "NVIDIA"),
+        ("AMD Technologies", "AMD"),
+        ("ATI Graphics", "ATI"),
+        ("Mesa DRI Intel", "Mesa"),
+        ('Unknown\\/:*?"<>| \t\n\r\v\f\x00Vendor', "UnknownVendor"),
+    ],
+)
+def test_gpu_vendor(mocker: MockerFixture, vendor, expected) -> None:
+    """Test vendor name processing."""
+    mock_gpuinfo = mocker.patch("pyvista.GPUInfo")
+    mock_gpuinfo.return_value.vendor = vendor
+
+    result = _SystemProperties._gpu_vendor()  # noqa: SLF001
+    assert result == expected
+
+
+def test_gpu_vendor_unknown(mocker: MockerFixture) -> None:
+    """Test exception from GPUInfo is handled properly."""
+    mocker.patch("pyvista.GPUInfo", side_effect=RuntimeError("fail"))
+    assert _SystemProperties._gpu_vendor() == "unknown"  # noqa: SLF001
