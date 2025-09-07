@@ -4,18 +4,25 @@ from __future__ import annotations
 
 from enum import Enum
 import filecmp
+import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import sys
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 
-from pytest_pyvista.pytest_pyvista import _get_env_info
+from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
+from pytest_pyvista.pytest_pyvista import _EnvInfo
+from pytest_pyvista.pytest_pyvista import _SystemProperties
 
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
 pv.OFF_SCREEN = True
 
 pytest_plugins = "pytester"
@@ -317,15 +324,23 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
+@pytest.mark.parametrize(
+    "env_info",
+    [
+        "prefix_suffix",
+        _EnvInfo(prefix="prefix", os=False, machine=False, gpu=False, python=False, pyvista=False, vtk=False, ci=False, suffix="suffix"),
+    ],
+)
 @pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_subdirs) -> None:
+def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_subdirs, env_info) -> None:
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(pytester.path)
     pytester.makepyfile(
-        """
+        f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
+            verify_image_cache.env_info = '{env_info}'
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
@@ -339,8 +354,12 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_sub
     result = pytester.runpytest(*args)
     assert (pytester.path / "gen_dir").is_dir()
     if generate_subdirs:
-        with_suffix = _get_env_info() + ".png"
-        assert (pytester.path / "gen_dir" / "imcache" / with_suffix).is_file()
+        subdir = pytester.path / "gen_dir" / "imcache"
+        assert subdir.is_dir()
+        paths = list(subdir.iterdir())
+        assert len(paths) == 1
+        image_path = paths[0]
+        assert image_path.name == "prefix_suffix.png"
     else:
         assert (pytester.path / "gen_dir" / "imcache.png").is_file()
     result.assert_outcomes(passed=1)
@@ -1016,3 +1035,134 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_test), str(from_cache))
+
+
+def test_env_info() -> None:
+    """Test env info dataclass."""
+    info = str(_EnvInfo())
+    assert " " not in info
+    assert info.startswith(f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}")
+    if platform.system() == "Linux":
+        if sys.version_info >= (3, 10):
+            assert info.startswith("ubuntu")
+        else:
+            assert info.startswith("Linux")
+
+    # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
+    pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
+    matches = re.findall(pattern, info)
+
+    assert any(m.startswith("_py-") for m in matches)
+    assert any(m.startswith("_pyvista-") for m in matches)
+    assert any(m.startswith("_vtk-") for m in matches)
+
+    assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI"])
+
+    if os.environ.get("CI", None):
+        assert "no-CI" not in info
+        assert "CI" in info
+    else:
+        assert "no-CI" in info
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("os", _SYSTEM_PROPERTIES.os_name),
+        ("machine", platform.machine()),
+        ("gpu", "gpu-"),
+        ("python", "py-"),
+        ("pyvista", "pyvista-"),
+        ("vtk", "vtk-"),
+        ("ci", "CI"),
+    ],
+)
+def test_env_info_exclude(name: str, value: str) -> None:
+    """Test removing parts of the env info."""
+    # Sanity check to ensure the value is there ordinarily
+    info = str(_EnvInfo())
+    assert value in info
+
+    # Test it's excluded
+    info = str(_EnvInfo(**{name: False}))
+    assert value not in info
+    assert "__" not in info
+    assert "_-" not in info
+    assert "-_" not in info
+
+
+def test_env_info_prefix_suffix() -> None:
+    """Test env info dataclass prefix and suffix."""
+    text = "foobar"
+    default = str(_EnvInfo())
+    sep = "_"
+    assert not default.startswith(sep)
+    assert not default.endswith(sep)
+
+    with_prefix = str(_EnvInfo(prefix=text))
+    assert f"{text}{sep}{default}" == with_prefix
+
+    with_suffix = str(_EnvInfo(suffix=text))
+    assert f"{default}{sep}{text}" == with_suffix
+
+
+@pytest.mark.parametrize(
+    ("vendor", "expected"),
+    [
+        ("NVIDIA Corporation", "NVIDIA"),
+        ("AMD Technologies", "AMD"),
+        ("ATI Graphics", "ATI"),
+        ("Mesa DRI Intel", "Mesa"),
+        ('Unknown\\/:*?"<>| \t\n\r\v\f\x00Vendor', "UnknownVendor"),
+    ],
+)
+def test_gpu_vendor(mocker: MockerFixture, vendor: str, expected: str) -> None:
+    """Test vendor name processing."""
+    mock_gpuinfo = mocker.patch("pyvista.GPUInfo")
+    mock_gpuinfo.return_value.vendor = vendor
+
+    result = _SystemProperties._gpu_vendor()  # noqa: SLF001
+    assert result == expected
+
+
+def test_gpu_vendor_unknown(mocker: MockerFixture) -> None:
+    """Test exception from GPUInfo is handled properly."""
+    mocker.patch("pyvista.GPUInfo", side_effect=RuntimeError("fail"))
+    assert _SystemProperties._gpu_vendor() == "unknown"  # noqa: SLF001
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="Missing freedesktop_os_release")
+def test_os_linux_freedesktop(mocker: MockerFixture) -> None:
+    """Test system properties for Linux."""
+    mocker.patch("platform.system", return_value="Linux")
+    mocker.patch(
+        "platform.freedesktop_os_release",
+        return_value={
+            "ID": "ubuntu",
+            "VERSION_ID": "22.04",
+        },
+    )
+
+    result = _SystemProperties._get_os()  # noqa: SLF001
+    assert result == ("ubuntu", "22.04")
+
+
+@pytest.mark.parametrize(
+    ("system", "release", "expected"),
+    [
+        ("Darwin", "24.6.0", ("macOS", "24.6.0")),
+        ("Windows", "10", ("Windows", "10")),
+    ],
+)
+def test_os_darwin_windows(
+    mocker: MockerFixture,
+    system: str,
+    release: str,
+    expected: tuple[str, str],
+) -> None:
+    """Test system properties for macOS and Windows."""
+    mocker.patch("platform.system", return_value=system)
+    mocker.patch("platform.release", return_value=release)
+
+    result = _SystemProperties._get_os()  # noqa: SLF001
+    assert result == expected
