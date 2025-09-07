@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import dataclass
+from functools import cached_property
 import importlib
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import sys
 from typing import TYPE_CHECKING
@@ -32,22 +35,95 @@ DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
 
 
-def _get_env_info() -> str:
-    system = platform.system()
-    if system == "Darwin":
-        system = "macOS"
+@dataclass
+class _EnvInfo:
+    prefix: str = ""
+    os: bool = True
+    machine: bool = True
+    python: bool = True
+    pyvista: bool = True
+    vtk: bool = True
+    gpu: bool = True
+    ci: bool = True
+    suffix: str = ""
 
-    return "_".join(
-        [
-            f"{system}-{platform.release()}",
-            f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-            f"pyvista-{pyvista.__version__}",
-            f"vtk-{vtkmodules.__version__}",
+    def __repr__(self) -> str:
+        os_version = f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}" if self.os else ""
+        machine = f"{platform.machine()}" if self.machine else ""
+        gpu = f"gpu-{_SYSTEM_PROPERTIES.gpu_vendor}" if self.gpu else ""
+        python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
+        pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
+        vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
+        ci = f"{'' if os.environ.get('CI', None) else 'no-'}CI" if self.ci else ""
+
+        values = [
+            f"{self.prefix}",
+            f"{os_version}",
+            f"{machine}",
+            f"{gpu}",
+            f"{python_version}",
+            f"{pyvista_version}",
+            f"{vtk_version}",
+            f"{ci}",
+            f"{self.suffix}",
         ]
-    )
+        return "_".join(val for val in values if val)
 
 
-ENV_INFO = _get_env_info()
+class _SystemProperties:
+    @cached_property
+    def os_name(self) -> str:
+        return _SystemProperties._get_os()[0]
+
+    @cached_property
+    def os_version(self) -> str:
+        return _SystemProperties._get_os()[1]
+
+    @cached_property
+    def gpu_vendor(self) -> str:
+        return _SystemProperties._gpu_vendor()
+
+    @staticmethod
+    def _get_os() -> tuple[str, str]:
+        system = platform.system()
+        if system == "Linux":
+            try:
+                name = platform.freedesktop_os_release()["ID"]
+                version = platform.freedesktop_os_release()["VERSION_ID"]
+            except AttributeError:
+                name = system
+                version = platform.release()
+            return name, version
+        name = "macOS" if system == "Darwin" else system
+        return name, platform.release()
+
+    @staticmethod
+    def _gpu_vendor() -> str:
+        try:
+            vendor = pyvista.GPUInfo().vendor
+        except Exception:  # noqa: BLE001
+            return "unknown"
+
+        # Try to shorten vendor string
+        lower = vendor.lower()
+        if lower.startswith(nv := "nvidia"):
+            text = nv
+        elif lower.startswith(amd := "amd"):
+            text = amd
+        elif lower.startswith(ati := "ati"):
+            text = ati
+        elif lower.startswith(mesa := "mesa"):
+            text = mesa
+        else:
+            text = vendor  # pragma: no cover
+        # Shorten original string and remove whitespace
+        vendor = vendor[: len(text)].replace(" ", "")
+        # Remove all potentially invalid/undesired filename characters
+        disallowed = r'[\\/:*?"<>|\s.\x00]'
+        return re.sub(disallowed, "", vendor)
+
+
+_SYSTEM_PROPERTIES = _SystemProperties()
 
 
 class RegressionError(RuntimeError):
@@ -86,7 +162,7 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
     group.addoption(
         "--generate_subdirs",
         action="store_true",
-        help="Save generated images to sub-directories.",
+        help="Save generated images to sub-directories. The image names are determined by the environment info.",
     )
     group.addoption(
         "--add_missing_images",
@@ -241,6 +317,7 @@ class VerifyImageCache:
     ) -> None:
         """Initialize VerifyImageCache."""
         self.test_name = test_name
+        self.env_info: str | _EnvInfo = _EnvInfo()
 
         # handle paths
         if not cache_dir.is_dir():
@@ -386,7 +463,9 @@ class VerifyImageCache:
 
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
-        generated_image_path = parent / Path(image_name).with_suffix("") / (ENV_INFO + ".png") if self.generate_subdirs else parent / image_name
+        generated_image_path = (
+            parent / Path(image_name).with_suffix("") / (str(self.env_info) + ".png") if self.generate_subdirs else parent / image_name
+        )
         generated_image_path.parent.mkdir(exist_ok=True, parents=True)
         plotter.screenshot(generated_image_path)
 
