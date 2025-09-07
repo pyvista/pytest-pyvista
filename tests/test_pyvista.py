@@ -630,7 +630,7 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache, image_
         assert from_test_dir.is_dir()
         file = from_test_dir / cached_image_name
         assert file.is_file()
-        assert file.suffix.removeprefix(".") == image_format
+        assert file.name.endswith(image_format)
 
         from_cache_dir = failed_image_dir_path / expected_subdir / "from_cache"
         if make_cache:

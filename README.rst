@@ -197,6 +197,10 @@ These are the flags you can use when calling ``pytest`` in the command line:
   by default. Set this CLI flag to allow this globally, or use the test-specific flag
   by the same name below to configure this on a per-test basis.
 
+* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
+  ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
+  This will override any configuration, see below.
+
 Test specific flags
 ===================
 These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
@@ -325,6 +329,10 @@ These are the flags you can use when calling ``pytest`` in the command line:
   failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
   This will override any configuration, see below.
 
+* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
+  ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
+  This will override any configuration, see below.
+
 Configuration
 -------------
 If using ``pyproject.toml`` or any other 
@@ -363,6 +371,13 @@ Configure directories for when ``--doc_mode`` is used:
     doc_images_dir = "doc/_build/html/_images"
 
 Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+
+Configure the image format to be ``jpg``:
+
+.. code-block:: toml
+
+    [tool.pytest.ini_options]
+    image_format = "jpg"
 
 Contributing
 ------------
