@@ -114,6 +114,11 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         "--image_format",
         action="store",
         choices=get_args(_ImageFormats),
+        default=None,
+        help="Image format to use when generating test images.",
+    )
+    parser.addini(
+        "image_format",
         default="png",
         help="Image format to use when generating test images.",
     )

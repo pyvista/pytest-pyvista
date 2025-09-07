@@ -10,13 +10,14 @@ import pytest
 import pyvista as pv
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
+from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images
 from tests.test_pyvista import make_multiple_cached_images
 
 
-@pytest.mark.parametrize("generated_image_dir", [True])
-@pytest.mark.parametrize("image_format", ["jpg"])
+@pytest.mark.parametrize("generated_image_dir", [True, False])
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
 def test_doc_mode(pytester: pytest.Pytester, generated_image_dir, image_format: str) -> None:
     """Test regular usage of the --doc_mode."""
     cache = "cache"
@@ -284,3 +285,85 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester) -> None:
     assert result.ret == pytest.ExitCode.TESTS_FAILED
 
     assert f"imcache{img_idx} Exceeded image regression error" in str(result.stdout)
+
+
+@pytest.mark.parametrize("cli", [True, False])
+def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
+    """Test regular usage of the --doc_mode."""
+    cache = "cache"
+    cache_ini = cache + "ini"
+    cache_cli = cache + "cli"
+
+    images = "images"
+    images_ini = images + "ini"
+    images_cli = images + "cli"
+
+    image_format_ini = "jpg"
+    image_format_cli = "png"
+
+    name = "imcache"
+    name_ini = f"{name}.{image_format_ini}"
+    name_cli = f"{name}.{image_format_cli}"
+
+    if cli:
+        make_cached_images(pytester.path, cache_cli, name=name_cli, color="red")
+        make_cached_images(pytester.path, images_cli, name=name_cli, color="blue")
+    else:
+        make_cached_images(pytester.path, cache_ini, name=name_ini, color="red")
+        make_cached_images(pytester.path, images_ini, name=name_ini, color="blue")
+
+    generated = "generated"
+    generated_ini = generated + "ini"
+    generated_cli = generated + "cli"
+
+    failed = "failed"
+    failed_ini = failed + "ini"
+    failed_cli = failed + "cli"
+
+    pytester.makeini(
+        f"""
+        [pytest]
+        image_format = {image_format_ini}
+        doc_failed_image_dir = {failed_ini}
+        doc_generated_image_dir = {generated_ini}
+        doc_image_cache_dir = {cache_ini}
+        doc_images_dir = {images_ini}
+        """
+    )
+
+    args = ["--doc_mode"]
+    if cli:
+        args.extend(
+            [
+                "--doc_images_dir",
+                images_cli,
+                "--doc_image_cache_dir",
+                cache_cli,
+                "--doc_failed_image_dir",
+                failed_cli,
+                "--doc_generated_image_dir",
+                generated_cli,
+                "--image_format",
+                image_format_cli,
+            ]
+        )
+
+    result = pytester.runpytest(*args)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    assert Path(generated_cli).is_dir() is cli
+    assert Path(cache_cli).is_dir() is cli
+    assert Path(generated_cli).is_dir() is cli
+    assert Path(failed_cli).is_dir() is cli
+
+    assert Path(generated_ini).is_dir() is not cli
+    assert Path(cache_ini).is_dir() is not cli
+    assert Path(generated_ini).is_dir() is not cli
+    assert Path(failed_ini).is_dir() is not cli
+
+    paths_cli = _get_file_paths(pytester.path, ext=image_format_cli)
+    paths_ini = _get_file_paths(pytester.path, ext=image_format_ini)
+
+    num_files = 5
+    assert len(paths_cli) == (num_files if cli else 0)
+    assert len(paths_ini) == (0 if cli else num_files)
