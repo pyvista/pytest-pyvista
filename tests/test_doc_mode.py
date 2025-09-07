@@ -10,7 +10,7 @@ import pytest
 import pyvista as pv
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
-from pytest_pyvista.pytest_pyvista import _get_env_info
+from pytest_pyvista.pytest_pyvista import _EnvInfo
 from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images
 from tests.test_pyvista import make_multiple_cached_images
@@ -41,7 +41,7 @@ def test_doc_mode(pytester: pytest.Pytester, *, generated_image_dir: bool, gener
         if generate_subdirs:
             subdir = Path(generated / Path(expected_name).with_suffix(""))
             assert subdir.is_dir()
-            assert os.listdir(subdir) == [_get_env_info() + Path(expected_name).suffix]  # noqa: PTH208
+            assert os.listdir(subdir) == [f"{_EnvInfo()}{Path(expected_name).suffix}"]  # noqa: PTH208
         else:
             assert os.listdir(generated) == [expected_name]  # noqa: PTH208
 

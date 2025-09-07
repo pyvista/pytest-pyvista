@@ -18,6 +18,7 @@ import pyvista as pv
 from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
 from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
 from .pytest_pyvista import _check_compare_fail
+from .pytest_pyvista import _EnvInfo
 from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_generated_image_path
 from .pytest_pyvista import _get_option_from_config_or_ini
@@ -92,7 +93,9 @@ def _preprocess_build_images(build_images_dir: Path, output_dir: Path, *, genera
         # so we flatten the file's relative path
         output_file_name = _flatten_path(input_path.relative_to(build_images_dir))
         output_file_name = output_file_name.with_suffix(".jpg")
-        output_path = _get_generated_image_path(parent=output_dir, image_name=output_file_name, generate_subdirs=generate_subdirs)
+        output_path = _get_generated_image_path(
+            parent=output_dir, image_name=output_file_name, generate_subdirs=generate_subdirs, env_info=_EnvInfo()
+        )
         output_paths.append(output_path)
 
         # Ensure image size is max 400x400 and save to output
