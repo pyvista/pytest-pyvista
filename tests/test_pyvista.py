@@ -578,12 +578,13 @@ def test_file_not_found(pytester: pytest.Pytester) -> None:
     result.stdout.fnmatch_lines("*does not exist in image cache*")
 
 
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
 @pytest.mark.parametrize(("outcome", "make_cache"), [("error", False), ("error", True), ("warning", True), ("success", True)])
-def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache) -> None:
+def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache, image_format) -> None:
     """Test usage of the `failed_image_dir` option."""
-    cached_image_name = "imcache.png"
+    cached_image_name = f"imcache.{image_format}"
     if make_cache:
-        make_cached_images(pytester.path)
+        make_cached_images(pytester.path, name=cached_image_name)
 
     red = [255, 0, 0]
     almost_red = [250, 0, 0]
@@ -601,7 +602,7 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache) -> Non
         """
     )
     dirname = "failed_image_dir"
-    result = pytester.runpytest("--failed_image_dir", dirname)
+    result = pytester.runpytest("--failed_image_dir", dirname, "--image_format", image_format)
 
     failed_image_dir_path = pytester.path / dirname
     if outcome == "success":
@@ -627,7 +628,9 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache) -> Non
 
         from_test_dir = failed_image_dir_path / expected_subdir / "from_test"
         assert from_test_dir.is_dir()
-        assert (from_test_dir / cached_image_name).is_file()
+        file = from_test_dir / cached_image_name
+        assert file.is_file()
+        assert file.suffix.removeprefix(".") == image_format
 
         from_cache_dir = failed_image_dir_path / expected_subdir / "from_cache"
         if make_cache:
