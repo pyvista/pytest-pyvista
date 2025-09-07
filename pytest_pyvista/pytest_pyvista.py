@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
 from typing import cast
+from typing import get_args
 from typing import overload
 import uuid
 import warnings
@@ -29,6 +30,8 @@ if TYPE_CHECKING:  # pragma: no cover
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
+
+_ImageFormats = Literal["png", "jpg"]
 
 
 def _get_env_info() -> str:
@@ -163,7 +166,7 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
     group.addoption(
         f"--{prefix}image_format",
         action="store",
-        choices=["jpg", "png"],
+        choices=get_args(_ImageFormats),
         default="png",
         help="Image format to use when generating test images.",
     )
@@ -237,7 +240,7 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
     generate_subdirs = None
-    image_format: Literal["png", "jpg"]
+    image_format: _ImageFormats
 
     def __init__(  # noqa: PLR0913
         self,
@@ -364,10 +367,10 @@ class VerifyImageCache:
 
         # Try again and compare with other cached images
         if fail_msg and len(cached_image_paths) > 1:
-            # Compare build image to other known valid versions
+            # Compare test image to other known valid versions
             msg_start = "This test has multiple cached images. It initially failed (as above)"
             for path in cached_image_paths:
-                error = pyvista.compare_images(plotter, str(path))
+                error = _compare_images(plotter, str(path))
                 if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
                     # Convert failure into a warning
                     warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
@@ -577,11 +580,14 @@ def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for inspection."""
     outcome = yield
     if outcome:
+        from .doc_mode import _DocModeInfo  # noqa: PLC0415
+
         rep = outcome.get_result()
 
         # Mark cached image as skipped if test was skipped during setup or execution
         if rep.when in ["call", "setup"] and rep.skipped:
-            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name, image_format=VerifyImageCache.image_format))
+            image_format = _DocModeInfo.image_format if getattr(_DocModeInfo, "image_format", None) else VerifyImageCache.image_format
+            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name, image_format=image_format))
 
         # Attach the report to the item so fixtures/finalizers can inspect it
         setattr(item, f"rep_{rep.when}", rep)
@@ -605,6 +611,7 @@ def pytest_configure(config: pytest.Config) -> None:
         from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
         _DocModeInfo.init_dirs(config)
+        _DocModeInfo.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "image_format"))
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
@@ -631,7 +638,7 @@ def verify_image_cache(
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
-    VerifyImageCache.image_format = cast("Literal['png', 'jpg']", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+    VerifyImageCache.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)

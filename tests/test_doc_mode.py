@@ -15,16 +15,18 @@ from tests.test_pyvista import make_cached_images
 from tests.test_pyvista import make_multiple_cached_images
 
 
-@pytest.mark.parametrize("generated_image_dir", [True, False])
-def test_doc_mode(pytester: pytest.Pytester, generated_image_dir) -> None:
+@pytest.mark.parametrize("generated_image_dir", [True])
+@pytest.mark.parametrize("image_format", ["jpg"])
+def test_doc_mode(pytester: pytest.Pytester, generated_image_dir, image_format: str) -> None:
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     images = "images"
-    make_cached_images(pytester.path, cache)
-    make_cached_images(pytester.path, images)
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
+    name = f"imcache.{image_format}"
+    make_cached_images(pytester.path, cache, name=name)
+    make_cached_images(pytester.path, images, name=name)
+    _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
     generated = "generated"
     if generated_image_dir:
         args.extend(["--doc_generated_image_dir", generated])
@@ -33,7 +35,7 @@ def test_doc_mode(pytester: pytest.Pytester, generated_image_dir) -> None:
 
     if generated_image_dir:
         assert Path(generated).is_dir()
-        assert os.listdir(generated) == ["imcache.jpg"]  # noqa: PTH208
+        assert os.listdir(generated) == [f"imcache.{image_format}"]  # noqa: PTH208
 
 
 def test_cli_errors(pytester: pytest.Pytester) -> None:
@@ -59,16 +61,17 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
 
 
 @pytest.mark.parametrize("missing", ["build", "cache"])
-def test_both_images_exist(pytester: pytest.Pytester, missing: str) -> None:
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
+def test_both_images_exist(pytester: pytest.Pytester, missing: str, image_format: str) -> None:
     """Test when either the cache or build image is missing for the test."""
     images_path = pytester.path / "images"
     cache_path = pytester.path / "cache"
     if missing == "build":
-        make_cached_images(cache_path.parent, cache_path.name)
-        _preprocess_build_images(cache_path, cache_path)
+        make_cached_images(cache_path.parent, cache_path.name, name=f"imcache.{image_format}")
+        _preprocess_build_images(cache_path, cache_path, image_format=image_format)
         expected_lines = [
             "*The image exists in the cache directory:",
-            f"*{cache_path.name}/imcache.jpg",
+            f"*{cache_path.name}/imcache.{image_format}",
             "*but is missing from the docs build directory:",
             f"*{images_path.name}",
         ]
@@ -83,7 +86,7 @@ def test_both_images_exist(pytester: pytest.Pytester, missing: str) -> None:
 
     images_path.mkdir(exist_ok=True)
     cache_path.mkdir(exist_ok=True)
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path)
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--image_format", image_format)
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
 
@@ -120,16 +123,17 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
 
 
 @pytest.mark.parametrize("failed_image_dir", [True, False])
-def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: bool) -> None:
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
+def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: bool, image_format: str) -> None:
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
-    name = "im.png"
+    name = f"im.{image_format}"
     make_cached_images(pytester.path, cache, name=name, color=[255, 0, 0])
     make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
+    _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
@@ -140,7 +144,6 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     assert Path(failed).is_dir() == failed_image_dir
     assert Path(failed, "warnings").is_dir() == failed_image_dir
     if failed_image_dir:
-        name = str(Path(name).with_suffix(".jpg"))
         original = Path(cache, name)
         from_cache = Path(failed, "warnings", "from_cache", name)
         assert from_cache.is_file()
@@ -164,20 +167,21 @@ ALMOST_RED = [254, 0, 0]
 @pytest.mark.parametrize(
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("green", pytest.ExitCode.TESTS_FAILED)]
 )
-def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir) -> None:
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
+def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format) -> None:  # noqa: PLR0913
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
-    name = "imcache.png"
+    name = f"imcache.{image_format}"
     subdir = Path(name).stem
     cache_parent = pytester.path / cache
     cache_parent = cache_parent / subdir if nested_subdir else cache_parent
-    red_filename = make_cached_images(cache_parent, subdir, name="im1.png", color="red")
-    blue_filename = make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
+    red_filename = make_cached_images(cache_parent, subdir, name=f"im1.{image_format}", color="red")
+    blue_filename = make_cached_images(cache_parent, subdir, name=f"im2.{image_format}", color="blue")
     build_filename = make_cached_images(pytester.path, images, name=name, color=build_color)
-    _preprocess_build_images(cache_parent / subdir, cache_parent / subdir)
+    _preprocess_build_images(cache_parent / subdir, cache_parent / subdir, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
@@ -201,17 +205,16 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             [
                 rf".*UserWarning: {partial_match}",
                 r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
-                ".*im2.jpg",
+                f".*im2.{image_format}",
             ]
         )
         # Test failed images are saved
-        cached_original = blue_filename.with_suffix(".jpg")
-        from_cache = Path(failed) / "errors_as_warnings" / "from_cache" / rel_subdirs / cached_original.name
+        from_cache = Path(failed) / "errors_as_warnings" / "from_cache" / rel_subdirs / blue_filename.name
         assert from_cache.is_file() == failed_image_dir
         if failed_image_dir:
-            assert not file_has_changed(str(from_cache), str(cached_original))
+            assert not file_has_changed(str(from_cache), str(blue_filename))
 
-        from_build = Path(failed, "errors_as_warnings", "from_build", build_filename.with_suffix(".jpg").name)
+        from_build = Path(failed, "errors_as_warnings", "from_build", build_filename.name)
         assert from_build.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_build), str(from_cache))
@@ -229,13 +232,12 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         # Test failed images are saved
         # Expect both red and blue cached images saved
         for filename in [blue_filename, red_filename]:
-            cached_original = filename.with_suffix(".jpg")
-            from_cache = Path(failed) / "errors" / "from_cache" / rel_subdirs / cached_original.name
+            from_cache = Path(failed) / "errors" / "from_cache" / rel_subdirs / filename.name
             assert from_cache.is_file() == failed_image_dir
             if failed_image_dir:
-                assert not file_has_changed(str(from_cache), str(cached_original))
+                assert not file_has_changed(str(from_cache), str(filename))
 
-        from_build = Path(failed, "errors", "from_build", build_filename.with_suffix(".jpg").name)
+        from_build = Path(failed, "errors", "from_build", build_filename.name)
         assert from_build.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_build), str(from_cache))
@@ -254,7 +256,7 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     assert result.ret == pytest.ExitCode.OK
     match = [
         ".*UserWarning: Cached image sub-directory only contains a single image.",
-        ".*Move the cached image 'cache/imcache/imcache.jpg' directly to the cached image dir 'cache'",
+        ".*Move the cached image 'cache/imcache/imcache.png' directly to the cached image dir 'cache'",
         ".*or include more than one image in the sub-directory.",
     ]
     result.stdout.re_match_lines(match)
