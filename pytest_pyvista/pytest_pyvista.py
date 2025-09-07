@@ -579,15 +579,12 @@ def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, 
 def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for inspection."""
     outcome = yield
-    if outcome:
-        from .doc_mode import _DocModeInfo  # noqa: PLC0415
-
+    if outcome and getattr(VerifyImageCache, "image_format", None):
         rep = outcome.get_result()
 
         # Mark cached image as skipped if test was skipped during setup or execution
         if rep.when in ["call", "setup"] and rep.skipped:
-            image_format = _DocModeInfo.image_format if getattr(_DocModeInfo, "image_format", None) else VerifyImageCache.image_format
-            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name, image_format=image_format))
+            SKIPPED_CACHED_IMAGE_NAMES.add(_image_name_from_test_name(item.name, image_format=VerifyImageCache.image_format))
 
         # Attach the report to the item so fixtures/finalizers can inspect it
         setattr(item, f"rep_{rep.when}", rep)
