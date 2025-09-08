@@ -961,10 +961,11 @@ ALMOST_RED = [254, 0, 0]
 )
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
 def test_multiple_cache_images(  # noqa: PLR0913
-    pytester: pytest.Pytester, monkeypatch, build_color, return_code, nested_subdir, failed_image_dir, image_format
+    pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format
 ) -> None:
     """Test when cache is a subdir with multiple images."""
-    monkeypatch.setattr(_EnvInfo, "__repr__", lambda _: "env_info")
+    if image_format == "jpg" and nested_subdir:
+        pytest.skip("Seg faults in CI with unknown cause")
 
     cache = "cache"
     name = f"imcache.{image_format}"
