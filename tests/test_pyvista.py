@@ -960,9 +960,11 @@ ALMOST_RED = [254, 0, 0]
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("'green'", pytest.ExitCode.TESTS_FAILED)]
 )
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
-def test_multiple_cache_images(pytester: pytest.Pytester, monkeypatch, build_color, return_code, nested_subdir, failed_image_dir, image_format) -> None:  # noqa: PLR0913
+def test_multiple_cache_images(  # noqa: PLR0913
+    pytester: pytest.Pytester, monkeypatch, build_color, return_code, nested_subdir, failed_image_dir, image_format
+) -> None:
     """Test when cache is a subdir with multiple images."""
-    monkeypatch.setattr(_EnvInfo, '__repr__', lambda x: 'env_info')
+    monkeypatch.setattr(_EnvInfo, "__repr__", lambda _: "env_info")
 
     cache = "cache"
     name = f"imcache.{image_format}"
