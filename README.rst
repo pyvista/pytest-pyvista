@@ -66,6 +66,43 @@ The plugin has two main use cases:
    `Sphinx PyVista Plot Directive <https://docs.pyvista.org/extras/plot_directive.html>`_
    when building documentation.
 
+Specifying multiple cache images
+================================
+The cache directory is typically flat with no sub-directories. However,
+it is possible to specify multiple cache images for a single test by
+including a sub-directory with the same name as the test, and including
+multiple "valid" cache images in the sub-directory. For example, a
+single cached image:
+
+.. code-block:: bash
+
+    cache/my_image.jpg
+
+Can be replaced with multiple versions of the image:
+
+.. code-block:: bash
+
+    cache/my_image/0.jpg
+    cache/my_image/1.jpg
+
+.. note::
+
+   - The sub-directory name should match the name of the test.
+   - The image names in sub-directories can be arbitrary, e.g. ``0.jpg`` or
+     ``foo.jpg``.
+   - Nested sub-directories are also supported, and their names can also be arbitrary.
+   - Use the ``--generate_subdirs`` flag to automatically generate test images in a
+     sub-directory format.
+
+When there are multiple images, the test will initially compare the test image
+to the first cached image. If that comparison fails, the test image is then
+compared to all other cached images for that test. The test is successful if one
+of the comparisons is successful, though a warning is still issued if it initially
+failed.
+
+Both use cases (i.e. unit tests and documentation tests) support specifying multiple
+cache images.
+
 Unit tests
 ----------
 Once installed, you only need to use the command `pl.show()` in your test. The
@@ -114,39 +151,6 @@ If you need to use any flag inside the tests, you can modify the
         pl.show()
 
 
-Specifying multiple cache images
-================================
-The cache directory is typically flat with no sub-directories. However,
-it is possible to specify multiple cache images for a single test by
-including a sub-directory with the same name as the test, and including
-multiple "valid" cache images in the sub-directory. For example, a
-single cached image:
-
-.. code-block:: bash
-
-    cache/my_image.jpg
-
-Can be replaced with multiple versions of the image:
-
-.. code-block:: bash
-
-    cache/my_image/0.jpg
-    cache/my_image/1.jpg
-
-.. note::
-
-   - The sub-directory name should match the name of the test.
-   - The image names in sub-directories can be arbitrary, e.g. ``0.jpg`` or
-     ``foo.jpg``.
-   - Nested sub-directories are also supported, and their names can also be arbitrary.
-   - Use the ``--generate_subdirs`` flag to automatically generate test images in a
-     sub-directory format.
-
-When there are multiple images, the test will initially compare the build image
-to the first cached image. If that comparison fails, the build image is then
-compared to all other cached images for that test. The test is successful if one
-of the comparisons is successful, though a warning is still issued.
-
 Global flags
 ============
 These are the flags you can use when calling ``pytest`` in the command line:
@@ -166,9 +170,10 @@ These are the flags you can use when calling ``pytest`` in the command line:
   instead of saving them directly to the ``generated_image_dir``. Without this option,
   generated images are saved as ``generated_image_dir/<test_name>.png``; with this
   option enabled, they are instead saved as
-  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has
-  the format ``<system>_<python-version>_<pyvista-version>_<vtk-version>``. This can
-  be useful for providing context about how an image was generated.
+  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has the format
+  ``<os-version>_<machine>_<gpu-vendor>_<python-version>_<pyvista-version>_<vtk-version>_<using-ci>``.
+  This can be useful for providing context about how an image was generated. See the
+  ``Test specific flags`` section for customizing the info.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
@@ -197,6 +202,10 @@ These are the flags you can use when calling ``pytest`` in the command line:
   by default. Set this CLI flag to allow this globally, or use the test-specific flag
   by the same name below to configure this on a per-test basis.
 
+* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
+  ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
+  This will override any configuration, see below.
+
 Test specific flags
 ===================
 These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
@@ -219,6 +228,31 @@ in the beginning of your test function.
 * ``allow_useless_fixture``: Set this flag to ``True`` to prevent test failure when the
   ``verify_image_cache`` fixture is used but no images are generated. The value of this
   flag takes precedence over the global flag by the same name (see above).
+
+* ``env_info``: Dataclass for controlling the environment info used to name the generated
+  test image(s) when the ``--generate_dirs`` option is used. The info can be test-specific
+  or can be modified globally by wrapping the ``verify_image_cache`` fixture, e.g.:
+
+  .. code-block:: python
+
+    @pytest.fixture(autouse=True)
+    def wrapped_verify_image_cache(verify_image_cache):
+        # Customize the environment info (NOTE: Default values are shown)
+        info = verify_image_cache.env_info
+        info.prefix: str = ""  # Add a custom prefix
+        info.os: bool = True  # Show/hide the os version (e.g. ubuntu, macOS, Windows)
+        info.machine: bool = True  # Show/hide the machine info (e.g. arm64)
+        info.gpu: bool = True  # Show/hide the gpu vendor (e.g. NVIDIA)
+        info.python: bool = True  # Show/hide the python version
+        info.pyvista: bool = True  # Show/hide the pyvista version
+        info.vtk: bool = True  # Show/hide the vtk version
+        info.ci: bool = True  # Show/hide if generated in CI
+        info.suffix: str = ""  # Add a custom suffix
+
+        # Alternatively, set a custom string
+        verify_image_cache.env_info = 'my_custom_string'
+
+        return verify_image_cache
 
 Documentation image tests
 -------------------------
@@ -265,37 +299,6 @@ The tests have three main modes of failure:
    Use the ``--doc_failed_image_dir`` flag to save copies of the images for
    failed tests.
 
-Specifying multiple cache images
-================================
-The cache directory is typically flat with no sub-directories. However,
-it is possible to specify multiple cache images for a single test by
-including a sub-directory with the same name as the image, and including
-multiple "valid" cache images in the sub-directory. For example, a
-single cached image:
-
-.. code-block:: bash
-
-    cache/my_image.jpg
-
-Can be replaced with multiple versions of the image:
-
-.. code-block:: bash
-
-    cache/my_image/0.jpg
-    cache/my_image/1.jpg
-
-.. note::
-
-   The sub-directory name should match the image name generated from the build.
-   The image names in sub-directories can be arbitrary, however, e.g. ``0.jpg`` or
-   ``foo.jpg``, and can even be nested in sub-sub-directories (the names
-   of sub-sub-directories can also be arbitrary).
-
-When there are multiple images, the test will initially compare the build image
-to the first cached image. If that comparison fails, the build image is then
-compared to all other cached images for that test. The test is successful if one
-of the comparisons is successful, though a warning is still issued.
-
 Global flags
 ============
 These are the flags you can use when calling ``pytest`` in the command line:
@@ -323,6 +326,10 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * ``--doc_failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
   failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  This will override any configuration, see below.
+
+* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
+  ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
   This will override any configuration, see below.
 
 Configuration
@@ -363,6 +370,13 @@ Configure directories for when ``--doc_mode`` is used:
     doc_images_dir = "doc/_build/html/_images"
 
 Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+
+Configure the image format to be ``jpg``:
+
+.. code-block:: toml
+
+    [tool.pytest.ini_options]
+    image_format = "jpg"
 
 Contributing
 ------------

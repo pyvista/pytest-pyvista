@@ -15,8 +15,13 @@ from PIL import Image
 import pytest
 import pyvista as pv
 
+from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
+from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
+from .pytest_pyvista import _check_compare_fail
 from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_option_from_config_or_ini
+from .pytest_pyvista import _ImageFormats
+from .pytest_pyvista import _test_compare_images
 
 MAX_IMAGE_DIM = 400  # pixels
 
@@ -26,6 +31,7 @@ class _DocModeInfo:
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
     doc_failed_image_dir: Path
+    image_format: _ImageFormats
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
     @classmethod
@@ -67,11 +73,12 @@ def _flatten_path(path: Path) -> Path:
     return Path("_".join(path.parts))
 
 
-def _preprocess_build_images(build_images_dir: Path, output_dir: Path) -> list[Path]:
+def _preprocess_build_images(build_images_dir: Path, output_dir: Path, image_format: _ImageFormats = "png") -> list[Path]:
     """
-    Read images from the build dir, resize them, and save as JPG to a flat output dir.
+    Read images from the build dir, resize them, and save to a flat output dir.
 
-    All PNG and GIF files from the build are included, and are saved as JPG.
+    All JPG, PNG and GIF files from the build are included, and are saved to
+    the desired image format.
 
     """
     input_png = _get_file_paths(build_images_dir, ext="png")
@@ -83,7 +90,7 @@ def _preprocess_build_images(build_images_dir: Path, output_dir: Path) -> list[P
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
         output_file_name = _flatten_path(input_path.relative_to(build_images_dir))
-        output_file_name = output_file_name.with_suffix(".jpg")
+        output_file_name = output_file_name.with_suffix("." + image_format)
         output_path = output_dir / output_file_name
         output_paths.append(output_path)
 
@@ -123,12 +130,14 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
         test_cases_dict[test_name].setdefault(key, filepath)
 
     # process test images
-    test_image_paths = _preprocess_build_images(_DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir)
+    test_image_paths = _preprocess_build_images(
+        _DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir, image_format=_DocModeInfo.image_format
+    )
     [add_to_dict(path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
     cache_dir = _DocModeInfo.doc_image_cache_dir
-    cached_image_paths = _get_file_paths(cache_dir, ext="jpg")
+    cached_image_paths = _get_file_paths(cache_dir, ext=_DocModeInfo.image_format)
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
         rel = path.relative_to(cache_dir)
@@ -191,21 +200,27 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         pytest.fail(fail_msg)
 
     cached_image_paths = (
-        [test_case.cached_image_path] if test_case.cached_image_path.is_file() else _get_file_paths(test_case.cached_image_path, ext="jpg")
+        [test_case.cached_image_path]
+        if test_case.cached_image_path.is_file()
+        else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.image_format)
     )
     current_cached_image_path = cached_image_paths[0]
 
     warn_msg, fail_msg = _test_compare_images(
-        test_name=test_case.test_name, docs_image_path=test_case.docs_image_path, cached_image_path=current_cached_image_path
+        test_name=test_case.test_name,
+        test_image=test_case.docs_image_path,
+        cached_image=current_cached_image_path,
+        allowed_error=DEFAULT_ERROR_THRESHOLD,
+        allowed_warning=DEFAULT_WARNING_THRESHOLD,
     )
 
     # Try again and compare with other cached images
     if fail_msg and len(cached_image_paths) > 1:
         # Compare build image to other known valid versions
         msg_start = "This test has multiple cached images. It initially failed (as above)"
-        for path in cached_image_paths:
+        for path in cached_image_paths[1:]:
             error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(path))
-            if _check_compare_fail(test_case.test_name, error) is None:
+            if _check_compare_fail(test_case.test_name, error, allowed_error=DEFAULT_ERROR_THRESHOLD) is None:
                 # Convert failure into a warning
                 warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
                 fail_msg = None
@@ -258,7 +273,7 @@ def _test_both_images_exist(filename: str, docs_image_path: Path, cached_image_p
 def _warn_cached_image_path(cached_image_path: Path) -> None:
     """Warn if a subdir is used with only one cached image."""
     if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext="jpg")
+        cached_images = _get_file_paths(cached_image_path, ext=_DocModeInfo.image_format)
         if len(cached_images) == 1:
             cache_dir = _DocModeInfo.doc_image_cache_dir
             rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)
@@ -268,30 +283,3 @@ def _warn_cached_image_path(cached_image_path: Path) -> None:
                 f"or include more than one image in the sub-directory."
             )
             warnings.warn(msg, stacklevel=2)
-
-
-def _test_compare_images(test_name: str, docs_image_path: Path, cached_image_path: Path) -> tuple[str | None, str | None]:
-    try:
-        docs_image = cast("pv.ImageData", pv.read(docs_image_path))
-        cached_image = cast("pv.ImageData", pv.read(cached_image_path))
-
-        # Check if test should fail or warn
-        error = pv.compare_images(docs_image, cached_image)
-        fail_msg = _check_compare_fail(test_name, error)
-        warn_msg = _check_compare_warn(test_name, error)
-    except RuntimeError as e:
-        warn_msg = None
-        fail_msg = repr(e)
-    return warn_msg, fail_msg
-
-
-def _check_compare_fail(filename: str, error_: float, allowed_error: float = 500.0) -> str | None:
-    if error_ > allowed_error:
-        return f"{filename} Exceeded image regression error of {allowed_error} with an image error equal to: {error_}"
-    return None
-
-
-def _check_compare_warn(filename: str, error_: float, allowed_warning: float = 200.0) -> str | None:
-    if error_ > allowed_warning:
-        return f"{filename} Exceeded image regression warning of {allowed_warning} with an image error of {error_}"
-    return None

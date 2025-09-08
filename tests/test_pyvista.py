@@ -4,18 +4,25 @@ from __future__ import annotations
 
 from enum import Enum
 import filecmp
+import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import sys
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 
-from pytest_pyvista.pytest_pyvista import _get_env_info
+from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
+from pytest_pyvista.pytest_pyvista import _EnvInfo
+from pytest_pyvista.pytest_pyvista import _SystemProperties
 
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
 pv.OFF_SCREEN = True
 
 pytest_plugins = "pytester"
@@ -317,15 +324,23 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
+@pytest.mark.parametrize(
+    "env_info",
+    [
+        "prefix_suffix",
+        _EnvInfo(prefix="prefix", os=False, machine=False, gpu=False, python=False, pyvista=False, vtk=False, ci=False, suffix="suffix"),
+    ],
+)
 @pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_subdirs) -> None:
+def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_subdirs, env_info) -> None:
     """Test setting generated_image_dir via CLI option."""
     make_cached_images(pytester.path)
     pytester.makepyfile(
-        """
+        f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
+            verify_image_cache.env_info = '{env_info}'
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="red")
@@ -339,8 +354,12 @@ def test_generated_image_dir_commandline(pytester: pytest.Pytester, generate_sub
     result = pytester.runpytest(*args)
     assert (pytester.path / "gen_dir").is_dir()
     if generate_subdirs:
-        with_suffix = _get_env_info() + ".png"
-        assert (pytester.path / "gen_dir" / "imcache" / with_suffix).is_file()
+        subdir = pytester.path / "gen_dir" / "imcache"
+        assert subdir.is_dir()
+        paths = list(subdir.iterdir())
+        assert len(paths) == 1
+        image_path = paths[0]
+        assert image_path.name == "prefix_suffix.png"
     else:
         assert (pytester.path / "gen_dir" / "imcache.png").is_file()
     result.assert_outcomes(passed=1)
@@ -559,31 +578,37 @@ def test_callback_called(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-def test_file_not_found(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("make_subdir", [True, False])
+def test_file_not_found(pytester: pytest.Pytester, make_subdir) -> None:
     """Test RegressionFileNotFoundError is correctly raised."""
+    test_name = "imcache_num2"
     pytester.makepyfile(
-        """
+        f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
-        def test_imcache_num2(verify_image_cache):
+        def test_{test_name}(verify_image_cache):
             sphere = pv.Box()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="blue")
             plotter.show()
         """
     )
+    if make_subdir:
+        # Test case where no images exist in a subdir
+        Path("image_cache_dir", test_name).mkdir(parents=True)
 
     result = pytester.runpytest()
     result.stdout.fnmatch_lines("*RegressionFileNotFoundError*")
     result.stdout.fnmatch_lines("*does not exist in image cache*")
 
 
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
 @pytest.mark.parametrize(("outcome", "make_cache"), [("error", False), ("error", True), ("warning", True), ("success", True)])
-def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache) -> None:
+def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache, image_format) -> None:
     """Test usage of the `failed_image_dir` option."""
-    cached_image_name = "imcache.png"
+    cached_image_name = f"imcache.{image_format}"
     if make_cache:
-        make_cached_images(pytester.path)
+        make_cached_images(pytester.path, name=cached_image_name)
 
     red = [255, 0, 0]
     almost_red = [250, 0, 0]
@@ -601,7 +626,7 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache) -> Non
         """
     )
     dirname = "failed_image_dir"
-    result = pytester.runpytest("--failed_image_dir", dirname)
+    result = pytester.runpytest("--failed_image_dir", dirname, "--image_format", image_format)
 
     failed_image_dir_path = pytester.path / dirname
     if outcome == "success":
@@ -627,7 +652,9 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache) -> Non
 
         from_test_dir = failed_image_dir_path / expected_subdir / "from_test"
         assert from_test_dir.is_dir()
-        assert (from_test_dir / cached_image_name).is_file()
+        file = from_test_dir / cached_image_name
+        assert file.is_file()
+        assert file.name.endswith(image_format)
 
         from_cache_dir = failed_image_dir_path / expected_subdir / "from_cache"
         if make_cache:
@@ -932,15 +959,21 @@ ALMOST_RED = [254, 0, 0]
 @pytest.mark.parametrize(
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("'green'", pytest.ExitCode.TESTS_FAILED)]
 )
-def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir) -> None:
-    """Test regression warning is issued."""
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
+def test_multiple_cache_images(  # noqa: PLR0913
+    pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format
+) -> None:
+    """Test when cache is a subdir with multiple images."""
+    if image_format == "jpg" and (nested_subdir or pv.vtk_version_info < (9, 3)):
+        pytest.skip("Seg faults in CI with unknown cause")
+
     cache = "cache"
-    name = "imcache.png"
+    name = f"imcache.{image_format}"
     subdir = Path(name).stem
     cache_parent = pytester.path / cache
     cache_parent = cache_parent / subdir if nested_subdir else cache_parent
-    red_filename = make_cached_images(cache_parent, subdir, name="im1.png", color="red")
-    blue_filename = make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
+    red_filename = make_cached_images(cache_parent, subdir, name=f"im1.{image_format}", color="red")
+    blue_filename = make_cached_images(cache_parent, subdir, name=f"im2.{image_format}", color="blue")
 
     pyfile = f"""
         import pyvista as pv
@@ -953,7 +986,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         """
     pytester.makepyfile(pyfile)
 
-    args = ["--image_cache_dir", cache]
+    args = ["--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--failed_image_dir", failed])
@@ -977,7 +1010,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             [
                 rf".*UserWarning: {partial_match}",
                 r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
-                ".*im2.png",
+                f".*im2.{image_format}",
             ]
         )
         # Test failed images are saved
@@ -1013,3 +1046,134 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_test), str(from_cache))
+
+
+def test_env_info() -> None:
+    """Test env info dataclass."""
+    info = str(_EnvInfo())
+    assert " " not in info
+    assert info.startswith(f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}")
+    if platform.system() == "Linux":
+        if sys.version_info >= (3, 10):
+            assert info.startswith("ubuntu")
+        else:
+            assert info.startswith("Linux")
+
+    # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
+    pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
+    matches = re.findall(pattern, info)
+
+    assert any(m.startswith("_py-") for m in matches)
+    assert any(m.startswith("_pyvista-") for m in matches)
+    assert any(m.startswith("_vtk-") for m in matches)
+
+    assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI"])
+
+    if os.environ.get("CI", None):
+        assert "no-CI" not in info
+        assert "CI" in info
+    else:
+        assert "no-CI" in info
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("os", _SYSTEM_PROPERTIES.os_name),
+        ("machine", platform.machine()),
+        ("gpu", "gpu-"),
+        ("python", "py-"),
+        ("pyvista", "pyvista-"),
+        ("vtk", "vtk-"),
+        ("ci", "CI"),
+    ],
+)
+def test_env_info_exclude(name: str, value: str) -> None:
+    """Test removing parts of the env info."""
+    # Sanity check to ensure the value is there ordinarily
+    info = str(_EnvInfo())
+    assert value in info
+
+    # Test it's excluded
+    info = str(_EnvInfo(**{name: False}))
+    assert value not in info
+    assert "__" not in info
+    assert "_-" not in info
+    assert "-_" not in info
+
+
+def test_env_info_prefix_suffix() -> None:
+    """Test env info dataclass prefix and suffix."""
+    text = "foobar"
+    default = str(_EnvInfo())
+    sep = "_"
+    assert not default.startswith(sep)
+    assert not default.endswith(sep)
+
+    with_prefix = str(_EnvInfo(prefix=text))
+    assert f"{text}{sep}{default}" == with_prefix
+
+    with_suffix = str(_EnvInfo(suffix=text))
+    assert f"{default}{sep}{text}" == with_suffix
+
+
+@pytest.mark.parametrize(
+    ("vendor", "expected"),
+    [
+        ("NVIDIA Corporation", "NVIDIA"),
+        ("AMD Technologies", "AMD"),
+        ("ATI Graphics", "ATI"),
+        ("Mesa DRI Intel", "Mesa"),
+        ('Unknown\\/:*?"<>| \t\n\r\v\f\x00Vendor', "UnknownVendor"),
+    ],
+)
+def test_gpu_vendor(mocker: MockerFixture, vendor: str, expected: str) -> None:
+    """Test vendor name processing."""
+    mock_gpuinfo = mocker.patch("pyvista.GPUInfo")
+    mock_gpuinfo.return_value.vendor = vendor
+
+    result = _SystemProperties._gpu_vendor()  # noqa: SLF001
+    assert result == expected
+
+
+def test_gpu_vendor_unknown(mocker: MockerFixture) -> None:
+    """Test exception from GPUInfo is handled properly."""
+    mocker.patch("pyvista.GPUInfo", side_effect=RuntimeError("fail"))
+    assert _SystemProperties._gpu_vendor() == "unknown"  # noqa: SLF001
+
+
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="Missing freedesktop_os_release")
+def test_os_linux_freedesktop(mocker: MockerFixture) -> None:
+    """Test system properties for Linux."""
+    mocker.patch("platform.system", return_value="Linux")
+    mocker.patch(
+        "platform.freedesktop_os_release",
+        return_value={
+            "ID": "ubuntu",
+            "VERSION_ID": "22.04",
+        },
+    )
+
+    result = _SystemProperties._get_os()  # noqa: SLF001
+    assert result == ("ubuntu", "22.04")
+
+
+@pytest.mark.parametrize(
+    ("system", "release", "expected"),
+    [
+        ("Darwin", "24.6.0", ("macOS", "24.6.0")),
+        ("Windows", "10", ("Windows", "10")),
+    ],
+)
+def test_os_darwin_windows(
+    mocker: MockerFixture,
+    system: str,
+    release: str,
+    expected: tuple[str, str],
+) -> None:
+    """Test system properties for macOS and Windows."""
+    mocker.patch("platform.system", return_value=system)
+    mocker.patch("platform.release", return_value=release)
+
+    result = _SystemProperties._get_os()  # noqa: SLF001
+    assert result == expected
