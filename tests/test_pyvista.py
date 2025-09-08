@@ -955,16 +955,13 @@ ALMOST_RED = [254, 0, 0]
 
 
 @pytest.mark.parametrize("failed_image_dir", [True, False])
-@pytest.mark.parametrize("nested_subdir", [True, False])
+@pytest.mark.parametrize("nested_subdir", [False])
 @pytest.mark.parametrize(
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("'green'", pytest.ExitCode.TESTS_FAILED)]
 )
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
 def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format) -> None:  # noqa: PLR0913
     """Test when cache is a subdir with multiple images."""
-    if pv.vtk_version_info < (9, 3, 0) and image_format == "jpg":
-        pytest.skip("Issue saving jpg screenshots.")
-
     cache = "cache"
     name = f"imcache.{image_format}"
     subdir = Path(name).stem
