@@ -578,19 +578,24 @@ def test_callback_called(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-def test_file_not_found(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("make_subdir", [True, False])
+def test_file_not_found(pytester: pytest.Pytester, make_subdir) -> None:
     """Test RegressionFileNotFoundError is correctly raised."""
+    test_name = "imcache_num2"
     pytester.makepyfile(
-        """
+        f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
-        def test_imcache_num2(verify_image_cache):
+        def test_{test_name}(verify_image_cache):
             sphere = pv.Box()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="blue")
             plotter.show()
         """
     )
+    if make_subdir:
+        # Test case where no images exist in a subdir
+        Path("image_cache_dir", test_name).mkdir(parents=True)
 
     result = pytester.runpytest()
     result.stdout.fnmatch_lines("*RegressionFileNotFoundError*")
@@ -954,15 +959,16 @@ ALMOST_RED = [254, 0, 0]
 @pytest.mark.parametrize(
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("'green'", pytest.ExitCode.TESTS_FAILED)]
 )
-def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir) -> None:
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
+def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format) -> None:  # noqa: PLR0913
     """Test regression warning is issued."""
     cache = "cache"
-    name = "imcache.png"
+    name = f"imcache.{image_format}"
     subdir = Path(name).stem
     cache_parent = pytester.path / cache
     cache_parent = cache_parent / subdir if nested_subdir else cache_parent
-    red_filename = make_cached_images(cache_parent, subdir, name="im1.png", color="red")
-    blue_filename = make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
+    red_filename = make_cached_images(cache_parent, subdir, name=f"im1.{image_format}", color="red")
+    blue_filename = make_cached_images(cache_parent, subdir, name=f"im2.{image_format}", color="blue")
 
     pyfile = f"""
         import pyvista as pv
@@ -975,7 +981,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         """
     pytester.makepyfile(pyfile)
 
-    args = ["--image_cache_dir", cache]
+    args = ["--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--failed_image_dir", failed])
@@ -999,7 +1005,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             [
                 rf".*UserWarning: {partial_match}",
                 r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
-                ".*im2.png",
+                f".*im2.{image_format}",
             ]
         )
         # Test failed images are saved

@@ -396,6 +396,9 @@ class VerifyImageCache:
         image_dirname = Path(self.cache_dir, Path(image_name).stem)
 
         cached_image_paths = _get_file_paths(image_dirname, ext=self.image_format) if image_dirname.is_dir() else [image_filename]
+        if not cached_image_paths:
+            # Path is an empty dir, append default expected image path
+            cached_image_paths.append(image_dirname / f"{self.env_info}.{self.image_format}")
         current_cached_image = cached_image_paths[0]
 
         if VerifyImageCache._is_skipped(
