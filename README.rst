@@ -66,6 +66,43 @@ The plugin has two main use cases:
    `Sphinx PyVista Plot Directive <https://docs.pyvista.org/extras/plot_directive.html>`_
    when building documentation.
 
+Specifying multiple cache images
+================================
+The cache directory is typically flat with no sub-directories. However,
+it is possible to specify multiple cache images for a single test by
+including a sub-directory with the same name as the test, and including
+multiple "valid" cache images in the sub-directory. For example, a
+single cached image:
+
+.. code-block:: bash
+
+    cache/my_image.jpg
+
+Can be replaced with multiple versions of the image:
+
+.. code-block:: bash
+
+    cache/my_image/0.jpg
+    cache/my_image/1.jpg
+
+.. note::
+
+   - The sub-directory name should match the name of the test.
+   - The image names in sub-directories can be arbitrary, e.g. ``0.jpg`` or
+     ``foo.jpg``.
+   - Nested sub-directories are also supported, and their names can also be arbitrary.
+   - Use the ``--generate_subdirs`` flag to automatically generate test images in a
+     sub-directory format.
+
+When there are multiple images, the test will initially compare the test image
+to the first cached image. If that comparison fails, the test image is then
+compared to all other cached images for that test. The test is successful if one
+of the comparisons is successful, though a warning is still issued if it initially
+failed.
+
+Both use cases (i.e. unit tests and documentation tests) support specifying multiple
+cache images.
+
 Unit tests
 ----------
 Once installed, you only need to use the command `pl.show()` in your test. The
@@ -113,39 +150,6 @@ If you need to use any flag inside the tests, you can modify the
         pl.add_mesh(pyvista.Sphere(), show_edges=True)
         pl.show()
 
-
-Specifying multiple cache images
-================================
-The cache directory is typically flat with no sub-directories. However,
-it is possible to specify multiple cache images for a single test by
-including a sub-directory with the same name as the test, and including
-multiple "valid" cache images in the sub-directory. For example, a
-single cached image:
-
-.. code-block:: bash
-
-    cache/my_image.jpg
-
-Can be replaced with multiple versions of the image:
-
-.. code-block:: bash
-
-    cache/my_image/0.jpg
-    cache/my_image/1.jpg
-
-.. note::
-
-   - The sub-directory name should match the name of the test.
-   - The image names in sub-directories can be arbitrary, e.g. ``0.jpg`` or
-     ``foo.jpg``.
-   - Nested sub-directories are also supported, and their names can also be arbitrary.
-   - Use the ``--generate_subdirs`` flag to automatically generate test images in a
-     sub-directory format.
-
-When there are multiple images, the test will initially compare the build image
-to the first cached image. If that comparison fails, the build image is then
-compared to all other cached images for that test. The test is successful if one
-of the comparisons is successful, though a warning is still issued.
 
 Global flags
 ============
@@ -294,37 +298,6 @@ The tests have three main modes of failure:
 .. note::
    Use the ``--doc_failed_image_dir`` flag to save copies of the images for
    failed tests.
-
-Specifying multiple cache images
-================================
-The cache directory is typically flat with no sub-directories. However,
-it is possible to specify multiple cache images for a single test by
-including a sub-directory with the same name as the image, and including
-multiple "valid" cache images in the sub-directory. For example, a
-single cached image:
-
-.. code-block:: bash
-
-    cache/my_image.jpg
-
-Can be replaced with multiple versions of the image:
-
-.. code-block:: bash
-
-    cache/my_image/0.jpg
-    cache/my_image/1.jpg
-
-.. note::
-
-   The sub-directory name should match the image name generated from the build.
-   The image names in sub-directories can be arbitrary, however, e.g. ``0.jpg`` or
-   ``foo.jpg``, and can even be nested in sub-sub-directories (the names
-   of sub-sub-directories can also be arbitrary).
-
-When there are multiple images, the test will initially compare the build image
-to the first cached image. If that comparison fails, the build image is then
-compared to all other cached images for that test. The test is successful if one
-of the comparisons is successful, though a warning is still issued.
 
 Global flags
 ============
