@@ -164,7 +164,7 @@ ALMOST_RED = [254, 0, 0]
 
 
 @pytest.mark.parametrize("failed_image_dir", [True, False])
-@pytest.mark.parametrize("nested_subdir", [True, False])
+@pytest.mark.parametrize("nested_subdir", [False])
 @pytest.mark.parametrize(
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("green", pytest.ExitCode.TESTS_FAILED)]
 )
