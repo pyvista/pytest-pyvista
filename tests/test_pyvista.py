@@ -964,7 +964,7 @@ def test_multiple_cache_images(  # noqa: PLR0913
     pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format
 ) -> None:
     """Test when cache is a subdir with multiple images."""
-    if image_format == "jpg" and nested_subdir:
+    if image_format == "jpg" and (nested_subdir or pv.vtk_version_info < (9, 3)):
         pytest.skip("Seg faults in CI with unknown cause")
 
     cache = "cache"
