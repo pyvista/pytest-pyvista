@@ -537,10 +537,12 @@ def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
 def _test_compare_images(
     test_name: str, test_image: Path | pyvista.Plotter, cached_image: Path | pyvista.Plotter, allowed_error: float, allowed_warning: float
 ) -> tuple[str | None, str | None]:
+    def _path_as_string(image: Path | pyvista.Plotter) -> str | pyvista.Plotter:
+        return str(image) if isinstance(image, Path) else image
 
     try:
         # Check if test should fail or warn
-        error = pyvista.compare_images(test_image, cached_image)
+        error = pyvista.compare_images(_path_as_string(test_image), _path_as_string(cached_image))
         fail_msg = _check_compare_fail(test_name, error, allowed_error)
         warn_msg = _check_compare_warn(test_name, error, allowed_warning)
     except RuntimeError as e:
