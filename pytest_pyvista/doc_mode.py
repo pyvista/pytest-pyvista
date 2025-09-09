@@ -264,11 +264,11 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
     def has_no_images(path: Path | None) -> bool:
         return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocModeInfo.image_format)) == 0)
 
-    doc_has_no_images = has_no_images(docs_image_path)
+    build_has_no_images = has_no_images(docs_image_path)
     cache_has_no_images = has_no_images(cached_image_path)
 
-    if doc_has_no_images or cache_has_no_images:
-        if doc_has_no_images:
+    if build_has_no_images or cache_has_no_images:
+        if build_has_no_images:
             source_path = cached_image_path
             exists = "cache"
             missing = "docs build"
