@@ -92,8 +92,8 @@ def _preprocess_build_images(
     input_gif = _get_file_paths(build_images_dir, ext="gif")
     input_jpg = _get_file_paths(build_images_dir, ext="jpg")
     output_paths = []
-    output_dir.mkdir(exist_ok=True)
     for input_path in input_png + input_gif + input_jpg:
+        output_dir.mkdir(exist_ok=True)
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
         output_file_name = _flatten_path(input_path.relative_to(build_images_dir))
@@ -197,7 +197,8 @@ def _save_failed_test_image(source_path: Path, category: Literal["warnings", "er
     dest_dir = _DocModeInfo.doc_failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
     dest_path = dest_dir / source_path.name
-    shutil.copy(source_path, dest_path)
+    copy_method = shutil.copytree if source_path.is_dir() else shutil.copy
+    copy_method(source_path, dest_path)
 
 
 def test_static_images(test_case: _TestCaseTuple) -> None:
@@ -259,10 +260,15 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         warnings.warn(warn_msg, stacklevel=2)
 
 
-def _test_both_images_exist(filename: str, docs_image_path: Path, cached_image_path: Path) -> tuple[str | None, Path | None]:
-    # Future: Update this to also check that, if the path is a directory, the directory is not empty
-    if docs_image_path is None or cached_image_path is None:
-        if docs_image_path is None:
+def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_image_path: Path | None) -> tuple[str | None, Path | None]:
+    def has_no_images(path: Path | None) -> bool:
+        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocModeInfo.image_format)) == 0)
+
+    doc_has_no_images = has_no_images(docs_image_path)
+    cache_has_no_images = has_no_images(cached_image_path)
+
+    if doc_has_no_images or cache_has_no_images:
+        if doc_has_no_images:
             source_path = cached_image_path
             exists = "cache"
             missing = "docs build"
