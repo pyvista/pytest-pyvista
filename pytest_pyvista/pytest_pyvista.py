@@ -80,15 +80,15 @@ class _EnvInfo:
 class _SystemProperties:
     @cached_property
     def os_name(self) -> str:
-        return "ubuntu"  # _SystemProperties._get_os()[0]
+        return _SystemProperties._get_os()[0]
 
     @cached_property
     def os_version(self) -> str:
-        return "22.04"  # _SystemProperties._get_os()[1]
+        return _SystemProperties._get_os()[1]
 
     @cached_property
     def gpu_vendor(self) -> str:
-        return "Mesa"  # _SystemProperties._gpu_vendor()
+        return _SystemProperties._gpu_vendor()
 
     @staticmethod
     def _get_os() -> tuple[str, str]:
