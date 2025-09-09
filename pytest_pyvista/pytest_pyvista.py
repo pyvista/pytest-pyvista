@@ -567,10 +567,20 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
 
     if isinstance(test_image, pyvista.Plotter) and (cached_suffix := Path(cached_image).suffix) == ".jpg":
         # Need to save image to file to apply jpg compression
+        tmpdir = Path(tempfile.mkdtemp())
+        tmpfile = tmpdir / f"screenshot{cached_suffix}"
+
         pl = cast("pyvista.Plotter", test_image)
-        with tempfile.NamedTemporaryFile(suffix=cached_suffix) as tmp:
-            pl.screenshot(tmp.name)
-            return pyvista.compare_images(tmp.name, _path_as_string(cached_image))
+        pl.screenshot(tmpfile)
+
+        try:
+            return pyvista.compare_images(tmpfile, _path_as_string(cached_image))
+        finally:
+            try:
+                tmpfile.unlink()
+                tmpdir.rmdir()
+            except OSError:
+                pass
     return pyvista.compare_images(_path_as_string(test_image), _path_as_string(cached_image))
 
 
