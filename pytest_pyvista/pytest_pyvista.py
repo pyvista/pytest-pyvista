@@ -601,7 +601,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         # on an pytest-xdist worker node, exit early
         return
 
-    if config.getoption("disallow_unused_cache"):
+    if config.getoption("disallow_unused_cache") and getattr(VerifyImageCache, "image_format", None):
         value = _get_option_from_config_or_ini(config, "image_cache_dir")
         cache_path = Path(cast("Path", value))
         cached_image_names = {f.name for f in cache_path.glob(f"*.{VerifyImageCache.image_format}")}
