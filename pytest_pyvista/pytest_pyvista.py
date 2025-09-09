@@ -6,6 +6,7 @@ import contextlib
 from dataclasses import dataclass
 from functools import cached_property
 import importlib
+import io
 import json
 import os
 from pathlib import Path
@@ -13,7 +14,6 @@ import platform
 import re
 import shutil
 import sys
-import tempfile
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
@@ -23,6 +23,8 @@ from typing import overload
 import uuid
 import warnings
 
+import numpy as np
+from PIL import Image
 import pytest
 import pyvista
 from pyvista import Plotter
@@ -556,16 +558,25 @@ def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
 
 
 def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path | str) -> float:
-    def _path_as_string(image: Path | str | pyvista.Plotter) -> str | pyvista.Plotter:
-        return str(image) if isinstance(image, Path) else image
+    if isinstance(test_image, pyvista.Plotter) and Path(cached_image).suffix == ".jpg":
+        # Need to process image to apply jpg compression
 
-    if isinstance(test_image, pyvista.Plotter) and (cached_suffix := Path(cached_image).suffix) == ".jpg":
-        # Need to save image to file to apply jpg compression
+        # Get screenshot as a PIL image
         pl = cast("pyvista.Plotter", test_image)
-        with tempfile.NamedTemporaryFile(suffix=cached_suffix) as tmp:
-            pl.screenshot(tmp.name)
-            return pyvista.compare_images(tmp.name, _path_as_string(cached_image))
-    return pyvista.compare_images(_path_as_string(test_image), _path_as_string(cached_image))
+        arr = pl.screenshot(return_img=True)
+        img = Image.fromarray(arr)
+
+        # Save as JPEG in memory
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        buf.seek(0)
+
+        # Reload compressed JPEG back into NumPy
+        arr_jpg = np.array(Image.open(buf))
+        return pyvista.compare_images(arr_jpg, str(cached_image))
+    # Cast Path to str
+    test_img = test_image if isinstance(test_image, pyvista.Plotter) else str(test_image)
+    return pyvista.compare_images(test_img, str(cached_image))
 
 
 def _test_compare_images(
