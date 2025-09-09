@@ -187,11 +187,11 @@ jobs:
         run: pip install --upgrade pip uv
 
       - name: Install pyvista with testing requirements
-        run: uv pip install -ve . --group test
+        run: uv pip install --system -ve . --group test
         working-directory: /tmp/pyvista
 
       - name: Install pytest-pyvista
-        run: uv pip install -ve .  --upgrade
+        run: uv pip install --system -ve . --upgrade
 
       - name: Software Report
         run: |
