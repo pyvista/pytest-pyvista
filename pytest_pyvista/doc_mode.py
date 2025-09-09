@@ -66,6 +66,7 @@ class _DocModeInfo:
         cls.doc_failed_image_dir = optional_dir_with_temp("doc_failed_image_dir", prefix="pytest_doc_failed_image_dir")
 
         cls.generate_subdirs = config.getoption("generate_subdirs")
+        cls.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "image_format"))
 
 
 class _TestCaseTuple(NamedTuple):

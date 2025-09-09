@@ -715,7 +715,6 @@ def pytest_configure(config: pytest.Config) -> None:
         from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
         _DocModeInfo.init_from_config(config)
-        _DocModeInfo.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "image_format"))
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
