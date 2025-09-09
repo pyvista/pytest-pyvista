@@ -71,79 +71,79 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
     result.stderr.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be a valid directory. Got:", "*/cache."])
 
 
-# # Future: Raise RegressionFileNotFoundError explicitly
-# @pytest.mark.parametrize("generated_image_dir", [True, False])
-# @pytest.mark.parametrize("failed_image_dir", [True, False])
-# @pytest.mark.parametrize("generate_subdirs", [True, False])
-# @pytest.mark.parametrize("missing_is_empty_dir", [True, False])
-# @pytest.mark.parametrize("missing", ["build", "cache"])
-# @pytest.mark.parametrize("image_format", ["png", "jpg"])
-# def test_both_images_exist(  # noqa: PLR0913
-#     *,
-#     pytester: pytest.Pytester,
-#     missing: str,
-#     image_format: str,
-#     generate_subdirs: bool,
-#     failed_image_dir: bool,
-#     generated_image_dir: bool,
-#     missing_is_empty_dir: bool,
-# ) -> None:
-#     """Test when either the cache or build image is missing for the test."""
-#     name = f"imcache.{image_format}"
-#     images_path = pytester.path / "images"
-#     cache_path = pytester.path / "cache"
-#     if missing == "build":
-#         make_cached_images(cache_path.parent, cache_path.name, name=name)
-#         _preprocess_build_images(cache_path, cache_path, image_format=image_format)
-#         expected_lines = [
-#             "*The image exists in the cache directory:",
-#             f"*{cache_path.name}/imcache.{image_format}",
-#             "*but is missing from the docs build directory:",
-#             f"*{images_path.name}",
-#         ]
-#         if missing_is_empty_dir:
-#             (images_path / Path(name).stem).mkdir(parents=True)
-#     else:
-#         make_cached_images(images_path.parent, images_path.name)
-#         expected_lines = [
-#             "*The image exists in the docs build directory:",
-#             f"*{images_path.name}",
-#             "*but is missing from the cache directory:",
-#             f"*{cache_path.name}",
-#         ]
-#         if missing_is_empty_dir:
-#             (cache_path / Path(name).stem).mkdir(parents=True)
-#
-#     images_path.mkdir(exist_ok=True)
-#     cache_path.mkdir(exist_ok=True)
-#     args = ["--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--image_format", image_format]
-#     if generate_subdirs:
-#         args.append("--generate_subdirs")
-#     failed = "failed"
-#     if failed_image_dir:
-#         args.extend(["--doc_failed_image_dir", failed])
-#     generated = "generated"
-#     if generated_image_dir:
-#         args.extend(["--doc_generated_image_dir", generated])
-#     result = pytester.runpytest(*args)
-#     result.assert_outcomes(failed=1)
-#     result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
-#
-#     assert Path(failed).is_dir() == failed_image_dir
-#     assert Path(generated).is_dir() == (generated_image_dir and missing == "cache")
-#
-#     if (path := Path(failed)).is_dir():
-#         assert os.listdir(path) == ["errors"]  # noqa: PTH208
-#         errors_dir = path / "errors"
-#         expected_from = "from_build" if missing == "cache" else "from_cache"
-#         assert os.listdir(errors_dir) == [expected_from]  # noqa: PTH208
-#         from_dir = errors_dir / expected_from
-#         expected_image = from_dir / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs and missing == "cache" else from_dir / name
-#         assert expected_image.is_file()
-#
-#     if (path := Path(generated)).is_dir():
-#         expected_image = path / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs else path / name
-#         assert expected_image.is_file()
+# Future: Raise RegressionFileNotFoundError explicitly
+@pytest.mark.parametrize("generated_image_dir", [True, False])
+@pytest.mark.parametrize("failed_image_dir", [True, False])
+@pytest.mark.parametrize("generate_subdirs", [True, False])
+@pytest.mark.parametrize("missing_is_empty_dir", [True, False])
+@pytest.mark.parametrize("missing", ["build", "cache"])
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
+def test_both_images_exist(  # noqa: PLR0913
+    *,
+    pytester: pytest.Pytester,
+    missing: str,
+    image_format: str,
+    generate_subdirs: bool,
+    failed_image_dir: bool,
+    generated_image_dir: bool,
+    missing_is_empty_dir: bool,
+) -> None:
+    """Test when either the cache or build image is missing for the test."""
+    name = f"imcache.{image_format}"
+    images_path = pytester.path / "images"
+    cache_path = pytester.path / "cache"
+    if missing == "build":
+        make_cached_images(cache_path.parent, cache_path.name, name=name)
+        _preprocess_build_images(cache_path, cache_path, image_format=image_format)
+        expected_lines = [
+            "*The image exists in the cache directory:",
+            f"*{cache_path.name}/imcache.{image_format}",
+            "*but is missing from the docs build directory:",
+            f"*{images_path.name}",
+        ]
+        if missing_is_empty_dir:
+            (images_path / Path(name).stem).mkdir(parents=True)
+    else:
+        make_cached_images(images_path.parent, images_path.name)
+        expected_lines = [
+            "*The image exists in the docs build directory:",
+            f"*{images_path.name}",
+            "*but is missing from the cache directory:",
+            f"*{cache_path.name}",
+        ]
+        if missing_is_empty_dir:
+            (cache_path / Path(name).stem).mkdir(parents=True)
+
+    images_path.mkdir(exist_ok=True)
+    cache_path.mkdir(exist_ok=True)
+    args = ["--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--image_format", image_format]
+    if generate_subdirs:
+        args.append("--generate_subdirs")
+    failed = "failed"
+    if failed_image_dir:
+        args.extend(["--doc_failed_image_dir", failed])
+    generated = "generated"
+    if generated_image_dir:
+        args.extend(["--doc_generated_image_dir", generated])
+    result = pytester.runpytest(*args)
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
+
+    assert Path(failed).is_dir() == failed_image_dir
+    assert Path(generated).is_dir() == (generated_image_dir and missing == "cache")
+
+    if (path := Path(failed)).is_dir():
+        assert os.listdir(path) == ["errors"]  # noqa: PTH208
+        errors_dir = path / "errors"
+        expected_from = "from_build" if missing == "cache" else "from_cache"
+        assert os.listdir(errors_dir) == [expected_from]  # noqa: PTH208
+        from_dir = errors_dir / expected_from
+        expected_image = from_dir / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs and missing == "cache" else from_dir / name
+        assert expected_image.is_file()
+
+    if (path := Path(generated)).is_dir():
+        expected_image = path / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs else path / name
+        assert expected_image.is_file()
 
 
 def test_compare_images_with_different_sizes(pytester: pytest.Pytester) -> None:
