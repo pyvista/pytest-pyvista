@@ -562,9 +562,6 @@ def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
 
 
 def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path | str) -> float:
-    def _path_as_string(image: Path | str | pyvista.Plotter) -> str | pyvista.Plotter:
-        return str(image) if isinstance(image, Path) else image
-
     if isinstance(test_image, pyvista.Plotter) and (cached_suffix := Path(cached_image).suffix) == ".jpg":
         # Need to save image to file to apply jpg compression
         tmpdir = Path(tempfile.mkdtemp())
@@ -574,14 +571,16 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
         pl.screenshot(tmpfile)
 
         try:
-            return pyvista.compare_images(tmpfile, _path_as_string(cached_image))
+            return pyvista.compare_images(str(tmpfile), str(cached_image))
         finally:
             try:
                 tmpfile.unlink()
                 tmpdir.rmdir()
             except OSError:
                 pass
-    return pyvista.compare_images(_path_as_string(test_image), _path_as_string(cached_image))
+    # Cast Path to str
+    test_img = test_image if isinstance(test_image, pyvista.Plotter) else str(test_image)
+    return pyvista.compare_images(test_img, str(cached_image))
 
 
 def _test_compare_images(
