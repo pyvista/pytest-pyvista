@@ -167,11 +167,6 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Prevent test failure if a generated test image has no use.",
     )
     group.addoption(
-        "--generate_subdirs",
-        action="store_true",
-        help="Save generated images to sub-directories. The image names are determined by the environment info.",
-    )
-    group.addoption(
         "--add_missing_images",
         action="store_true",
         help="Adds images to cache if missing.",
@@ -255,6 +250,16 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
         f"{prefix}failed_image_dir",
         default=None,
         help="Path to dump images from failed tests from the current run.",
+    )
+    group.addoption(
+        f"--{prefix}generate_subdirs",
+        action="store_true",
+        help="Save generated images to sub-directories. The image names are determined by the environment info.",
+    )
+    parser.addini(
+        f"{prefix}generate_subdirs",
+        default=False,
+        help="Save generated images to sub-directories. The image names are determined by the environment info.",
     )
 
 

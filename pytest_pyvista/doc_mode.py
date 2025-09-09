@@ -33,7 +33,7 @@ class _DocModeInfo:
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
     doc_failed_image_dir: Path
-    generate_subdirs: bool
+    doc_generate_subdirs: bool
     image_format: _ImageFormats
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
@@ -65,7 +65,7 @@ class _DocModeInfo:
         cls.doc_generated_image_dir = optional_dir_with_temp("doc_generated_image_dir", prefix="pytest_doc_generated_image_dir")
         cls.doc_failed_image_dir = optional_dir_with_temp("doc_failed_image_dir", prefix="pytest_doc_failed_image_dir")
 
-        cls.generate_subdirs = config.getoption("generate_subdirs")
+        cls.doc_generate_subdirs = config.getoption("doc_generate_subdirs")
         cls.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "image_format"))
 
 
@@ -140,7 +140,7 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
         test_cases_dict[test_name].setdefault(key, filepath)
 
     # process test images
-    generate_subdirs = _DocModeInfo.generate_subdirs
+    generate_subdirs = _DocModeInfo.doc_generate_subdirs
     test_image_paths = _preprocess_build_images(
         _DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir, image_format=_DocModeInfo.image_format, generate_subdirs=generate_subdirs
     )

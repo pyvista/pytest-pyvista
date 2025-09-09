@@ -34,7 +34,7 @@ def test_doc_mode(pytester: pytest.Pytester, *, generated_image_dir: bool, gener
     if generated_image_dir:
         args.extend(["--doc_generated_image_dir", generated])
     if generate_subdirs:
-        args.append("--generate_subdirs")
+        args.append("--doc_generate_subdirs")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
@@ -117,7 +117,7 @@ def test_both_images_exist(  # noqa: PLR0913
     cache_path.mkdir(exist_ok=True)
     args = ["--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--image_format", image_format]
     if generate_subdirs:
-        args.append("--generate_subdirs")
+        args.append("--doc_generate_subdirs")
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
@@ -192,7 +192,7 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
     if generate_subdirs:
-        args.append("--generate_subdirs")
+        args.append("--doc_generate_subdirs")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
@@ -360,7 +360,6 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
     name = "imcache"
     name_ini = f"{name}.{image_format_ini}"
     name_cli = f"{name}.{image_format_cli}"
-
     if cli:
         make_cached_images(pytester.path, cache_cli, name=name_cli, color="red")
         make_cached_images(pytester.path, images_cli, name=name_cli, color="blue")
@@ -384,6 +383,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
         doc_generated_image_dir = {generated_ini}
         doc_image_cache_dir = {cache_ini}
         doc_images_dir = {images_ini}
+        doc_generate_subdirs = True
         """
     )
 
@@ -401,6 +401,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
                 generated_cli,
                 "--image_format",
                 image_format_cli,
+                "--doc_generate_subdirs",
             ]
         )
 
