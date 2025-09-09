@@ -177,10 +177,9 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines([r".*Failed: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"])
 
 
-# Future: @pytest.mark.parametrize("generate_subdirs", [True, False])
-@pytest.mark.parametrize("failed_image_dir", [True, False])
+@pytest.mark.parametrize(("failed_image_dir", "generate_subdirs"), [(True, True), (True, False), (False, False)])
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
-def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: bool, image_format: str) -> None:
+def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: bool, image_format: str, generate_subdirs: bool) -> None:
     """Test regression warning is issued."""
     cache = "cache"
     images = "images"
@@ -193,6 +192,8 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
+    if generate_subdirs:
+        args.append("--generate_subdirs")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
@@ -201,13 +202,14 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     assert Path(failed, "warnings").is_dir() == failed_image_dir
     if failed_image_dir:
         original = Path(cache, name)
-        from_cache = Path(failed, "warnings", "from_cache", name)
-        assert from_cache.is_file()
-        assert not file_has_changed(str(from_cache), str(original))
+        from_cache_file = Path(failed) / "warnings" / "from_cache" / name
+        assert from_cache_file.is_file()
+        assert not file_has_changed(str(from_cache_file), str(original))
 
-        from_build = Path(failed, "warnings", "from_build", name)
-        assert from_build.is_file()
-        assert file_has_changed(str(from_build), str(from_cache))
+        from_build = Path(failed) / "warnings" / "from_build"
+        from_build_file = from_build / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs else from_build / name
+        assert from_build_file.is_file()
+        assert file_has_changed(str(from_build_file), str(from_cache_file))
 
     result.stdout.re_match_lines(
         [rf".*UserWarning: {Path(name).stem} Exceeded image regression warning of 200\.0 with an image error of [0-9]+\.[0-9]+"]
