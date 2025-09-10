@@ -31,7 +31,7 @@ class _DocModeInfo:
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
     doc_failed_image_dir: Path
-    image_format: _ImageFormats
+    doc_image_format: _ImageFormats
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
     @classmethod
@@ -131,13 +131,13 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
 
     # process test images
     test_image_paths = _preprocess_build_images(
-        _DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir, image_format=_DocModeInfo.image_format
+        _DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir, image_format=_DocModeInfo.doc_image_format
     )
     [add_to_dict(path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
     cache_dir = _DocModeInfo.doc_image_cache_dir
-    cached_image_paths = _get_file_paths(cache_dir, ext=_DocModeInfo.image_format)
+    cached_image_paths = _get_file_paths(cache_dir, ext=_DocModeInfo.doc_image_format)
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
         rel = path.relative_to(cache_dir)
@@ -202,7 +202,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     cached_image_paths = (
         [test_case.cached_image_path]
         if test_case.cached_image_path.is_file()
-        else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.image_format)
+        else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.doc_image_format)
     )
     current_cached_image_path = cached_image_paths[0]
 
@@ -273,7 +273,7 @@ def _test_both_images_exist(filename: str, docs_image_path: Path, cached_image_p
 def _warn_cached_image_path(cached_image_path: Path) -> None:
     """Warn if a subdir is used with only one cached image."""
     if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext=_DocModeInfo.image_format)
+        cached_images = _get_file_paths(cached_image_path, ext=_DocModeInfo.doc_image_format)
         if len(cached_images) == 1:
             cache_dir = _DocModeInfo.doc_image_cache_dir
             rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)

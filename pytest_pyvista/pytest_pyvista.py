@@ -189,18 +189,6 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         action="store_true",
         help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
     )
-    group.addoption(
-        "--image_format",
-        action="store",
-        choices=get_args(_ImageFormats),
-        default=None,
-        help="Image format to use when generating test images.",
-    )
-    parser.addini(
-        "image_format",
-        default="png",
-        help="Image format to use when generating test images.",
-    )
 
     # Doc-specific test options
     group.addoption(
@@ -253,6 +241,18 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
         f"{prefix}failed_image_dir",
         default=None,
         help="Path to dump images from failed tests from the current run.",
+    )
+    group.addoption(
+        f"--{prefix}image_format",
+        action="store",
+        choices=get_args(_ImageFormats),
+        default=None,
+        help="Image format to use when generating test images.",
+    )
+    parser.addini(
+        f"{prefix}image_format",
+        default="png",
+        help="Image format to use when generating test images.",
     )
 
 
@@ -698,7 +698,7 @@ def pytest_configure(config: pytest.Config) -> None:
         from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
         _DocModeInfo.init_dirs(config)
-        _DocModeInfo.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "image_format"))
+        _DocModeInfo.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
