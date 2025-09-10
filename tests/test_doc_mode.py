@@ -344,7 +344,8 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester) -> None:
 
 
 @pytest.mark.parametrize("cli", [True, False])
-def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
+@pytest.mark.parametrize("generate_subdirs", [True, False])
+def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) -> None:
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     cache_ini = cache + "ini"
@@ -383,7 +384,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
         doc_generated_image_dir = {generated_ini}
         doc_image_cache_dir = {cache_ini}
         doc_images_dir = {images_ini}
-        doc_generate_subdirs = True
+        doc_generate_subdirs = {generate_subdirs}
         """
     )
 
@@ -401,9 +402,10 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
                 generated_cli,
                 "--doc_image_format",
                 image_format_cli,
-                "--doc_generate_subdirs",
             ]
         )
+        if generate_subdirs:
+            args.append("--doc_generate_subdirs")
 
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -417,6 +419,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
     assert Path(cache_ini).is_dir() is not cli
     assert Path(generated_ini).is_dir() is not cli
     assert Path(failed_ini).is_dir() is not cli
+
+    generated_image_path = Path(generated_cli if cli else generated_ini) / name
+    assert generated_image_path.is_dir() is generate_subdirs
 
     paths_cli = _get_file_paths(pytester.path, ext=image_format_cli)
     paths_ini = _get_file_paths(pytester.path, ext=image_format_ini)

@@ -241,12 +241,15 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
     )
     group.addoption(
         f"--{prefix}generate_subdirs",
-        action="store_true",
+        action="store_const",
+        const=True,
+        default=None,
         help="Save generated images to sub-directories. The image names are determined by the environment info.",
     )
     parser.addini(
         f"{prefix}generate_subdirs",
         default=False,
+        type="bool",
         help="Save generated images to sub-directories. The image names are determined by the environment info.",
     )
     group.addoption(
@@ -671,12 +674,12 @@ def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
 
 
 @overload
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[False] = False) -> str | bool | None: ...
+@overload
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[True] = True) -> Path | None: ...
 @overload
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[False] = False) -> str | None: ...
-@overload
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | None: ...
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | None:
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | bool | None: ...
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | bool | None:
     value = pytestconfig.getoption(option)
     if value is None:
         value = pytestconfig.getini(option)
