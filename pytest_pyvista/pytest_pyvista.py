@@ -39,6 +39,10 @@ SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
 
+
+_PLUGIN_PARSER_GROUP = "pyvista"
+_PLUGIN_PARSER: pytest.Parser  # global reference to the parser
+
 _ImageFormats = Literal["png", "jpg"]
 
 
@@ -152,9 +156,12 @@ class RegressionFileNotFoundError(RegressionFileNotFound):
 
 def pytest_addoption(parser) -> None:  # noqa: ANN001
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
+    global _PLUGIN_PARSER  # noqa: PLW0603
+    _PLUGIN_PARSER = parser
+
     _add_common_pytest_options(parser)
 
-    group = parser.getgroup("pyvista")
+    group = parser.getgroup(_PLUGIN_PARSER_GROUP)
     group.addoption(
         "--reset_image_cache",
         action="store_true",
@@ -213,7 +220,7 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
 
 def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: ANN001
     prefix = "doc_" if doc else ""
-    group = parser.getgroup("pyvista")
+    group = parser.getgroup(_PLUGIN_PARSER_GROUP)
     group.addoption(
         f"--{prefix}image_cache_dir",
         action="store",
@@ -705,7 +712,21 @@ class _ChainedCallbacks:
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
-    if config.getoption("doc_mode"):
+
+    def get_plugin_options() -> list[str]:
+        options = _PLUGIN_PARSER.getgroup(_PLUGIN_PARSER_GROUP).options
+        return [name for option in options for name in option.names()]
+
+    using_doc_mode = config.getoption("doc_mode")
+    plugin_options = get_plugin_options()
+    cli_args = config.invocation_params.args
+    for arg in cli_args:
+        if arg in plugin_options and arg.startswith("--") and arg.startswith("--doc_") is not using_doc_mode:
+            word = "not" if using_doc_mode else "only"
+            msg = f"Argument {arg} is {word} valid when using --doc_mode"
+            raise RuntimeError(msg)
+
+    if using_doc_mode:
         from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
         _DocModeInfo.init_dirs(config)
