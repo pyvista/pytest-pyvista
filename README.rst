@@ -336,7 +336,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
   failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
   This will override any configuration, see below.
 
-* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
+* Use ``--doc_image_format`` to save test images in either ``png`` or ``jpg`` format.
   ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
   This will override any configuration, see below.
 
@@ -379,12 +379,13 @@ Configure directories for when ``--doc_mode`` is used:
 
 Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
 
-Configure the image format to be ``jpg``:
+Configure the image format to be ``jpg`` for both unit tests and when using ``--doc_mode``.
 
 .. code-block:: toml
 
     [tool.pytest.ini_options]
     image_format = "jpg"
+    doc_image_format = "jpg"
 
 Contributing
 ------------

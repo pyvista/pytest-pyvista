@@ -34,7 +34,7 @@ class _DocModeInfo:
     doc_generated_image_dir: Path
     doc_failed_image_dir: Path
     doc_generate_subdirs: bool
-    image_format: _ImageFormats
+    doc_image_format: _ImageFormats
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
     @classmethod
@@ -65,8 +65,8 @@ class _DocModeInfo:
         cls.doc_generated_image_dir = optional_dir_with_temp("doc_generated_image_dir", prefix="pytest_doc_generated_image_dir")
         cls.doc_failed_image_dir = optional_dir_with_temp("doc_failed_image_dir", prefix="pytest_doc_failed_image_dir")
 
+        cls.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
         cls.doc_generate_subdirs = config.getoption("doc_generate_subdirs")
-        cls.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "image_format"))
 
 
 class _TestCaseTuple(NamedTuple):
@@ -142,13 +142,16 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
     # process test images
     generate_subdirs = _DocModeInfo.doc_generate_subdirs
     test_image_paths = _preprocess_build_images(
-        _DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir, image_format=_DocModeInfo.image_format, generate_subdirs=generate_subdirs
+        _DocModeInfo.doc_images_dir,
+        _DocModeInfo.doc_generated_image_dir,
+        image_format=_DocModeInfo.doc_image_format,
+        generate_subdirs=generate_subdirs,
     )
     [add_to_dict(path.parent if generate_subdirs else path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
     cache_dir = _DocModeInfo.doc_image_cache_dir
-    cached_image_paths = _get_file_paths(cache_dir, ext=_DocModeInfo.image_format)
+    cached_image_paths = _get_file_paths(cache_dir, ext=_DocModeInfo.doc_image_format)
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
         rel = path.relative_to(cache_dir)
@@ -215,13 +218,13 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     cached_image_paths = (
         [test_case.cached_image_path]
         if test_case.cached_image_path.is_file()
-        else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.image_format)
+        else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.doc_image_format)
     )
     current_cached_image_path = cached_image_paths[0]
     docs_image_path = (
         test_case.docs_image_path
         if test_case.docs_image_path.is_file()
-        else _get_file_paths(test_case.docs_image_path, ext=_DocModeInfo.image_format)[0]
+        else _get_file_paths(test_case.docs_image_path, ext=_DocModeInfo.doc_image_format)[0]
     )
 
     warn_msg, fail_msg = _test_compare_images(
@@ -263,7 +266,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
 
 def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_image_path: Path | None) -> tuple[str | None, Path | None]:
     def has_no_images(path: Path | None) -> bool:
-        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocModeInfo.image_format)) == 0)
+        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocModeInfo.doc_image_format)) == 0)
 
     build_has_no_images = has_no_images(docs_image_path)
     cache_has_no_images = has_no_images(cached_image_path)
@@ -297,7 +300,7 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
 def _warn_cached_image_path(cached_image_path: Path) -> None:
     """Warn if a subdir is used with only one cached image."""
     if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext=_DocModeInfo.image_format)
+        cached_images = _get_file_paths(cached_image_path, ext=_DocModeInfo.doc_image_format)
         if len(cached_images) == 1:
             cache_dir = _DocModeInfo.doc_image_cache_dir
             rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)

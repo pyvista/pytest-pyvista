@@ -186,18 +186,6 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         action="store_true",
         help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
     )
-    group.addoption(
-        "--image_format",
-        action="store",
-        choices=get_args(_ImageFormats),
-        default=None,
-        help="Image format to use when generating test images.",
-    )
-    parser.addini(
-        "image_format",
-        default="png",
-        help="Image format to use when generating test images.",
-    )
 
     # Doc-specific test options
     group.addoption(
@@ -260,6 +248,18 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
         f"{prefix}generate_subdirs",
         default=False,
         help="Save generated images to sub-directories. The image names are determined by the environment info.",
+    )
+    group.addoption(
+        f"--{prefix}image_format",
+        action="store",
+        choices=get_args(_ImageFormats),
+        default=None,
+        help="Image format to use when generating test images.",
+    )
+    parser.addini(
+        f"{prefix}image_format",
+        default="png",
+        help="Image format to use when generating test images.",
     )
 
 

@@ -29,7 +29,7 @@ def test_doc_mode(pytester: pytest.Pytester, *, generated_image_dir: bool, gener
     make_cached_images(pytester.path, images, name=name)
     _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
     generated = "generated"
     if generated_image_dir:
         args.extend(["--doc_generated_image_dir", generated])
@@ -115,7 +115,7 @@ def test_both_images_exist(  # noqa: PLR0913
 
     images_path.mkdir(exist_ok=True)
     cache_path.mkdir(exist_ok=True)
-    args = ["--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--doc_image_format", image_format]
     if generate_subdirs:
         args.append("--doc_generate_subdirs")
     failed = "failed"
@@ -187,7 +187,7 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
     _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
@@ -238,7 +238,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     build_filename = make_cached_images(pytester.path, images, name=name, color=build_color)
     _preprocess_build_images(cache_parent / subdir, cache_parent / subdir, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
@@ -378,7 +378,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
     pytester.makeini(
         f"""
         [pytest]
-        image_format = {image_format_ini}
+        doc_image_format = {image_format_ini}
         doc_failed_image_dir = {failed_ini}
         doc_generated_image_dir = {generated_ini}
         doc_image_cache_dir = {cache_ini}
@@ -399,7 +399,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
                 failed_cli,
                 "--doc_generated_image_dir",
                 generated_cli,
-                "--image_format",
+                "--doc_image_format",
                 image_format_cli,
                 "--doc_generate_subdirs",
             ]
