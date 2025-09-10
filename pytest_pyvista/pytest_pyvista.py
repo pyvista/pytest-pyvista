@@ -702,6 +702,26 @@ class _ChainedCallbacks:
             f(plotter)
 
 
+def _validate_cache(cache_dir: Path, image_format: _ImageFormats) -> None:
+    def check_image_format(format_to_check: _ImageFormats) -> None:
+        image_paths = [str(p.relative_to(cache_dir)) for p in _get_file_paths(cache_dir, ext=format_to_check)]
+        if image_paths and image_format != format_to_check:
+            msg = (
+                f"The image format is {image_format!r}, but {format_to_check!r} images exist in the cache.\n"
+                f"The following images should be removed from the cache:\n"
+                f"{image_paths}"
+            )
+            raise TypeError(msg)
+
+    check_image_format("png")
+    check_image_format("jpg")
+
+    # FUTURE
+    subdir_names = {p.name for p in cache_dir.glob("*") if p.is_dir()}
+    png_names = {p.stem for p in cache_dir.glob("*.png")}
+    jpg_names = {p.stem for p in cache_dir.glob("*.jpg")}
+
+
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
@@ -739,6 +759,7 @@ def verify_image_cache(
     VerifyImageCache.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
+    _validate_cache(cache_dir, image_format=VerifyImageCache.image_format)
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir", is_dir=True)
 
