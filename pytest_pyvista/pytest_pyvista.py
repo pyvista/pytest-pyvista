@@ -137,6 +137,10 @@ class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria."""
 
 
+class InvalidCacheError(RuntimeError):
+    """Error when validating the cache."""
+
+
 class RegressionFileNotFound(FileNotFoundError):  # noqa: N818
     """
     Error when regression file is not found.
@@ -707,19 +711,25 @@ def _validate_cache(cache_dir: Path, image_format: _ImageFormats) -> None:
         image_paths = [str(p.relative_to(cache_dir)) for p in _get_file_paths(cache_dir, ext=format_to_check)]
         if image_paths and image_format != format_to_check:
             msg = (
-                f"The image format is {image_format!r}, but {format_to_check!r} images exist in the cache.\n"
-                f"The following images should be removed from the cache:\n"
+                f"The image format is {image_format!r}, but {format_to_check!r}\n"
+                f"images exist in the cache. The following images should be removed from the cache:\n"
                 f"{image_paths}"
             )
-            raise TypeError(msg)
+            raise InvalidCacheError(msg)
 
     check_image_format("png")
     check_image_format("jpg")
 
-    # FUTURE
     subdir_names = {p.name for p in cache_dir.glob("*") if p.is_dir()}
-    png_names = {p.stem for p in cache_dir.glob("*.png")}
-    jpg_names = {p.stem for p in cache_dir.glob("*.jpg")}
+    image_names = {p.stem for p in cache_dir.glob(f"*.{image_format}")}
+    if intersection := (subdir_names & image_names):
+        msg = (
+            "Non-unique image test names detected in the cache.\n"
+            "An image's name must not share the same name as a subdirectory. Either the image\n"
+            "or the subdirectory should be removed for the following test cases:\n"
+            f"{intersection}"
+        )
+        raise InvalidCacheError(msg)
 
 
 @pytest.hookimpl
@@ -730,6 +740,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
         _DocModeInfo.init_dirs(config)
         _DocModeInfo.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
+        _validate_cache(_DocModeInfo.doc_image_cache_dir, image_format=_DocModeInfo.doc_image_format)
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):

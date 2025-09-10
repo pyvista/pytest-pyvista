@@ -1177,7 +1177,7 @@ def test_os_darwin_windows(
 
 
 @pytest.mark.parametrize(("valid_format", "invalid_format"), [("png", "jpg"), ("jpg", "png")])
-def test_validate_cache(pytester: pytest.Pytester, valid_format, invalid_format) -> None:
+def test_validate_cache_image_format(pytester: pytest.Pytester, valid_format, invalid_format) -> None:
     """Test cache validation."""
     test_name = "imcache"
     name = f"{test_name}.{invalid_format}"
@@ -1192,6 +1192,29 @@ def test_validate_cache(pytester: pytest.Pytester, valid_format, invalid_format)
     )
     result = pytester.runpytest("--image_format", valid_format)
     result.assert_outcomes(errors=1)
-    result.stdout.fnmatch_lines(f"E           TypeError: The image format is '{valid_format}', but '{invalid_format}' images exist in the cache.")
-    result.stdout.fnmatch_lines("E           The following images should be removed from the cache:")
+    result.stdout.fnmatch_lines(
+        f"E           pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format is '{valid_format}', but '{invalid_format}'"
+    )
+    result.stdout.fnmatch_lines("E           images exist in the cache. The following images should be removed from the cache:")
     result.stdout.fnmatch_lines(f"E           ['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']")
+
+
+def test_validate_cache_unique_names(pytester: pytest.Pytester) -> None:
+    """Test cache validation."""
+    test_name = "imcache"
+    name = f"{test_name}.png"
+    cache = "image_cache_dir"
+    make_cached_images(pytester.path, path=cache, name=name)
+    make_cached_images(pytester.path / cache, path=test_name, name=name)
+
+    pytester.makepyfile(
+        f"""def test_{test_name}(verify_image_cache):
+            ...
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(errors=1)
+    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
+    result.stdout.fnmatch_lines("E           An image's name must not share the same name as a subdirectory. Either the image")
+    result.stdout.fnmatch_lines("E           or the subdirectory should be removed for the following test cases:")
+    result.stdout.fnmatch_lines(f"E           {{{test_name!r}}}")

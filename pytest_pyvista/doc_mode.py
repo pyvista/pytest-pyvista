@@ -22,7 +22,6 @@ from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_option_from_config_or_ini
 from .pytest_pyvista import _ImageFormats
 from .pytest_pyvista import _test_compare_images
-from .pytest_pyvista import _validate_cache
 
 MAX_IMAGE_DIM = 400  # pixels
 
@@ -59,7 +58,6 @@ class _DocModeInfo:
 
         cls.doc_images_dir = require_existing_dir("doc_images_dir")
         cls.doc_image_cache_dir = require_existing_dir("doc_image_cache_dir")
-        _validate_cache(cls.doc_image_cache_dir)
 
         cls.doc_generated_image_dir = optional_dir_with_temp("doc_generated_image_dir", prefix="pytest_doc_generated_image_dir")
         cls.doc_failed_image_dir = optional_dir_with_temp("doc_failed_image_dir", prefix="pytest_doc_failed_image_dir")
