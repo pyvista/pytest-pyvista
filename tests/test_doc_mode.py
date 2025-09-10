@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PIL import Image
 import pytest
 import pyvista as pv
 
@@ -100,11 +99,6 @@ def test_compare_images_with_different_sizes(pytester: pytest.Pytester) -> None:
     images = "images"
     make_cached_images(pytester.path, cache)
     make_cached_images(pytester.path, images)
-
-    file = pytester.path / cache / "imcache.png"
-    with Image.open(file) as im:
-        im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
-        im.save(file.with_suffix(".jpg"))
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
