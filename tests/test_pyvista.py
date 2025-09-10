@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _SystemProperties
@@ -1176,8 +1177,9 @@ def test_os_darwin_windows(
     assert result == expected
 
 
+@pytest.mark.parametrize("doc_mode", [True, False])
 @pytest.mark.parametrize(("valid_format", "invalid_format"), [("png", "jpg"), ("jpg", "png")])
-def test_validate_cache_image_format(pytester: pytest.Pytester, valid_format, invalid_format) -> None:
+def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format, invalid_format, doc_mode) -> None:
     """Test cache validation."""
     test_name = "imcache"
     name = f"{test_name}.{invalid_format}"
@@ -1185,21 +1187,36 @@ def test_validate_cache_image_format(pytester: pytest.Pytester, valid_format, in
     make_cached_images(pytester.path, path=cache, name=name)
     make_cached_images(pytester.path / cache, path=test_name, name=name)
 
-    pytester.makepyfile(
-        f"""def test_{test_name}(verify_image_cache):
-            ...
-        """
-    )
-    result = pytester.runpytest("--image_format", valid_format)
-    result.assert_outcomes(errors=1)
-    result.stdout.fnmatch_lines(
-        f"E           pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format is '{valid_format}', but '{invalid_format}'"
-    )
-    result.stdout.fnmatch_lines("E           images exist in the cache. The following images should be removed from the cache:")
-    result.stdout.fnmatch_lines(f"E           ['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']")
+    args = [f"--{'doc_' if doc_mode else ''}image_format", valid_format]
+    if doc_mode:
+        images = "images"
+        _preprocess_build_images(Path(cache), Path(images), image_format=valid_format)
+        args.extend(["--doc_mode", "--doc_image_cache_dir", cache, "--doc_images_dir", images])
+        match_prefix = "INTERNALERROR> "
+        exit_code = pytest.ExitCode.INTERNAL_ERROR
+    else:
+        pytester.makepyfile(
+            f"""def test_{test_name}(verify_image_cache):
+                ...
+            """
+        )
+        match_prefix = "E           "
+        exit_code = pytest.ExitCode.TESTS_FAILED
+
+    result = pytester.runpytest(*args)
+    assert result.ret == exit_code
+
+    line1 = f"pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format is '{valid_format}', but '{invalid_format}'"
+    line2 = "images exist in the cache. The following images should be removed from the cache:"
+    line3 = f"['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']"
+    output = result.stderr if doc_mode else result.stdout
+    output.fnmatch_lines(f"{match_prefix}{line1}")
+    output.fnmatch_lines(f"{match_prefix}{line2}")
+    output.fnmatch_lines(f"{match_prefix}{line3}")
 
 
-def test_validate_cache_unique_names(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("doc_mode", [True, False])
+def test_validate_cache_unique_names(*, pytester: pytest.Pytester, doc_mode: bool) -> None:
     """Test cache validation."""
     test_name = "imcache"
     name = f"{test_name}.png"
@@ -1207,14 +1224,31 @@ def test_validate_cache_unique_names(pytester: pytest.Pytester) -> None:
     make_cached_images(pytester.path, path=cache, name=name)
     make_cached_images(pytester.path / cache, path=test_name, name=name)
 
-    pytester.makepyfile(
-        f"""def test_{test_name}(verify_image_cache):
-            ...
-        """
-    )
-    result = pytester.runpytest()
-    result.assert_outcomes(errors=1)
-    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
-    result.stdout.fnmatch_lines("E           An image's name must not share the same name as a subdirectory. Either the image")
-    result.stdout.fnmatch_lines("E           or the subdirectory should be removed for the following test cases:")
-    result.stdout.fnmatch_lines(f"E           {{{test_name!r}}}")
+    if doc_mode:
+        images = "images"
+        _preprocess_build_images(Path(cache), Path(images))
+        args = ["--doc_mode", "--doc_image_cache_dir", cache, "--doc_images_dir", images]
+        match_prefix = "INTERNALERROR> "
+        exit_code = pytest.ExitCode.INTERNAL_ERROR
+    else:
+        args = []
+        pytester.makepyfile(
+            f"""def test_{test_name}(verify_image_cache):
+                ...
+            """
+        )
+        match_prefix = "E           "
+        exit_code = pytest.ExitCode.TESTS_FAILED
+
+    result = pytester.runpytest(*args)
+    assert result.ret == exit_code
+
+    line1 = "pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache."
+    line2 = "An image's name must not share the same name as a subdirectory. Either the image"
+    line3 = "or the subdirectory should be removed for the following test cases:"
+    line4 = f"{{{test_name!r}}}"
+    output = result.stderr if doc_mode else result.stdout
+    output.fnmatch_lines(f"{match_prefix}{line1}")
+    output.fnmatch_lines(f"{match_prefix}{line2}")
+    output.fnmatch_lines(f"{match_prefix}{line3}")
+    output.fnmatch_lines(f"{match_prefix}{line4}")
