@@ -27,7 +27,7 @@ def test_doc_mode(pytester: pytest.Pytester, generated_image_dir, image_format: 
     make_cached_images(pytester.path, images, name=name)
     _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
     generated = "generated"
     if generated_image_dir:
         args.extend(["--doc_generated_image_dir", generated])
@@ -87,7 +87,9 @@ def test_both_images_exist(pytester: pytest.Pytester, missing: str, image_format
 
     images_path.mkdir(exist_ok=True)
     cache_path.mkdir(exist_ok=True)
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--image_format", image_format)
+    result = pytester.runpytest(
+        "--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--doc_image_format", image_format
+    )
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
 
@@ -134,7 +136,7 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
     _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
@@ -171,9 +173,6 @@ ALMOST_RED = [254, 0, 0]
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
 def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format) -> None:  # noqa: PLR0913
     """Test when cache is a subdir with multiple images."""
-    if image_format == "jpg" and nested_subdir:
-        pytest.skip("Seg faults in CI with unknown cause")
-
     cache = "cache"
     images = "images"
     name = f"imcache.{image_format}"
@@ -185,7 +184,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     build_filename = make_cached_images(pytester.path, images, name=name, color=build_color)
     _preprocess_build_images(cache_parent / subdir, cache_parent / subdir, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
     failed = "failed"
     if failed_image_dir:
         args.extend(["--doc_failed_image_dir", failed])
@@ -326,7 +325,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
     pytester.makeini(
         f"""
         [pytest]
-        image_format = {image_format_ini}
+        doc_image_format = {image_format_ini}
         doc_failed_image_dir = {failed_ini}
         doc_generated_image_dir = {generated_ini}
         doc_image_cache_dir = {cache_ini}
@@ -346,7 +345,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool) -> None:
                 failed_cli,
                 "--doc_generated_image_dir",
                 generated_cli,
-                "--image_format",
+                "--doc_image_format",
                 image_format_cli,
             ]
         )
