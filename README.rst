@@ -208,7 +208,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
 
 Test specific flags
 ===================
-These are attributes of `verify_image_cache`. You can set them as ``True`` if needed
+These are attributes of ``verify_image_cache``. You can set them as ``True`` if needed
 in the beginning of your test function.
 
 * ``high_variance_test``: If necessary, the threshold for determining if a test
@@ -331,6 +331,35 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * Use ``--doc_image_format`` to save test images in either ``png`` or ``jpg`` format.
   ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
   This will override any configuration, see below.
+
+Customizing test cases
+======================
+Similar to how the unit tests may be customized using the ``verify_image_cache`` fixture,
+the documentations tests can be customized using a ``doc_verify_image_cache`` object.
+Instead of a fixture, a pytest hook function is used.
+
+In your ``conftest.py`` file, define a hook function named ``pytest_pyvista_doc_mode_hook``
+with ``doc_verify_image_cache`` and ``request`` as arguments. The ``doc_verify_image_cache``
+object can then be modified directly on a per-test (i.e. per-image) basis.
+
+For example, a test comparing the build image ``images/foo.png`` to the cached image
+``cache/foo.png`` will have the test name ``foo``, and can be modified as shown below.
+Currently, only the ``env_info`` can be customized. Refer to the test-specific flags
+for unit tests above for more details about customizing the ``env_info`` string.
+
+.. code-block:: python
+
+    def pytest_pyvista_doc_mode_hook(doc_verify_image_cache, request):
+        if doc_verify_image_cache.test_name == 'foo':
+            doc_verify_image_cache.env_info = 'my_custom_string'
+        return doc_verify_image_cache
+
+.. note::
+    Customizing the ``env_info`` will affect the generated image's filename, and is only
+    relevant if the ``--generate_subdirs`` option is enabled.
+
+Since the regular ``pytest`` ``request`` fixture is also exposed by the hook, users
+can further modify the test properties based based on node, markers, or other fixtures.
 
 Configuration
 -------------
