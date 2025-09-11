@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 import shutil
 import tempfile
@@ -29,7 +28,7 @@ MAX_IMAGE_DIM = 400  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 
 
-class _DocModeInfo:
+class _DocVerifyImageCache:
     doc_images_dir: Path
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
@@ -69,13 +68,11 @@ class _DocModeInfo:
         cls.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
         cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
 
-
-@dataclass
-class _DocVerifyImageCache:
-    test_name: str
-    docs_image_path: Path
-    cached_image_path: Path
-    env_info: str | _EnvInfo
+    def __init__(self, test_name: str, *, docs_image_path: Path, cached_image_path: Path, env_info: str | _EnvInfo) -> None:
+        self.test_name = test_name
+        self.test_image_path = docs_image_path
+        self.cached_image_path = cached_image_path
+        self.env_info = env_info
 
 
 def _flatten_path(path: Path) -> Path:
@@ -143,18 +140,18 @@ def _generate_test_cases() -> list[_DocVerifyImageCache]:
         test_cases_dict[test_name].setdefault(key, filepath)
 
     # process test images
-    generate_subdirs = _DocModeInfo.doc_generate_subdirs
+    generate_subdirs = _DocVerifyImageCache.doc_generate_subdirs
     test_image_paths = _preprocess_build_images(
-        _DocModeInfo.doc_images_dir,
-        _DocModeInfo.doc_generated_image_dir,
-        image_format=_DocModeInfo.doc_image_format,
+        _DocVerifyImageCache.doc_images_dir,
+        _DocVerifyImageCache.doc_generated_image_dir,
+        image_format=_DocVerifyImageCache.doc_image_format,
         generate_subdirs=generate_subdirs,
     )
     [add_to_dict(path.parent if generate_subdirs else path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
-    cache_dir = _DocModeInfo.doc_image_cache_dir
-    cached_image_paths = _get_file_paths(cache_dir, ext=_DocModeInfo.doc_image_format)
+    cache_dir = _DocVerifyImageCache.doc_image_cache_dir
+    cached_image_paths = _get_file_paths(cache_dir, ext=_DocVerifyImageCache.doc_image_format)
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
         rel = path.relative_to(cache_dir)
@@ -188,16 +185,16 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 def _save_failed_test_image(source_path: Path, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
-    _DocModeInfo.doc_failed_image_dir.mkdir(exist_ok=True)
+    _DocVerifyImageCache.doc_failed_image_dir.mkdir(exist_ok=True)
 
-    if source_path.is_relative_to(_DocModeInfo.doc_image_cache_dir):
-        rel = source_path.relative_to(_DocModeInfo.doc_image_cache_dir)
+    if source_path.is_relative_to(_DocVerifyImageCache.doc_image_cache_dir):
+        rel = source_path.relative_to(_DocVerifyImageCache.doc_image_cache_dir)
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
-        rel = source_path.relative_to(_DocModeInfo.doc_generated_image_dir)
+        rel = source_path.relative_to(_DocVerifyImageCache.doc_generated_image_dir)
         dest_relative_dir = Path("from_build") / rel.parent
 
-    dest_dir = _DocModeInfo.doc_failed_image_dir / category / dest_relative_dir
+    dest_dir = _DocVerifyImageCache.doc_failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
     dest_path = dest_dir / source_path.name
     copy_method = shutil.copytree if source_path.is_dir() else shutil.copy
@@ -217,7 +214,7 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
     test_case = _pytest_pyvista_test_case
     _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(
-        filename=test_case.test_name, docs_image_path=test_case.docs_image_path, cached_image_path=test_case.cached_image_path
+        filename=test_case.test_name, docs_image_path=test_case.test_image_path, cached_image_path=test_case.cached_image_path
     )
     if fail_msg:
         _save_failed_test_image(cast("Path", fail_source), "errors")
@@ -226,13 +223,13 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
     cached_image_paths = (
         [test_case.cached_image_path]
         if test_case.cached_image_path.is_file()
-        else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.doc_image_format)
+        else _get_file_paths(test_case.cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
     )
     current_cached_image_path = cached_image_paths[0]
     docs_image_path = (
-        test_case.docs_image_path
-        if test_case.docs_image_path.is_file()
-        else _get_file_paths(test_case.docs_image_path, ext=_DocModeInfo.doc_image_format)[0]
+        test_case.test_image_path
+        if test_case.test_image_path.is_file()
+        else _get_file_paths(test_case.test_image_path, ext=_DocVerifyImageCache.doc_image_format)[0]
     )
 
     warn_msg, fail_msg = _test_compare_images(
@@ -256,7 +253,7 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
                 current_cached_image_path = path
                 break
         else:  # Loop completed - test still fails
-            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocModeInfo.doc_image_cache_dir / test_case.test_name!s}"
+            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocVerifyImageCache.doc_image_cache_dir / test_case.test_name!s}"
 
     if fail_msg:
         _save_failed_test_image(docs_image_path, "errors")
@@ -274,7 +271,7 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
 
 def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_image_path: Path | None) -> tuple[str | None, Path | None]:
     def has_no_images(path: Path | None) -> bool:
-        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocModeInfo.doc_image_format)) == 0)
+        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocVerifyImageCache.doc_image_format)) == 0)
 
     build_has_no_images = has_no_images(docs_image_path)
     cache_has_no_images = has_no_images(cached_image_path)
@@ -285,13 +282,13 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
             exists = "cache"
             missing = "docs build"
             exists_path = cached_image_path
-            missing_path = _DocModeInfo.doc_images_dir
+            missing_path = _DocVerifyImageCache.doc_images_dir
         else:
             source_path = docs_image_path
             exists = "docs build"
             missing = "cache"
-            exists_path = _DocModeInfo.doc_images_dir
-            missing_path = _DocModeInfo.doc_image_cache_dir
+            exists_path = _DocVerifyImageCache.doc_images_dir
+            missing_path = _DocVerifyImageCache.doc_image_cache_dir
 
         msg = (
             f"Test setup failed for test image:\n"
@@ -308,9 +305,9 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
 def _warn_cached_image_path(cached_image_path: Path) -> None:
     """Warn if a subdir is used with only one cached image."""
     if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext=_DocModeInfo.doc_image_format)
+        cached_images = _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
         if len(cached_images) == 1:
-            cache_dir = _DocModeInfo.doc_image_cache_dir
+            cache_dir = _DocVerifyImageCache.doc_image_cache_dir
             rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)
             msg = (
                 "Cached image sub-directory only contains a single image.\n"
