@@ -30,6 +30,8 @@ import pyvista
 from pyvista import Plotter
 import vtkmodules
 
+from pytest_pyvista import hooks
+
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
@@ -150,7 +152,12 @@ class RegressionFileNotFoundError(RegressionFileNotFound):
     """Error when regression file is not found."""
 
 
-def pytest_addoption(parser) -> None:  # noqa: ANN001
+def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
+    """Add hooks."""
+    pluginmanager.add_hookspecs(hooks)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
     _add_common_pytest_options(parser)
 

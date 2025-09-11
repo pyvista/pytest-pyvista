@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 import shutil
 import tempfile
 from typing import ClassVar
 from typing import Literal
-from typing import NamedTuple
 from typing import cast
 import warnings
 
@@ -26,6 +26,7 @@ from .pytest_pyvista import _ImageFormats
 from .pytest_pyvista import _test_compare_images
 
 MAX_IMAGE_DIM = 400  # pixels
+TEST_CASE_NAME = "_pytest_pyvista_test_case"
 
 
 class _DocModeInfo:
@@ -69,10 +70,12 @@ class _DocModeInfo:
         cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
 
 
-class _TestCaseTuple(NamedTuple):
+@dataclass
+class _DocVerifyImageCache:
     test_name: str
     docs_image_path: Path
     cached_image_path: Path
+    env_info: str | _EnvInfo
 
 
 def _flatten_path(path: Path) -> Path:
@@ -114,7 +117,7 @@ def _preprocess_build_images(
     return output_paths
 
 
-def _generate_test_cases() -> list[_TestCaseTuple]:
+def _generate_test_cases() -> list[_DocVerifyImageCache]:
     """
     Generate a list of image test cases.
 
@@ -168,11 +171,7 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
     for test_name, content in sorted(test_cases_dict.items()):
         doc = content.get("docs", None)
         cache = content.get("cached", None)
-        test_case = _TestCaseTuple(
-            test_name=test_name,
-            docs_image_path=doc,
-            cached_image_path=cache,
-        )
+        test_case = _DocVerifyImageCache(test_name=test_name, docs_image_path=doc, cached_image_path=cache, env_info=_EnvInfo())
         test_cases_list.append(test_case)
 
     return test_cases_list
@@ -180,11 +179,11 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate parametrized tests."""
-    if "test_case" in metafunc.fixturenames:
+    if TEST_CASE_NAME in metafunc.fixturenames:
         # Generate a separate test case for each image being tested
         test_cases = _generate_test_cases()
         ids = [case.test_name for case in test_cases]
-        metafunc.parametrize("test_case", test_cases, ids=ids)
+        metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
 
 
 def _save_failed_test_image(source_path: Path, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
@@ -205,8 +204,17 @@ def _save_failed_test_image(source_path: Path, category: Literal["warnings", "er
     copy_method(source_path, dest_path)
 
 
-def test_static_images(test_case: _TestCaseTuple) -> None:
+@pytest.fixture
+def doc_verify_image_cache(request: pytest.FixtureRequest) -> _DocVerifyImageCache:
+    """Fixture to allow users to mutate test cases before they run."""
+    test_case: _DocVerifyImageCache = request.node.callspec.params[TEST_CASE_NAME]
+    request.config.hook.pytest_pyvista_doc_mode_hook(doc_verify_image_cache=test_case, request=request)
+    return test_case
+
+
+def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
+    test_case = _pytest_pyvista_test_case
     _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(
         filename=test_case.test_name, docs_image_path=test_case.docs_image_path, cached_image_path=test_case.cached_image_path

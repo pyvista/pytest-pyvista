@@ -429,3 +429,28 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     num_files = 5
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)
+
+
+def test_customizing_tests(pytester: pytest.Pytester) -> None:
+    """Test that individual test cases can be customized."""
+    cache = "cache"
+    images = "images"
+    name = "imcache.png"
+    make_cached_images(pytester.path, cache, name=name)
+    make_cached_images(pytester.path, images, name=name)
+    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
+
+    custom_string = "custom_string"
+    pytester.makeconftest(
+        f"""
+        def pytest_pyvista_doc_mode_hook(doc_verify_image_cache, request) -> None:
+            if doc_verify_image_cache.test_name == {Path(name).stem!r}:
+                doc_verify_image_cache.env_info = {custom_string!r}
+            return doc_verify_image_cache
+    """
+    )
+    generated = "generated"
+    pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_generated_image_dir", generated)
+
+    assert Path(generated).is_dir()
+    assert Path(generated) / Path(name).stem / f"{custom_string}{Path(name).suffix}"
