@@ -1192,27 +1192,20 @@ def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format,
         images = "images"
         _preprocess_build_images(Path(cache), Path(images), image_format=valid_format)
         args.extend(["--doc_mode", "--doc_image_cache_dir", cache, "--doc_images_dir", images])
-        match_prefix = "INTERNALERROR> "
-        exit_code = pytest.ExitCode.INTERNAL_ERROR
     else:
         pytester.makepyfile(
             f"""def test_{test_name}(verify_image_cache):
-                ...
+                    ...
             """
         )
-        match_prefix = "E           "
-        exit_code = pytest.ExitCode.TESTS_FAILED
 
     result = pytester.runpytest(*args)
-    assert result.ret == exit_code
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
 
-    line1 = f"pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format is '{valid_format}', but '{invalid_format}'"
-    line2 = "images exist in the cache. The following images should be removed from the cache:"
-    line3 = f"['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']"
-    output = result.stderr if doc_mode else result.stdout
-    output.fnmatch_lines(f"{match_prefix}{line1}")
-    output.fnmatch_lines(f"{match_prefix}{line2}")
-    output.fnmatch_lines(f"{match_prefix}{line3}")
+    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format required by")
+    result.stdout.fnmatch_lines(f"E           the image cache directory is {valid_format!r}, but {invalid_format!r} images exist in the cache.")
+    result.stdout.fnmatch_lines("E           Cache directory: *")
+    result.stdout.fnmatch_lines(f"E           Invalid images: ['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']")
 
 
 @pytest.mark.parametrize("doc_mode", [True, False])
@@ -1228,27 +1221,18 @@ def test_validate_cache_unique_names(*, pytester: pytest.Pytester, doc_mode: boo
         images = "images"
         _preprocess_build_images(Path(cache), Path(images))
         args = ["--doc_mode", "--doc_image_cache_dir", cache, "--doc_images_dir", images]
-        match_prefix = "INTERNALERROR> "
-        exit_code = pytest.ExitCode.INTERNAL_ERROR
     else:
         args = []
         pytester.makepyfile(
             f"""def test_{test_name}(verify_image_cache):
-                ...
+                    ...
             """
         )
-        match_prefix = "E           "
-        exit_code = pytest.ExitCode.TESTS_FAILED
 
     result = pytester.runpytest(*args)
-    assert result.ret == exit_code
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
 
-    line1 = "pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache."
-    line2 = "An image's name must not share the same name as a subdirectory. Either the image"
-    line3 = "or the subdirectory should be removed for the following test cases:"
-    line4 = f"{{{test_name!r}}}"
-    output = result.stderr if doc_mode else result.stdout
-    output.fnmatch_lines(f"{match_prefix}{line1}")
-    output.fnmatch_lines(f"{match_prefix}{line2}")
-    output.fnmatch_lines(f"{match_prefix}{line3}")
-    output.fnmatch_lines(f"{match_prefix}{line4}")
+    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
+    result.stdout.fnmatch_lines("E           An image's name must not share the same name as a subdirectory. Either the image")
+    result.stdout.fnmatch_lines("E           or the subdirectory should be removed for the following test cases:")
+    result.stdout.fnmatch_lines(f"E           {{{test_name!r}}}")

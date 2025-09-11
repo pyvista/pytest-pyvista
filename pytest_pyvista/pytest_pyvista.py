@@ -706,14 +706,34 @@ class _ChainedCallbacks:
             f(plotter)
 
 
+@pytest.fixture(scope="session")
+def validate_cache(pytestconfig: pytest.Config) -> None:
+    """
+    Validate the contents of the image cache directory.
+
+    A session scope fixture is used since we only need to evaluate this once, and we want
+    the error raised during test setup.
+    """
+    if pytestconfig.getoption("doc_mode"):
+        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
+
+        image_cache_dir = _DocModeInfo.doc_image_cache_dir
+        image_format = _DocModeInfo.doc_image_format
+    else:
+        image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
+        image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+    _validate_cache(image_cache_dir, image_format)
+
+
 def _validate_cache(cache_dir: Path, image_format: _ImageFormats) -> None:
     def check_image_format(format_to_check: _ImageFormats) -> None:
         image_paths = [str(p.relative_to(cache_dir)) for p in _get_file_paths(cache_dir, ext=format_to_check)]
         if image_paths and image_format != format_to_check:
             msg = (
-                f"The image format is {image_format!r}, but {format_to_check!r}\n"
-                f"images exist in the cache. The following images should be removed from the cache:\n"
-                f"{image_paths}"
+                f"The image format required by\n"
+                f"the image cache directory is {image_format!r}, but {format_to_check!r} images exist in the cache.\n"
+                f"Cache directory: {str(cache_dir.resolve())!r}\n"
+                f"Invalid images: {image_paths}"
             )
             raise InvalidCacheError(msg)
 
@@ -740,7 +760,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
         _DocModeInfo.init_dirs(config)
         _DocModeInfo.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
-        _validate_cache(_DocModeInfo.doc_image_cache_dir, image_format=_DocModeInfo.doc_image_format)
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
@@ -758,6 +777,7 @@ def verify_image_cache(
     request: pytest.FixtureRequest,
     pytestconfig: pytest.Config,
     monkeypatch: pytest.MonkeyPatch,
+    validate_cache: None,  # noqa: ARG001
 ) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
@@ -770,7 +790,6 @@ def verify_image_cache(
     VerifyImageCache.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
-    _validate_cache(cache_dir, image_format=VerifyImageCache.image_format)
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir", is_dir=True)
 
