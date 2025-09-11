@@ -707,7 +707,7 @@ class _ChainedCallbacks:
 
 
 @pytest.fixture(scope="session")
-def validate_cache(pytestconfig: pytest.Config) -> None:
+def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
     """
     Validate the contents of the image cache directory.
 
@@ -722,10 +722,10 @@ def validate_cache(pytestconfig: pytest.Config) -> None:
     else:
         image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
         image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
-    _validate_cache(image_cache_dir, image_format)
+    __validate_image_cache_dir(image_cache_dir, image_format)
 
 
-def _validate_cache(cache_dir: Path, image_format: _ImageFormats) -> None:
+def __validate_image_cache_dir(cache_dir: Path, image_format: _ImageFormats) -> None:
     def check_image_format(format_to_check: _ImageFormats) -> None:
         image_paths = [str(p.relative_to(cache_dir)) for p in _get_file_paths(cache_dir, ext=format_to_check)]
         if image_paths and image_format != format_to_check:
@@ -777,7 +777,7 @@ def verify_image_cache(
     request: pytest.FixtureRequest,
     pytestconfig: pytest.Config,
     monkeypatch: pytest.MonkeyPatch,
-    validate_cache: None,  # noqa: ARG001
+    _validate_image_cache_dir: None,
 ) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
