@@ -137,6 +137,10 @@ class RegressionError(RuntimeError):
     """Error when regression does not meet the criteria."""
 
 
+class InvalidCacheError(RuntimeError):
+    """Error when validating the cache."""
+
+
 class RegressionFileNotFound(FileNotFoundError):  # noqa: N818
     """
     Error when regression file is not found.
@@ -716,6 +720,52 @@ class _ChainedCallbacks:
             f(plotter)
 
 
+@pytest.fixture(scope="session")
+def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
+    """
+    Validate the contents of the image cache directory.
+
+    A session scope fixture is used since we only need to evaluate this once, and we want
+    the error raised during test setup.
+    """
+    if pytestconfig.getoption("doc_mode"):
+        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
+
+        image_cache_dir = _DocModeInfo.doc_image_cache_dir
+        image_format = _DocModeInfo.doc_image_format
+    else:
+        image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
+        image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+    __validate_image_cache_dir(image_cache_dir, image_format)
+
+
+def __validate_image_cache_dir(cache_dir: Path, image_format: _ImageFormats) -> None:
+    def check_image_format(format_to_check: _ImageFormats) -> None:
+        image_paths = [str(p.relative_to(cache_dir)) for p in _get_file_paths(cache_dir, ext=format_to_check)]
+        if image_paths and image_format != format_to_check:
+            msg = (
+                f"The image format required by\n"
+                f"the image cache directory is {image_format!r}, but {format_to_check!r} images exist in the cache.\n"
+                f"Cache directory: {str(cache_dir.resolve())!r}\n"
+                f"Invalid images: {image_paths}"
+            )
+            raise InvalidCacheError(msg)
+
+    check_image_format("png")
+    check_image_format("jpg")
+
+    subdir_names = {p.name for p in cache_dir.glob("*") if p.is_dir()}
+    image_names = {p.stem for p in cache_dir.glob(f"*.{image_format}")}
+    if intersection := (subdir_names & image_names):
+        msg = (
+            "Non-unique image test names detected in the cache.\n"
+            "An image's name must not share the same name as a subdirectory. Either the image\n"
+            "or the subdirectory should be removed for the following test cases:\n"
+            f"{intersection}"
+        )
+        raise InvalidCacheError(msg)
+
+
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
@@ -740,6 +790,7 @@ def verify_image_cache(
     request: pytest.FixtureRequest,
     pytestconfig: pytest.Config,
     monkeypatch: pytest.MonkeyPatch,
+    _validate_image_cache_dir: None,
 ) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
