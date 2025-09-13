@@ -30,6 +30,8 @@ import pyvista
 from pyvista import Plotter
 import vtkmodules
 
+from pytest_pyvista import hooks
+
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
@@ -150,7 +152,12 @@ class RegressionFileNotFoundError(RegressionFileNotFound):
     """Error when regression file is not found."""
 
 
-def pytest_addoption(parser) -> None:  # noqa: ANN001
+def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
+    """Add hooks."""
+    pluginmanager.add_hookspecs(hooks)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
     _add_common_pytest_options(parser)
 
@@ -720,9 +727,9 @@ class _ChainedCallbacks:
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
     if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
-        _DocModeInfo.init_from_config(config)
+        _DocVerifyImageCache.init_from_config(config)
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
@@ -839,11 +846,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
     if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
-        for tempdir in _DocModeInfo._tempdirs:  # noqa: SLF001
+        for tempdir in _DocVerifyImageCache._tempdirs:  # noqa: SLF001
             tempdir.cleanup()
-        _DocModeInfo._tempdirs = []  # noqa: SLF001
+        _DocVerifyImageCache._tempdirs = []  # noqa: SLF001
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
