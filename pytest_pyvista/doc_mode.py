@@ -23,6 +23,7 @@ from .pytest_pyvista import _get_generated_image_path
 from .pytest_pyvista import _get_option_from_config_or_ini
 from .pytest_pyvista import _ImageFormats
 from .pytest_pyvista import _test_compare_images
+from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
 MAX_IMAGE_DIM = 400  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
@@ -214,6 +215,7 @@ def doc_verify_image_cache(request: pytest.FixtureRequest) -> _DocVerifyImageCac
     return test_case
 
 
+@pytest.mark.usefixtures("_validate_image_cache_dir")
 def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
     test_case = _pytest_pyvista_test_case
