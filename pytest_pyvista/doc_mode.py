@@ -18,7 +18,9 @@ import pyvista as pv
 from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
 from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
 from .pytest_pyvista import _check_compare_fail
+from .pytest_pyvista import _EnvInfo
 from .pytest_pyvista import _get_file_paths
+from .pytest_pyvista import _get_generated_image_path
 from .pytest_pyvista import _get_option_from_config_or_ini
 from .pytest_pyvista import _ImageFormats
 from .pytest_pyvista import _test_compare_images
@@ -32,11 +34,12 @@ class _DocModeInfo:
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
     doc_failed_image_dir: Path
+    doc_generate_subdirs: bool
     doc_image_format: _ImageFormats
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
     @classmethod
-    def init_dirs(cls, config: pytest.Config) -> None:
+    def init_from_config(cls, config: pytest.Config) -> None:
         def require_existing_dir(option: str) -> Path:
             """Fetch a required directory option and ensure it's valid."""
             path = _get_option_from_config_or_ini(config, option, is_dir=True)
@@ -63,6 +66,9 @@ class _DocModeInfo:
         cls.doc_generated_image_dir = optional_dir_with_temp("doc_generated_image_dir", prefix="pytest_doc_generated_image_dir")
         cls.doc_failed_image_dir = optional_dir_with_temp("doc_failed_image_dir", prefix="pytest_doc_failed_image_dir")
 
+        cls.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
+        cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
+
 
 class _TestCaseTuple(NamedTuple):
     test_name: str
@@ -74,7 +80,9 @@ def _flatten_path(path: Path) -> Path:
     return Path("_".join(path.parts))
 
 
-def _preprocess_build_images(build_images_dir: Path, output_dir: Path, image_format: _ImageFormats = "png") -> list[Path]:
+def _preprocess_build_images(
+    build_images_dir: Path, output_dir: Path, *, image_format: _ImageFormats = "png", generate_subdirs: bool = False
+) -> list[Path]:
     """
     Read images from the build dir, resize them, and save to a flat output dir.
 
@@ -86,13 +94,15 @@ def _preprocess_build_images(build_images_dir: Path, output_dir: Path, image_for
     input_gif = _get_file_paths(build_images_dir, ext="gif")
     input_jpg = _get_file_paths(build_images_dir, ext="jpg")
     output_paths = []
-    output_dir.mkdir(exist_ok=True)
     for input_path in input_png + input_gif + input_jpg:
+        output_dir.mkdir(exist_ok=True)
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
         output_file_name = _flatten_path(input_path.relative_to(build_images_dir))
         output_file_name = output_file_name.with_suffix("." + image_format)
-        output_path = output_dir / output_file_name
+        output_path = _get_generated_image_path(
+            parent=output_dir, image_name=output_file_name, generate_subdirs=generate_subdirs, env_info=_EnvInfo()
+        )
         output_paths.append(output_path)
 
         # Ensure image size is max 400x400 and save to output
@@ -131,10 +141,14 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
         test_cases_dict[test_name].setdefault(key, filepath)
 
     # process test images
+    generate_subdirs = _DocModeInfo.doc_generate_subdirs
     test_image_paths = _preprocess_build_images(
-        _DocModeInfo.doc_images_dir, _DocModeInfo.doc_generated_image_dir, image_format=_DocModeInfo.doc_image_format
+        _DocModeInfo.doc_images_dir,
+        _DocModeInfo.doc_generated_image_dir,
+        image_format=_DocModeInfo.doc_image_format,
+        generate_subdirs=generate_subdirs,
     )
-    [add_to_dict(path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
+    [add_to_dict(path.parent if generate_subdirs else path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
     cache_dir = _DocModeInfo.doc_image_cache_dir
@@ -182,12 +196,14 @@ def _save_failed_test_image(source_path: Path, category: Literal["warnings", "er
         rel = source_path.relative_to(_DocModeInfo.doc_image_cache_dir)
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
-        dest_relative_dir = Path("from_build")
+        rel = source_path.relative_to(_DocModeInfo.doc_generated_image_dir)
+        dest_relative_dir = Path("from_build") / rel.parent
 
     dest_dir = _DocModeInfo.doc_failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
     dest_path = dest_dir / source_path.name
-    shutil.copy(source_path, dest_path)
+    copy_method = shutil.copytree if source_path.is_dir() else shutil.copy
+    copy_method(source_path, dest_path)
 
 
 @pytest.mark.usefixtures("_validate_image_cache_dir")
@@ -207,10 +223,15 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.doc_image_format)
     )
     current_cached_image_path = cached_image_paths[0]
+    docs_image_path = (
+        test_case.docs_image_path
+        if test_case.docs_image_path.is_file()
+        else _get_file_paths(test_case.docs_image_path, ext=_DocModeInfo.doc_image_format)[0]
+    )
 
     warn_msg, fail_msg = _test_compare_images(
         test_name=test_case.test_name,
-        test_image=test_case.docs_image_path,
+        test_image=docs_image_path,
         cached_image=current_cached_image_path,
         allowed_error=DEFAULT_ERROR_THRESHOLD,
         allowed_warning=DEFAULT_WARNING_THRESHOLD,
@@ -221,7 +242,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         # Compare build image to other known valid versions
         msg_start = "This test has multiple cached images. It initially failed (as above)"
         for path in cached_image_paths[1:]:
-            error = pv.compare_images(pv.read(test_case.docs_image_path), pv.read(path))
+            error = pv.compare_images(pv.read(docs_image_path), pv.read(path))
             if _check_compare_fail(test_case.test_name, error, allowed_error=DEFAULT_ERROR_THRESHOLD) is None:
                 # Convert failure into a warning
                 warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
@@ -232,7 +253,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
             fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocModeInfo.doc_image_cache_dir / test_case.test_name!s}"
 
     if fail_msg:
-        _save_failed_test_image(test_case.docs_image_path, "errors")
+        _save_failed_test_image(docs_image_path, "errors")
         # Save all cached images since they all failed
         for path in cached_image_paths:
             _save_failed_test_image(path, "errors")
@@ -240,14 +261,20 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
 
     if warn_msg:
         parent_dir: Literal["errors_as_warnings", "warnings"] = "errors_as_warnings" if test_case.cached_image_path.is_dir() else "warnings"
-        _save_failed_test_image(test_case.docs_image_path, parent_dir)
+        _save_failed_test_image(docs_image_path, parent_dir)
         _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)
 
 
-def _test_both_images_exist(filename: str, docs_image_path: Path, cached_image_path: Path) -> tuple[str | None, Path | None]:
-    if docs_image_path is None or cached_image_path is None:
-        if docs_image_path is None:
+def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_image_path: Path | None) -> tuple[str | None, Path | None]:
+    def has_no_images(path: Path | None) -> bool:
+        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocModeInfo.doc_image_format)) == 0)
+
+    build_has_no_images = has_no_images(docs_image_path)
+    cache_has_no_images = has_no_images(cached_image_path)
+
+    if build_has_no_images or cache_has_no_images:
+        if build_has_no_images:
             source_path = cached_image_path
             exists = "cache"
             missing = "docs build"

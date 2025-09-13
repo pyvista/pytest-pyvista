@@ -171,11 +171,6 @@ def pytest_addoption(parser) -> None:  # noqa: ANN001
         help="Prevent test failure if a generated test image has no use.",
     )
     group.addoption(
-        "--generate_subdirs",
-        action="store_true",
-        help="Save generated images to sub-directories. The image names are determined by the environment info.",
-    )
-    group.addoption(
         "--add_missing_images",
         action="store_true",
         help="Adds images to cache if missing.",
@@ -247,6 +242,19 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
         f"{prefix}failed_image_dir",
         default=None,
         help="Path to dump images from failed tests from the current run.",
+    )
+    group.addoption(
+        f"--{prefix}generate_subdirs",
+        action="store_const",
+        const=True,
+        default=None,
+        help="Save generated images to sub-directories. The image names are determined by the environment info.",
+    )
+    parser.addini(
+        f"{prefix}generate_subdirs",
+        default=False,
+        type="bool",
+        help="Save generated images to sub-directories. The image names are determined by the environment info.",
     )
     group.addoption(
         f"--{prefix}image_format",
@@ -324,7 +332,7 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
-    generate_subdirs = None
+    generate_subdirs: bool = False
     image_format: _ImageFormats
 
     def __init__(  # noqa: PLR0913
@@ -459,7 +467,7 @@ class VerifyImageCache:
             # Compare test image to other known valid versions
             msg_start = "This test has multiple cached images. It initially failed (as above)"
             for path in cached_image_paths[1:]:
-                error = _compare_images(plotter, str(path))
+                error = _compare_images(plotter, path)
                 if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
                     # Convert failure into a warning
                     warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
@@ -490,10 +498,9 @@ class VerifyImageCache:
 
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
-        generated_image_path = (
-            parent / Path(image_name).with_suffix("") / f"{self.env_info}.{self.image_format}" if self.generate_subdirs else parent / image_name
+        generated_image_path = _get_generated_image_path(
+            parent=parent, image_name=image_name, generate_subdirs=self.generate_subdirs, env_info=self.env_info
         )
-        generated_image_path.parent.mkdir(exist_ok=True, parents=True)
         plotter.screenshot(generated_image_path)
 
     def _save_failed_test_images(
@@ -554,6 +561,13 @@ def _test_name_from_image_name(image_name: str) -> str:
         return "_".join(parts)
 
     return "test_" + remove_suffix(image_name)
+
+
+def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo) -> Path:
+    name = Path(image_name)
+    generated_image_path = parent / name.with_suffix("") / f"{env_info}{name.suffix}" if generate_subdirs else parent / name
+    generated_image_path.parent.mkdir(exist_ok=True, parents=True)
+    return generated_image_path
 
 
 def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
@@ -664,12 +678,12 @@ def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
 
 
 @overload
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[False] = False) -> str | bool | None: ...
+@overload
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[True] = True) -> Path | None: ...
 @overload
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[False] = False) -> str | None: ...
-@overload
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | None: ...
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | None:
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | bool | None: ...
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | bool | None:
     value = pytestconfig.getoption(option)
     if value is None:
         value = pytestconfig.getini(option)
@@ -758,8 +772,7 @@ def pytest_configure(config: pytest.Config) -> None:
     if config.getoption("doc_mode"):
         from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
 
-        _DocModeInfo.init_dirs(config)
-        _DocModeInfo.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
+        _DocModeInfo.init_from_config(config)
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
