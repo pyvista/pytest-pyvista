@@ -168,7 +168,12 @@ def _generate_test_cases() -> list[_DocVerifyImageCache]:
     for test_name, content in sorted(test_cases_dict.items()):
         doc = content.get("docs", None)
         cache = content.get("cached", None)
-        test_case = _DocVerifyImageCache(test_name=test_name, docs_image_path=doc, cached_image_path=cache, env_info=_EnvInfo())
+        test_case = _DocVerifyImageCache(
+            test_name=test_name,
+            docs_image_path=doc,
+            cached_image_path=cache,
+            env_info=_EnvInfo(),
+        )
         test_cases_list.append(test_case)
 
     return test_cases_list

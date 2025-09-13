@@ -417,6 +417,14 @@ Configure the image format to be ``jpg`` for both unit tests and when using ``--
     image_format = "jpg"
     doc_image_format = "jpg"
 
+Enable the generation of test images inside of sub-directories for both unit tests and when using ``--doc_mode``.
+
+.. code-block:: toml
+
+    [tool.pytest.ini_options]
+    generate_subdirs = True
+    doc_generate_subdirs = True
+
 Contributing
 ------------
 Contributions are always welcome. Tests can be run with `tox`_, please ensure
