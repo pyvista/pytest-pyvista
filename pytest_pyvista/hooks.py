@@ -15,5 +15,5 @@ def pytest_pyvista_doc_mode_hook(doc_verify_image_cache: _DocVerifyImageCache, r
     """
     Function called for each generated test before it executes.
 
-    Users can mutate `doc_verify_image_cache` in-place.
+    Users can mutate ``doc_verify_image_cache`` in-place.
     """  # noqa: D401
