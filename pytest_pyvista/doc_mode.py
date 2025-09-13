@@ -24,6 +24,7 @@ from .pytest_pyvista import _get_generated_image_path
 from .pytest_pyvista import _get_option_from_config_or_ini
 from .pytest_pyvista import _ImageFormats
 from .pytest_pyvista import _test_compare_images
+from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
 MAX_IMAGE_DIM = 400  # pixels
 
@@ -205,6 +206,7 @@ def _save_failed_test_image(source_path: Path, category: Literal["warnings", "er
     copy_method(source_path, dest_path)
 
 
+@pytest.mark.usefixtures("_validate_image_cache_dir")
 def test_static_images(test_case: _TestCaseTuple) -> None:
     """Compare generated image with cached image."""
     _warn_cached_image_path(test_case.cached_image_path)
