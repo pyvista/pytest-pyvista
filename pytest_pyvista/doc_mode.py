@@ -219,19 +219,6 @@ def doc_verify_image_cache(request: pytest.FixtureRequest) -> _DocVerifyImageCac
 def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
     test_case = _pytest_pyvista_test_case
-
-    # Ensure test path is an image
-    test_image_path = (
-        test_case.test_image_path
-        if test_case.test_image_path.is_file()
-        else _get_file_paths(test_case.test_image_path, ext=_DocVerifyImageCache.doc_image_format)[0]
-    )
-    if test_case.doc_generate_subdirs:
-        # Need to update the filename in case it's been modified by a plugin hook
-        new_path = test_image_path.with_stem(str(test_case.env_info))
-        if not new_path.is_file():
-            test_image_path.rename(new_path)
-
     _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(
         filename=test_case.test_name, docs_image_path=test_case.test_image_path, cached_image_path=test_case.cached_image_path
@@ -246,6 +233,18 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
         else _get_file_paths(test_case.cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
     )
     current_cached_image_path = cached_image_paths[0]
+
+    # Ensure test path is an image
+    test_image_path = (
+        test_case.test_image_path
+        if test_case.test_image_path.is_file()
+        else _get_file_paths(test_case.test_image_path, ext=_DocVerifyImageCache.doc_image_format)[0]
+    )
+    if test_case.doc_generate_subdirs:
+        # Need to update the filename in case it's been modified by a plugin hook
+        new_path = test_image_path.with_stem(str(test_case.env_info))
+        if not new_path.is_file():
+            test_image_path.rename(new_path)
 
     warn_msg, fail_msg = _test_compare_images(
         test_name=test_case.test_name,
