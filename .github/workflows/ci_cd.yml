@@ -87,7 +87,7 @@ jobs:
 
       - name: Install pytest-pyvista with test dependencies
         run: |
-          pip install .[tests] 'pyvista>=0.37'
+          pip install .[tests] 'pyvista[jupyter]>=0.37'
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
