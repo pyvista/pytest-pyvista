@@ -19,8 +19,6 @@ import pyvista as pv
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
-from pytest_pyvista.pytest_pyvista import DEFAULT_IMAGE_HEIGHT
-from pytest_pyvista.pytest_pyvista import DEFAULT_IMAGE_WIDTH
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _SystemProperties
 
@@ -51,7 +49,7 @@ def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", co
     d = Path(test_path, path)
     d.mkdir(exist_ok=True, parents=True)
     sphere = pv.Sphere()
-    plotter = pv.Plotter(window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT))
+    plotter = pv.Plotter()
     plotter.add_mesh(sphere, color=color)
     filename = d / name
     if filename.suffix == ".vtksz":

@@ -15,8 +15,6 @@ import pytest
 import pyvista as pv
 
 from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
-from .pytest_pyvista import DEFAULT_IMAGE_HEIGHT
-from .pytest_pyvista import DEFAULT_IMAGE_WIDTH
 from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
 from .pytest_pyvista import _check_compare_fail
 from .pytest_pyvista import _EnvInfo
@@ -27,6 +25,8 @@ from .pytest_pyvista import _ImageFormats
 from .pytest_pyvista import _test_compare_images
 from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
+DEFAULT_IMAGE_WIDTH = 400  # pixels
+DEFAULT_IMAGE_HEIGHT = 300  # pixels
 MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ = "_pytest_pyvista_test_case_vtksz"
