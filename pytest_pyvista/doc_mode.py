@@ -245,6 +245,7 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
         new_path = test_image_path.with_stem(str(test_case.env_info))
         if not new_path.is_file():
             test_image_path.rename(new_path)
+            test_image_path = new_path
 
     warn_msg, fail_msg = _test_compare_images(
         test_name=test_case.test_name,
