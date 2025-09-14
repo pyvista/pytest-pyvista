@@ -35,11 +35,12 @@ docs = [
   "sphinx==8.2.1",
   "sphinx_copybutton==0.5.2",
 ]
-interactive = ["playwright<1.56", "pyvista[jupyter]", "trame-vtk< 2.10"]
+interactive = ["playwright<1.56", "pyvista[jupyter]"]
 tests = [
   "codecov<2.2.0",
   "coverage==7.10.6",
   "numpy<2.3",
+  "playwright<1.56",
   "pytest-cov==6.2.1",
   "pytest-xdist==3.8.0",
   "pytest>=6.2.0",
