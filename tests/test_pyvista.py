@@ -1177,6 +1177,19 @@ def test_os_darwin_windows(
     assert result == expected
 
 
+def test_invalid_cli_args(pytester: pytest.Pytester) -> None:
+    """Test using wrong CLI args related to doc mode."""
+    # Test 'doc' arg without --doc_mode
+    result = pytester.runpytest("--doc_image_format", "png")
+    assert result.ret == pytest.ExitCode.INTERNAL_ERROR
+    result.stderr.fnmatch_lines("INTERNALERROR> RuntimeError: Argument --doc_image_format is only valid when using --doc_mode")
+
+    # Test no 'doc' arg with --doc_mode
+    result = pytester.runpytest("--doc_mode", "--image_format", "png")
+    assert result.ret == pytest.ExitCode.INTERNAL_ERROR
+    result.stderr.fnmatch_lines("INTERNALERROR> RuntimeError: Argument --image_format is not valid when using --doc_mode")
+
+
 @pytest.mark.parametrize("doc_mode", [True, False])
 @pytest.mark.parametrize(("valid_format", "invalid_format"), [("png", "jpg"), ("jpg", "png")])
 def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format, invalid_format, doc_mode) -> None:
