@@ -444,7 +444,10 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     """
     )
     generated = "generated"
-    pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_generated_image_dir", generated)
+    pytester.runpytest(
+        "--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_generated_image_dir", generated, "--doc_generate_subdirs"
+    )
 
     assert Path(generated).is_dir()
-    assert Path(generated) / Path(name).stem / f"{custom_string}{Path(name).suffix}"
+    expected_file = Path(generated) / Path(name).stem / f"{custom_string}{Path(name).suffix}"
+    assert expected_file.is_file()
