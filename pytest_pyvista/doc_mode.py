@@ -7,7 +7,6 @@ import shutil
 import tempfile
 from typing import ClassVar
 from typing import Literal
-from typing import NamedTuple
 from typing import cast
 import warnings
 
@@ -27,9 +26,10 @@ from .pytest_pyvista import _test_compare_images
 from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
 MAX_IMAGE_DIM = 400  # pixels
+TEST_CASE_NAME = "_pytest_pyvista_test_case"
 
 
-class _DocModeInfo:
+class _DocVerifyImageCache:
     doc_images_dir: Path
     doc_image_cache_dir: Path
     doc_generated_image_dir: Path
@@ -69,11 +69,11 @@ class _DocModeInfo:
         cls.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
         cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
 
-
-class _TestCaseTuple(NamedTuple):
-    test_name: str
-    docs_image_path: Path
-    cached_image_path: Path
+    def __init__(self, test_name: str, *, docs_image_path: Path, cached_image_path: Path, env_info: str | _EnvInfo) -> None:
+        self.test_name = test_name
+        self.test_image_path = docs_image_path
+        self.cached_image_path = cached_image_path
+        self.env_info = env_info
 
 
 def _flatten_path(path: Path) -> Path:
@@ -115,7 +115,7 @@ def _preprocess_build_images(
     return output_paths
 
 
-def _generate_test_cases() -> list[_TestCaseTuple]:
+def _generate_test_cases() -> list[_DocVerifyImageCache]:
     """
     Generate a list of image test cases.
 
@@ -141,18 +141,18 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
         test_cases_dict[test_name].setdefault(key, filepath)
 
     # process test images
-    generate_subdirs = _DocModeInfo.doc_generate_subdirs
+    generate_subdirs = _DocVerifyImageCache.doc_generate_subdirs
     test_image_paths = _preprocess_build_images(
-        _DocModeInfo.doc_images_dir,
-        _DocModeInfo.doc_generated_image_dir,
-        image_format=_DocModeInfo.doc_image_format,
+        _DocVerifyImageCache.doc_images_dir,
+        _DocVerifyImageCache.doc_generated_image_dir,
+        image_format=_DocVerifyImageCache.doc_image_format,
         generate_subdirs=generate_subdirs,
     )
     [add_to_dict(path.parent if generate_subdirs else path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
     # process cached images
-    cache_dir = _DocModeInfo.doc_image_cache_dir
-    cached_image_paths = _get_file_paths(cache_dir, ext=_DocModeInfo.doc_image_format)
+    cache_dir = _DocVerifyImageCache.doc_image_cache_dir
+    cached_image_paths = _get_file_paths(cache_dir, ext=_DocVerifyImageCache.doc_image_format)
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
         rel = path.relative_to(cache_dir)
@@ -169,10 +169,11 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
     for test_name, content in sorted(test_cases_dict.items()):
         doc = content.get("docs", None)
         cache = content.get("cached", None)
-        test_case = _TestCaseTuple(
+        test_case = _DocVerifyImageCache(
             test_name=test_name,
             docs_image_path=doc,
             cached_image_path=cache,
+            env_info=_EnvInfo(),
         )
         test_cases_list.append(test_case)
 
@@ -181,37 +182,46 @@ def _generate_test_cases() -> list[_TestCaseTuple]:
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate parametrized tests."""
-    if "test_case" in metafunc.fixturenames:
+    if TEST_CASE_NAME in metafunc.fixturenames:
         # Generate a separate test case for each image being tested
         test_cases = _generate_test_cases()
         ids = [case.test_name for case in test_cases]
-        metafunc.parametrize("test_case", test_cases, ids=ids)
+        metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
 
 
 def _save_failed_test_image(source_path: Path, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
-    _DocModeInfo.doc_failed_image_dir.mkdir(exist_ok=True)
+    _DocVerifyImageCache.doc_failed_image_dir.mkdir(exist_ok=True)
 
-    if source_path.is_relative_to(_DocModeInfo.doc_image_cache_dir):
-        rel = source_path.relative_to(_DocModeInfo.doc_image_cache_dir)
+    if source_path.is_relative_to(_DocVerifyImageCache.doc_image_cache_dir):
+        rel = source_path.relative_to(_DocVerifyImageCache.doc_image_cache_dir)
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
-        rel = source_path.relative_to(_DocModeInfo.doc_generated_image_dir)
+        rel = source_path.relative_to(_DocVerifyImageCache.doc_generated_image_dir)
         dest_relative_dir = Path("from_build") / rel.parent
 
-    dest_dir = _DocModeInfo.doc_failed_image_dir / category / dest_relative_dir
+    dest_dir = _DocVerifyImageCache.doc_failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
     dest_path = dest_dir / source_path.name
     copy_method = shutil.copytree if source_path.is_dir() else shutil.copy
     copy_method(source_path, dest_path)
 
 
+@pytest.fixture
+def doc_verify_image_cache(request: pytest.FixtureRequest) -> _DocVerifyImageCache:
+    """Fixture to allow users to mutate test cases before they run."""
+    test_case: _DocVerifyImageCache = request.node.callspec.params[TEST_CASE_NAME]
+    request.config.hook.pytest_pyvista_doc_mode_hook(doc_verify_image_cache=test_case, request=request)
+    return test_case
+
+
 @pytest.mark.usefixtures("_validate_image_cache_dir")
-def test_static_images(test_case: _TestCaseTuple) -> None:
+def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
+    test_case = _pytest_pyvista_test_case
     _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(
-        filename=test_case.test_name, docs_image_path=test_case.docs_image_path, cached_image_path=test_case.cached_image_path
+        filename=test_case.test_name, docs_image_path=test_case.test_image_path, cached_image_path=test_case.cached_image_path
     )
     if fail_msg:
         _save_failed_test_image(cast("Path", fail_source), "errors")
@@ -220,18 +230,26 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
     cached_image_paths = (
         [test_case.cached_image_path]
         if test_case.cached_image_path.is_file()
-        else _get_file_paths(test_case.cached_image_path, ext=_DocModeInfo.doc_image_format)
+        else _get_file_paths(test_case.cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
     )
     current_cached_image_path = cached_image_paths[0]
-    docs_image_path = (
-        test_case.docs_image_path
-        if test_case.docs_image_path.is_file()
-        else _get_file_paths(test_case.docs_image_path, ext=_DocModeInfo.doc_image_format)[0]
+
+    # Ensure test path is an image
+    test_image_path = (
+        test_case.test_image_path
+        if test_case.test_image_path.is_file()
+        else _get_file_paths(test_case.test_image_path, ext=_DocVerifyImageCache.doc_image_format)[0]
     )
+    if test_case.doc_generate_subdirs:
+        # Need to update the filename in case it's been modified by a plugin hook
+        new_path = test_image_path.with_stem(str(test_case.env_info))
+        if not new_path.is_file():
+            test_image_path.rename(new_path)
+            test_image_path = new_path
 
     warn_msg, fail_msg = _test_compare_images(
         test_name=test_case.test_name,
-        test_image=docs_image_path,
+        test_image=test_image_path,
         cached_image=current_cached_image_path,
         allowed_error=DEFAULT_ERROR_THRESHOLD,
         allowed_warning=DEFAULT_WARNING_THRESHOLD,
@@ -242,7 +260,7 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
         # Compare build image to other known valid versions
         msg_start = "This test has multiple cached images. It initially failed (as above)"
         for path in cached_image_paths[1:]:
-            error = pv.compare_images(pv.read(docs_image_path), pv.read(path))
+            error = pv.compare_images(pv.read(test_image_path), pv.read(path))
             if _check_compare_fail(test_case.test_name, error, allowed_error=DEFAULT_ERROR_THRESHOLD) is None:
                 # Convert failure into a warning
                 warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
@@ -250,10 +268,10 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
                 current_cached_image_path = path
                 break
         else:  # Loop completed - test still fails
-            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocModeInfo.doc_image_cache_dir / test_case.test_name!s}"
+            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocVerifyImageCache.doc_image_cache_dir / test_case.test_name!s}"
 
     if fail_msg:
-        _save_failed_test_image(docs_image_path, "errors")
+        _save_failed_test_image(test_image_path, "errors")
         # Save all cached images since they all failed
         for path in cached_image_paths:
             _save_failed_test_image(path, "errors")
@@ -261,14 +279,14 @@ def test_static_images(test_case: _TestCaseTuple) -> None:
 
     if warn_msg:
         parent_dir: Literal["errors_as_warnings", "warnings"] = "errors_as_warnings" if test_case.cached_image_path.is_dir() else "warnings"
-        _save_failed_test_image(docs_image_path, parent_dir)
+        _save_failed_test_image(test_image_path, parent_dir)
         _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)
 
 
 def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_image_path: Path | None) -> tuple[str | None, Path | None]:
     def has_no_images(path: Path | None) -> bool:
-        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocModeInfo.doc_image_format)) == 0)
+        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocVerifyImageCache.doc_image_format)) == 0)
 
     build_has_no_images = has_no_images(docs_image_path)
     cache_has_no_images = has_no_images(cached_image_path)
@@ -279,13 +297,13 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
             exists = "cache"
             missing = "docs build"
             exists_path = cached_image_path
-            missing_path = _DocModeInfo.doc_images_dir
+            missing_path = _DocVerifyImageCache.doc_images_dir
         else:
             source_path = docs_image_path
             exists = "docs build"
             missing = "cache"
-            exists_path = _DocModeInfo.doc_images_dir
-            missing_path = _DocModeInfo.doc_image_cache_dir
+            exists_path = _DocVerifyImageCache.doc_images_dir
+            missing_path = _DocVerifyImageCache.doc_image_cache_dir
 
         msg = (
             f"Test setup failed for test image:\n"
@@ -302,9 +320,9 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
 def _warn_cached_image_path(cached_image_path: Path) -> None:
     """Warn if a subdir is used with only one cached image."""
     if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext=_DocModeInfo.doc_image_format)
+        cached_images = _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
         if len(cached_images) == 1:
-            cache_dir = _DocModeInfo.doc_image_cache_dir
+            cache_dir = _DocVerifyImageCache.doc_image_cache_dir
             rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)
             msg = (
                 "Cached image sub-directory only contains a single image.\n"
