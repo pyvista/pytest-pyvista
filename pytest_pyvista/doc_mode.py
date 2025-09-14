@@ -297,15 +297,23 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
         else _get_file_paths(test_case.cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
     )
     current_cached_image_path = cached_image_paths[0]
-    docs_image_path = (
+
+    # Ensure test path is an image
+    test_image_path = (
         test_case.test_image_path
         if test_case.test_image_path.is_file()
         else _get_file_paths(test_case.test_image_path, ext=_DocVerifyImageCache.doc_image_format)[0]
     )
+    if test_case.doc_generate_subdirs:
+        # Need to update the filename in case it's been modified by a plugin hook
+        new_path = test_image_path.with_stem(str(test_case.env_info))
+        if not new_path.is_file():
+            test_image_path.rename(new_path)
+            test_image_path = new_path
 
     warn_msg, fail_msg = _test_compare_images(
         test_name=test_case.test_name,
-        test_image=docs_image_path,
+        test_image=test_image_path,
         cached_image=current_cached_image_path,
         allowed_error=DEFAULT_ERROR_THRESHOLD,
         allowed_warning=DEFAULT_WARNING_THRESHOLD,
@@ -316,7 +324,7 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
         # Compare build image to other known valid versions
         msg_start = "This test has multiple cached images. It initially failed (as above)"
         for path in cached_image_paths[1:]:
-            error = pv.compare_images(pv.read(docs_image_path), pv.read(path))
+            error = pv.compare_images(pv.read(test_image_path), pv.read(path))
             if _check_compare_fail(test_case.test_name, error, allowed_error=DEFAULT_ERROR_THRESHOLD) is None:
                 # Convert failure into a warning
                 warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
@@ -327,7 +335,7 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
             fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocVerifyImageCache.doc_image_cache_dir / test_case.test_name!s}"
 
     if fail_msg:
-        _save_failed_test_image(docs_image_path, "errors")
+        _save_failed_test_image(test_image_path, "errors")
         # Save all cached images since they all failed
         for path in cached_image_paths:
             _save_failed_test_image(path, "errors")
@@ -335,7 +343,7 @@ def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_veri
 
     if warn_msg:
         parent_dir: Literal["errors_as_warnings", "warnings"] = "errors_as_warnings" if test_case.cached_image_path.is_dir() else "warnings"
-        _save_failed_test_image(docs_image_path, parent_dir)
+        _save_failed_test_image(test_image_path, parent_dir)
         _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)
 

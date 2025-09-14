@@ -344,7 +344,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
 Customizing test cases
 ======================
 Similar to how the unit tests may be customized using the ``verify_image_cache`` fixture,
-the documentations tests can be customized using a ``doc_verify_image_cache`` object.
+the documentation tests can be customized using a ``doc_verify_image_cache`` object.
 Instead of a fixture, a pytest hook function is used.
 
 In your ``conftest.py`` file, define a hook function named ``pytest_pyvista_doc_mode_hook``
