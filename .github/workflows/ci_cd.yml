@@ -90,7 +90,7 @@ jobs:
           pip install .[tests] 'pyvista[jupyter]>=0.37'
 
       - name: Install playwright
-        run: install playwright chromium
+        run: playwright install chromium
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
