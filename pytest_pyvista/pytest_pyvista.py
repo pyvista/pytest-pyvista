@@ -30,6 +30,8 @@ import pyvista
 from pyvista import Plotter
 import vtkmodules
 
+from pytest_pyvista import hooks
+
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
@@ -154,7 +156,12 @@ class RegressionFileNotFoundError(RegressionFileNotFound):
     """Error when regression file is not found."""
 
 
-def pytest_addoption(parser) -> None:  # noqa: ANN001
+def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
+    """Add hooks."""
+    pluginmanager.add_hookspecs(hooks)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
     _add_common_pytest_options(parser)
 
@@ -729,10 +736,10 @@ def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
     the error raised during test setup.
     """
     if pytestconfig.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
-        image_cache_dir = _DocModeInfo.doc_image_cache_dir
-        image_format = _DocModeInfo.doc_image_format
+        image_cache_dir = _DocVerifyImageCache.doc_image_cache_dir
+        image_format = _DocVerifyImageCache.doc_image_format
     else:
         image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
         image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
@@ -770,9 +777,9 @@ def __validate_image_cache_dir(cache_dir: Path, image_format: _ImageFormats) -> 
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
     if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
-        _DocModeInfo.init_from_config(config)
+        _DocVerifyImageCache.init_from_config(config)
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
@@ -890,11 +897,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
     if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocModeInfo  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
-        for tempdir in _DocModeInfo._tempdirs:  # noqa: SLF001
+        for tempdir in _DocVerifyImageCache._tempdirs:  # noqa: SLF001
             tempdir.cleanup()
-        _DocModeInfo._tempdirs = []  # noqa: SLF001
+        _DocVerifyImageCache._tempdirs = []  # noqa: SLF001
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
