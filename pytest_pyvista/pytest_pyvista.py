@@ -41,6 +41,9 @@ SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
 
+DEFAULT_IMAGE_WIDTH = 400  # pixels
+DEFAULT_IMAGE_HEIGHT = 300  # pixels
+
 _ImageFormats = Literal["png", "jpg"]
 
 
@@ -213,6 +216,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "doc_images_dir",
         default=None,
         help="Path to the documentation images.",
+    )
+    group.addoption(
+        "--max_vtksz_file_size",
+        action="store",
+        default=None,
+        help="Maximum size allowed for vtksz interactive plot files.",
+    )
+    parser.addini(
+        "max_vtksz_file_size",
+        default=None,
+        help="Maximum size allowed for vtksz interactive plot files.",
     )
     _add_common_pytest_options(parser, doc=True)
 
@@ -449,7 +463,7 @@ class VerifyImageCache:
             raise RegressionFileNotFoundError(msg)
 
         if (self.add_missing_images and not current_cached_image.is_file()) or (self.reset_image_cache and not self.reset_only_failed):
-            plotter.screenshot(current_cached_image)
+            _screenshot(plotter, current_cached_image)
 
         if self.generated_image_dir is not None:
             self._save_generated_image(plotter, image_name=image_name)
@@ -492,7 +506,7 @@ class VerifyImageCache:
                     f"{fail_msg}\nThis image will be reset in the cache.",
                     stacklevel=2,
                 )
-                plotter.screenshot(current_cached_image)
+                _screenshot(plotter, current_cached_image)
             else:
                 remove_plotter_close_callback()
                 raise RegressionError(fail_msg)
@@ -508,7 +522,7 @@ class VerifyImageCache:
         generated_image_path = _get_generated_image_path(
             parent=parent, image_name=image_name, generate_subdirs=self.generate_subdirs, env_info=self.env_info
         )
-        plotter.screenshot(generated_image_path)
+        _screenshot(plotter, generated_image_path)
 
     def _save_failed_test_images(
         self,
@@ -588,7 +602,7 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
 
         # Get screenshot as a PIL image
         pl = cast("pyvista.Plotter", test_image)
-        arr = pl.screenshot(return_img=True)
+        arr = _screenshot(pl, return_img=True)
         img = Image.fromarray(arr)
 
         # Save as JPEG in memory
@@ -602,6 +616,10 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
     # Cast Path to str
     test_img = test_image if isinstance(test_image, pyvista.Plotter) else str(test_image)
     return pyvista.compare_images(test_img, str(cached_image))
+
+
+def _screenshot(plotter: pyvista.Plotter, *args, **kwargs):
+    plotter.screenshot(*args, window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT), **kwargs)
 
 
 def _test_compare_images(

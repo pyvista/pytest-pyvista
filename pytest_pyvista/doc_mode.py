@@ -15,6 +15,8 @@ import pytest
 import pyvista as pv
 
 from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
+from .pytest_pyvista import DEFAULT_IMAGE_HEIGHT
+from .pytest_pyvista import DEFAULT_IMAGE_WIDTH
 from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
 from .pytest_pyvista import _check_compare_fail
 from .pytest_pyvista import _EnvInfo
@@ -25,8 +27,9 @@ from .pytest_pyvista import _ImageFormats
 from .pytest_pyvista import _test_compare_images
 from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
-MAX_IMAGE_DIM = 400  # pixels
+MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
+TEST_CASE_NAME_VTKSZ = "_pytest_pyvista_test_case_vtksz"
 
 
 class _DocVerifyImageCache:
@@ -36,6 +39,7 @@ class _DocVerifyImageCache:
     doc_failed_image_dir: Path
     doc_generate_subdirs: bool
     doc_image_format: _ImageFormats
+    _max_vtksz_file_size: int | None
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
     @classmethod
@@ -69,6 +73,8 @@ class _DocVerifyImageCache:
         cls.doc_image_format = cast("_ImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
         cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
 
+        cls._max_vtksz_file_size = _get_option_from_config_or_ini(config, "max_vtksz_file_size")
+
     def __init__(self, test_name: str, *, docs_image_path: Path, cached_image_path: Path, env_info: str | _EnvInfo) -> None:
         self.test_name = test_name
         self.test_image_path = docs_image_path
@@ -81,7 +87,12 @@ def _flatten_path(path: Path) -> Path:
 
 
 def _preprocess_build_images(
-    build_images_dir: Path, output_dir: Path, *, image_format: _ImageFormats = "png", generate_subdirs: bool = False
+    build_images_dir: Path,
+    output_dir: Path,
+    *,
+    image_format: _ImageFormats = "png",
+    generate_subdirs: bool = False,
+    interactive: bool = False,
 ) -> list[Path]:
     """
     Read images from the build dir, resize them, and save to a flat output dir.
@@ -90,32 +101,78 @@ def _preprocess_build_images(
     the desired image format.
 
     """
-    input_png = _get_file_paths(build_images_dir, ext="png")
-    input_gif = _get_file_paths(build_images_dir, ext="gif")
-    input_jpg = _get_file_paths(build_images_dir, ext="jpg")
-    output_paths = []
-    for input_path in input_png + input_gif + input_jpg:
-        output_dir.mkdir(exist_ok=True)
+
+    def _get_output_path(input_path: Path) -> Path:
         # input image from the docs may come from a nested directory,
         # so we flatten the file's relative path
         output_file_name = _flatten_path(input_path.relative_to(build_images_dir))
         output_file_name = output_file_name.with_suffix("." + image_format)
-        output_path = _get_generated_image_path(
-            parent=output_dir, image_name=output_file_name, generate_subdirs=generate_subdirs, env_info=_EnvInfo()
-        )
-        output_paths.append(output_path)
+        return _get_generated_image_path(parent=output_dir, image_name=output_file_name, generate_subdirs=generate_subdirs, env_info=_EnvInfo())
 
-        # Ensure image size is max 400x400 and save to output
-        with Image.open(input_path) as im:
-            im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
-            if not (im.size[0] <= MAX_IMAGE_DIM and im.size[1] <= MAX_IMAGE_DIM):
-                im.thumbnail(size=(MAX_IMAGE_DIM, MAX_IMAGE_DIM))
-            im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
+    def _get_output_paths(input_paths: list[Path]) -> list[Path]:
+        output_paths: list[Path] = []
+        for input_path in input_paths:
+            output_dir.mkdir(exist_ok=True)
+            output_path = _get_output_path(input_path)
+            output_paths.append(output_path)
+            _preprocess_image(input_path, output_path)
+        return output_paths
 
-    return output_paths
+    if interactive:
+        vtksz_paths = _get_file_paths(build_images_dir, ext="vtksz")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            for vtksz_path in vtksz_paths:
+                html_path = _vtksz_to_html(vtksz_path, tmppath)
+                _html_screenshot(html_path, tmppath)
+            input_paths = _get_file_paths(tmppath, ext="png")
+            return _get_output_paths(input_paths)
+
+    input_png = _get_file_paths(build_images_dir, ext="png")
+    input_gif = _get_file_paths(build_images_dir, ext="gif")
+    input_jpg = _get_file_paths(build_images_dir, ext="jpg")
+    input_paths = input_png + input_gif + input_jpg
+    return _get_output_paths(input_paths)
 
 
-def _generate_test_cases() -> list[_DocVerifyImageCache]:
+def _preprocess_image(input_path, output_path):
+    # Ensure image size is max 400x400 and save to output
+    with Image.open(input_path) as im:
+        im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
+        if not (im.size[0] <= MAX_IMAGE_DIM and im.size[1] <= MAX_IMAGE_DIM):
+            im.thumbnail(size=(MAX_IMAGE_DIM, MAX_IMAGE_DIM))
+        im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
+
+
+def _vtksz_to_html(vtksz_file: Path, output_dir: Path) -> Path:
+    from trame_vtk.tools.vtksz2html import embed_data_to_viewer_file
+
+    with open(vtksz_file, "rb") as data:
+        data = data.read()
+
+    output_path = Path(output_dir) / f"{vtksz_file.stem}.html"
+    embed_data_to_viewer_file(data, output_path)
+    return output_path
+
+
+def _html_screenshot(html_file: Path, output_dir: Path) -> Path:
+    from playwright.sync_api import sync_playwright
+
+    output_path = Path(output_dir) / f"{html_file.stem}.png"
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        size = dict(width=DEFAULT_IMAGE_WIDTH, height=DEFAULT_IMAGE_HEIGHT)
+        page = browser.new_page(viewport=size)
+        page.goto(f"file://{html_file}")
+        page.screenshot(path=output_path)
+        browser.close()
+    with Image.open(output_path) as im:
+        # Resize since the browser does not respect the requested size
+        im.resize((DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT)).save(output_path)
+    return output_path
+
+
+def _generate_test_cases(interactive: bool = False) -> list[_DocVerifyImageCache]:
     """
     Generate a list of image test cases.
 
@@ -147,6 +204,7 @@ def _generate_test_cases() -> list[_DocVerifyImageCache]:
         _DocVerifyImageCache.doc_generated_image_dir,
         image_format=_DocVerifyImageCache.doc_image_format,
         generate_subdirs=generate_subdirs,
+        interactive=interactive,
     )
     [add_to_dict(path.parent if generate_subdirs else path, "docs") for path in test_image_paths]  # type: ignore[func-returns-value]
 
@@ -187,6 +245,12 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         test_cases = _generate_test_cases()
         ids = [case.test_name for case in test_cases]
         metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
+
+    # if _DocVerifyImageCache._max_vtksz_file_size is not None and TEST_CASE_NAME_VTKSZ in metafunc.fixturenames:
+    #     # Generate a separate test case for each vtksz file
+    #     files = _get_file_paths(_DocVerifyImageCache.doc_images_dir, ext="vtksz")
+    #     ids = [Path(file).stem for file in files]
+    #     metafunc.parametrize(TEST_CASE_NAME_VTKSZ, files, ids=ids)
 
 
 def _save_failed_test_image(source_path: Path, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
@@ -322,3 +386,19 @@ def _warn_cached_image_path(cached_image_path: Path) -> None:
                 f"or include more than one image in the sub-directory."
             )
             warnings.warn(msg, stacklevel=2)
+
+
+# def test_interactive_plot_file_size(vtksz_file: str):
+#     filepath = Path(vtksz_file)
+#     assert filepath.is_file()
+#     size_bytes = filepath.stat().st_size
+#     size_megabytes = round(size_bytes / 1_000_000)
+#     if size_megabytes > _DocVerifyImageCache.max_vtksz_file_size:
+#         rel_path = filepath.relative_to(_DocVerifyImageCache.doc_images_dir)
+#         msg = (
+#             f"The generated interactive plot file is too large: "
+#             f"\n\t{rel_path}\n"
+#             f"Its size is {size_megabytes} MB, but must be less than {_DocVerifyImageCache.max_vtksz_file_size} MB."
+#             f"\nConsider reducing the complexity of the plot or forcing it to be static."
+#         )
+#         pytest.fail(msg)
