@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.doc_mode import DEFAULT_IMAGE_HEIGHT
+from pytest_pyvista.doc_mode import DEFAULT_IMAGE_WIDTH
 from pytest_pyvista.doc_mode import _html_screenshot
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.doc_mode import _vtksz_to_html
@@ -452,13 +454,14 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     assert Path(generated) / Path(name).stem / f"{custom_string}{Path(name).suffix}"
 
 
-def test_vtksz_screenshot(tmp_path):
+def test_vtksz_screenshot(tmp_path) -> None:
+    """Test converting vtksz file to image screenshot."""
     name = "im.vtksz"
     vtksz_file = make_cached_images(tmp_path, name=name)
     html_file = _vtksz_to_html(vtksz_file, tmp_path)
     png_file = _html_screenshot(html_file, tmp_path)
     assert png_file.suffix == ".png"
 
-    expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"))
+    expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT))
     small_error = 30
     assert pv.compare_images(str(expected_screenshot), str(png_file)) < small_error
