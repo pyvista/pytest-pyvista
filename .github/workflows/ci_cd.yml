@@ -87,7 +87,7 @@ jobs:
 
       - name: Install pytest-pyvista with test dependencies
         run: |
-          pip install .[tests] 'pyvista[jupyter]>=0.37'
+          pip install .[tests]
 
       - name: Install playwright
         run: playwright install chromium
