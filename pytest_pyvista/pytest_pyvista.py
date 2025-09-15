@@ -17,6 +17,7 @@ import sys
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
+from typing import Union
 from typing import cast
 from typing import get_args
 from typing import overload
@@ -41,7 +42,8 @@ SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
 
-_ImageFormats = Literal["png", "jpg"]
+_AllowedImageFormats = Literal["png", "jpg"]
+_OriginalImageFormats = Union[_AllowedImageFormats, Literal["gif", "vtksz"]]
 
 
 @dataclass
@@ -223,6 +225,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addini(
         "max_vtksz_file_size",
         default=None,
+        type="int",
         help="Maximum size allowed for vtksz interactive plot files.",
     )
     _add_common_pytest_options(parser, doc=True)
@@ -277,7 +280,7 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
     group.addoption(
         f"--{prefix}image_format",
         action="store",
-        choices=get_args(_ImageFormats),
+        choices=get_args(_AllowedImageFormats),
         default=None,
         help="Image format to use when generating test images.",
     )
@@ -351,7 +354,7 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
     generate_subdirs: bool = False
-    image_format: _ImageFormats
+    image_format: _AllowedImageFormats
 
     def __init__(  # noqa: PLR0913
         self,
@@ -517,7 +520,10 @@ class VerifyImageCache:
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
         generated_image_path = _get_generated_image_path(
-            parent=parent, image_name=image_name, generate_subdirs=self.generate_subdirs, env_info=self.env_info
+            parent=parent,
+            image_name=image_name,
+            generate_subdirs=self.generate_subdirs,
+            env_info=self.env_info,
         )
         plotter.screenshot(generated_image_path)
 
@@ -581,8 +587,11 @@ def _test_name_from_image_name(image_name: str) -> str:
     return "test_" + remove_suffix(image_name)
 
 
-def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo) -> Path:
+def _get_generated_image_path(
+    parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo, interactive: bool = False
+) -> Path:
     name = Path(image_name)
+    name = name.with_stem(name.stem + "_interactive") if interactive else name
     generated_image_path = parent / name.with_suffix("") / f"{env_info}{name.suffix}" if generate_subdirs else parent / name
     generated_image_path.parent.mkdir(exist_ok=True, parents=True)
     return generated_image_path
@@ -753,12 +762,12 @@ def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
         image_format = _DocVerifyImageCache.doc_image_format
     else:
         image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
-        image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+        image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
     __validate_image_cache_dir(image_cache_dir, image_format)
 
 
-def __validate_image_cache_dir(cache_dir: Path, image_format: _ImageFormats) -> None:
-    def check_image_format(format_to_check: _ImageFormats) -> None:
+def __validate_image_cache_dir(cache_dir: Path, image_format: _AllowedImageFormats) -> None:
+    def check_image_format(format_to_check: _AllowedImageFormats) -> None:
         image_paths = [str(p.relative_to(cache_dir)) for p in _get_file_paths(cache_dir, ext=format_to_check)]
         if image_paths and image_format != format_to_check:
             msg = (
@@ -818,7 +827,7 @@ def verify_image_cache(
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
-    VerifyImageCache.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+    VerifyImageCache.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)

@@ -449,7 +449,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     )
     generated = "generated"
     failed = "failed"
-    pytester.runpytest(
+    result = pytester.runpytest(
         "--doc_mode",
         "--doc_images_dir",
         images,
@@ -461,6 +461,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
         failed,
         "--doc_generate_subdirs",
     )
+    result.assert_outcomes(failed=1)
 
     expected_relpath = Path(Path(name).stem) / f"{custom_string}{Path(name).suffix}"
     assert Path(generated).is_dir()
@@ -482,4 +483,39 @@ def test_vtksz_screenshot(tmp_path) -> None:
 
     expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT))
     small_error = 30
-    assert pv.compare_images(str(expected_screenshot), str(png_file)) < small_error
+    actual_error = pv.compare_images(str(expected_screenshot), str(png_file))
+    assert actual_error < small_error
+
+
+def test_interactive(pytester: pytest.Pytester) -> None:
+    """Test that test images are generated from interactive plot files."""
+    stem = "im"
+    name_vtksz = f"{stem}.vtksz"
+    name_generated = stem + "_interactive.png"
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue")
+    make_cached_images(pytester.path, path=cache, name=name_generated, color="red")
+
+    generated = "generated"
+    failed = "failed"
+    result = pytester.runpytest(
+        "--doc_mode",
+        "--doc_images_dir",
+        images,
+        "--doc_image_cache_dir",
+        cache,
+        "--doc_generated_image_dir",
+        generated,
+        "--doc_failed_image_dir",
+        failed,
+    )
+    result.assert_outcomes(failed=1)
+
+    assert Path(generated).is_dir()
+    expected_file = Path(generated) / name_generated
+    assert expected_file.is_file()
+
+    assert Path(failed).is_dir()
+    expected_file = Path(failed) / "errors" / "from_build" / name_generated
+    assert expected_file.is_file()
