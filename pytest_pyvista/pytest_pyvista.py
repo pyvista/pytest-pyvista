@@ -217,6 +217,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Path to the documentation images.",
     )
     group.addoption(
+        "--include_vtksz",
+        action="store_true",
+        help="Include tests for interactive images with the .vtksz file format.",
+    )
+    parser.addini(
+        "include_vtksz",
+        type="bool",
+        default=False,
+        help="Include tests for interactive images with the .vtksz file format.",
+    )
+    group.addoption(
         "--max_vtksz_file_size",
         action="store",
         default=None,
@@ -587,11 +598,9 @@ def _test_name_from_image_name(image_name: str) -> str:
     return "test_" + remove_suffix(image_name)
 
 
-def _get_generated_image_path(
-    parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo, interactive: bool = False
-) -> Path:
+def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo, vtksz: bool = False) -> Path:
     name = Path(image_name)
-    name = name.with_stem(name.stem + "_interactive") if interactive else name
+    name = name.with_stem(name.stem + "_vtksz") if vtksz else name
     generated_image_path = parent / name.with_suffix("") / f"{env_info}{name.suffix}" if generate_subdirs else parent / name
     generated_image_path.parent.mkdir(exist_ok=True, parents=True)
     return generated_image_path

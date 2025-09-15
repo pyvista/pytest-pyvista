@@ -487,19 +487,21 @@ def test_vtksz_screenshot(tmp_path) -> None:
     assert actual_error < small_error
 
 
-def test_interactive(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("include_vtksz", [True, False])
+def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     """Test that test images are generated from interactive plot files."""
     stem = "im"
     name_vtksz = f"{stem}.vtksz"
-    name_generated = stem + "_interactive.png"
+    name_generated = stem + "_vtksz.png"
     cache = "cache"
     images = "images"
     make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue")
     make_cached_images(pytester.path, path=cache, name=name_generated, color="red")
+    _preprocess_build_images(Path(cache), Path(cache))
 
     generated = "generated"
     failed = "failed"
-    result = pytester.runpytest(
+    args = [
         "--doc_mode",
         "--doc_images_dir",
         images,
@@ -509,8 +511,18 @@ def test_interactive(pytester: pytest.Pytester) -> None:
         generated,
         "--doc_failed_image_dir",
         failed,
-    )
+        "-v",
+    ]
+    if include_vtksz:
+        args.append("--include_vtksz")
+    result = pytester.runpytest(*args)
+    if not include_vtksz:
+        result.assert_outcomes(skipped=1)
+        result.stdout.fnmatch_lines("::doc_mode.py::test_static_images[NOTSET] SKIPPED (got empty paramet...) [100%]")
+        return
+
     result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
 
     assert Path(generated).is_dir()
     expected_file = Path(generated) / name_generated

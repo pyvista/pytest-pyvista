@@ -74,6 +74,7 @@ class _DocVerifyImageCache:
         cls.doc_image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
         cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
 
+        cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
         cls._max_vtksz_file_size = cast("int | None", _get_option_from_config_or_ini(config, "max_vtksz_file_size"))
 
     def __init__(
@@ -97,11 +98,9 @@ def _preprocess_build_images(
     *,
     image_format: _AllowedImageFormats = "png",
     generate_subdirs: bool = False,
-    interactive: bool = False,
+    vtksz: bool = False,
     return_input_paths: Literal[False] = False,
 ) -> list[Path]: ...
-
-
 @overload
 def _preprocess_build_images(
     build_images_dir: Path,
@@ -109,7 +108,7 @@ def _preprocess_build_images(
     *,
     image_format: _AllowedImageFormats = "png",
     generate_subdirs: bool = False,
-    interactive: bool = False,
+    vtksz: bool = False,
     return_input_paths: Literal[True],
 ) -> tuple[list[Path], list[Path]]: ...
 def _preprocess_build_images(  # noqa: PLR0913
@@ -118,7 +117,7 @@ def _preprocess_build_images(  # noqa: PLR0913
     *,
     image_format: _AllowedImageFormats = "png",
     generate_subdirs: bool = False,
-    interactive: bool = False,
+    vtksz: bool = False,
     return_input_paths: bool = False,
 ) -> list[Path] | tuple[list[Path], list[Path]]:
     """
@@ -135,7 +134,7 @@ def _preprocess_build_images(  # noqa: PLR0913
         output_file_name = _flatten_path(input_path.relative_to(relative_to))
         output_file_name = output_file_name.with_suffix("." + image_format)
         return _get_generated_image_path(
-            parent=output_dir, image_name=output_file_name, generate_subdirs=generate_subdirs, env_info=_EnvInfo(), interactive=interactive
+            parent=output_dir, image_name=output_file_name, generate_subdirs=generate_subdirs, env_info=_EnvInfo(), vtksz=vtksz
         )
 
     def _preprocess_input_paths(input_paths: list[Path], relative_to: Path) -> list[Path]:
@@ -152,7 +151,7 @@ def _preprocess_build_images(  # noqa: PLR0913
             return input_paths, output_paths
         return output_paths
 
-    if interactive:
+    if vtksz:
         vtksz_paths = _get_file_paths(build_images_dir, ext="vtksz")
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -207,7 +206,7 @@ def _html_screenshot(html_file: Path, output_dir: Path) -> Path:
     return output_path
 
 
-def _generate_test_cases(*, interactive: bool = False) -> list[_DocVerifyImageCache]:  # noqa: C901
+def _generate_test_cases(*, vtksz: bool = False) -> list[_DocVerifyImageCache]:  # noqa: C901
     """
     Generate a list of image test cases.
 
@@ -241,7 +240,7 @@ def _generate_test_cases(*, interactive: bool = False) -> list[_DocVerifyImageCa
         _DocVerifyImageCache.doc_generated_image_dir,
         image_format=_DocVerifyImageCache.doc_image_format,
         generate_subdirs=generate_subdirs,
-        interactive=interactive,
+        vtksz=vtksz,
         return_input_paths=True,
     )
     for input_path, test_path in zip(input_paths, test_image_paths):
@@ -272,13 +271,13 @@ def _generate_test_cases(*, interactive: bool = False) -> list[_DocVerifyImageCa
         )
 
         input_is_vtksz = input_path is not None and input_path.suffix == ".vtksz"
-        cache_is_interactive = cache is not None and cache.stem.endswith("_interactive")
+        cache_is_from_vtksz = cache is not None and cache.stem.endswith("_vtksz")
 
-        # Only append interactive test cases when interactive
-        if input_is_vtksz or cache_is_interactive:
-            if interactive:
+        # Interactive test cases from vtksz files are mutually exclusive with regular image file tests
+        if input_is_vtksz or cache_is_from_vtksz:
+            if vtksz:
                 test_cases_list.append(test_case)
-        elif not interactive:
+        elif not vtksz:
             test_cases_list.append(test_case)
 
     return test_cases_list
@@ -293,11 +292,15 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         test_cases = _generate_test_cases()
         ids = [case.test_name for case in test_cases]
 
-        # Generate cases for interactive vtksz files in the doc_images dir
-        test_cases_interactive = _generate_test_cases(interactive=True)
-        ids_interactive = [case.test_name for case in test_cases_interactive]
+        if _DocVerifyImageCache.include_vtksz:
+            # Generate cases for interactive vtksz files in the doc_images dir
+            test_cases_vtksz = _generate_test_cases(vtksz=True)
+            ids_vtksz = [case.test_name for case in test_cases_vtksz]
 
-        metafunc.parametrize(TEST_CASE_NAME, [*test_cases, *test_cases_interactive], ids=[*ids, *ids_interactive])
+            test_cases.extend(test_cases_vtksz)
+            ids.extend(ids_vtksz)
+
+        metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
 
     # if _DocVerifyImageCache._max_vtksz_file_size is not None and TEST_CASE_NAME_VTKSZ in metafunc.fixturenames:
     #     # Generate a separate test case for each vtksz file
