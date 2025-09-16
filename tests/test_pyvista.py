@@ -81,7 +81,10 @@ def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int
         else:
             plotter = pv.Plotter(off_screen=True)
             plotter.add_mesh(mesh, color=color)
-            plotter.screenshot(filename)
+            if filename.suffix == ".vtksz":
+                plotter.export_vtksz(filename)
+            else:
+                plotter.screenshot(filename)
             color_to_file[color] = filename
 
         filenames.append(filename)

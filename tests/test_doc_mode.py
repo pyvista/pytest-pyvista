@@ -317,14 +317,17 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines(match)
 
 
-def test_multiple_cache_images_parallel(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("include_vtksz", [True, False])
+def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz) -> None:
     """Ensure that doc_mode works with multiple workers."""
     cache = "cache"
     images = "images"
 
     n_images = 50
-    make_multiple_cached_images(pytester.path, cache, n_images=n_images)
-    image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images)
+    name_cache = "imcache{index}_vtksz.png" if include_vtksz else "imcache{index}.png"
+    make_multiple_cached_images(pytester.path, cache, n_images=n_images, name=name_cache)
+    name_build = "imcache{index}.vtksz" if include_vtksz else "imcache{index}.png"
+    image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images, name=name_build)
 
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
@@ -333,12 +336,20 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester) -> None:
 
     # replace a single image with a different image
     img_idx = 34
-    pv.Cube().plot(screenshot=image_filenames[img_idx])
+    pl = pv.Plotter()
+    pl.add_mesh(pv.Cube())
+    if include_vtksz:
+        pl.export_vtksz(image_filenames[img_idx])
+    else:
+        pl.screenshot(image_filenames[img_idx])
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2")
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2"]
+    if include_vtksz:
+        args.append("--include_vtksz")
+    result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
-
-    assert f"imcache{img_idx} Exceeded image regression error" in str(result.stdout)
+    failed_test_name = f"imcache{img_idx}{'_vtksz' if include_vtksz else ''}"
+    assert f"{failed_test_name} Exceeded image regression error" in str(result.stdout)
 
 
 @pytest.mark.parametrize("cli", [True, False])
