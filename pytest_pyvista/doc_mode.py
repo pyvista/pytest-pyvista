@@ -40,6 +40,7 @@ class _DocVerifyImageCache:
     doc_failed_image_dir: Path
     doc_generate_subdirs: bool
     doc_image_format: _AllowedImageFormats
+    include_vtksz: bool
     _max_vtksz_file_size: int | None
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
@@ -200,9 +201,6 @@ def _html_screenshot(html_file: Path, output_dir: Path) -> Path:
         page.goto(f"file://{html_file}")
         page.screenshot(path=output_path)
         browser.close()
-    with Image.open(output_path) as im:
-        # Resize since the browser does not respect the requested size
-        im.resize((DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT)).save(output_path)
     return output_path
 
 
