@@ -473,12 +473,13 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     assert expected_file.is_file()
 
 
-def test_vtksz_screenshot(tmp_path) -> None:
+@pytest.mark.asyncio
+async def test_vtksz_screenshot(tmp_path) -> None:
     """Test converting vtksz file to image screenshot."""
     name = "im.vtksz"
     vtksz_file = make_cached_images(tmp_path, name=name)
     html_files = _vtksz_to_html_files([vtksz_file], tmp_path)
-    png_files = _html_screenshots(html_files, tmp_path)
+    png_files = await _html_screenshots(html_files, tmp_path)
     png_file = png_files[0]
     assert png_file.suffix == ".png"
 

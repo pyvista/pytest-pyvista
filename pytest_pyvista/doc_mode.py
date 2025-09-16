@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 import shutil
 import tempfile
@@ -157,7 +158,7 @@ def _preprocess_build_images(  # noqa: PLR0913
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             html_paths = _vtksz_to_html_files(vtksz_paths, tmppath)
-            _html_screenshots(html_paths, tmppath)
+            asyncio.run(_html_screenshots(html_paths, tmppath))
             input_paths = _get_file_paths(tmppath, ext="png")
             output_paths = _preprocess_input_paths(input_paths, relative_to=tmppath)
         return _get_output(vtksz_paths, output_paths)
@@ -192,21 +193,22 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
     return output_paths
 
 
-def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
-    from playwright.sync_api import sync_playwright  # noqa: PLC0415
+async def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
+    from playwright.async_api import async_playwright  # noqa: PLC0415
 
     output_paths: list[Path] = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
-        page = context.new_page()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
+        page = await context.new_page()
 
         for html_file in html_files:
             output_path = output_dir / f"{html_file.stem}.png"
-            page.goto(f"file://{html_file}")
-            page.screenshot(path=output_path)
+            await page.goto(f"file://{html_file}", wait_until="domcontentloaded")
+            await page.screenshot(path=output_path)
             output_paths.append(output_path)
-        browser.close()
+
+        await browser.close()
 
     return output_paths
 
