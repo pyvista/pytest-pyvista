@@ -10,9 +10,9 @@ import pyvista as pv
 
 from pytest_pyvista.doc_mode import DEFAULT_IMAGE_HEIGHT
 from pytest_pyvista.doc_mode import DEFAULT_IMAGE_WIDTH
-from pytest_pyvista.doc_mode import _html_screenshot
+from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _preprocess_build_images
-from pytest_pyvista.doc_mode import _vtksz_to_html
+from pytest_pyvista.doc_mode import _vtksz_to_html_files
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
@@ -477,8 +477,9 @@ def test_vtksz_screenshot(tmp_path) -> None:
     """Test converting vtksz file to image screenshot."""
     name = "im.vtksz"
     vtksz_file = make_cached_images(tmp_path, name=name)
-    html_file = _vtksz_to_html(vtksz_file, tmp_path)
-    png_file = _html_screenshot(html_file, tmp_path)
+    html_files = _vtksz_to_html_files([vtksz_file], tmp_path)
+    png_files = _html_screenshots(html_files, tmp_path)
+    png_file = png_files[0]
     assert png_file.suffix == ".png"
 
     expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT))

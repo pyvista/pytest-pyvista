@@ -156,9 +156,8 @@ def _preprocess_build_images(  # noqa: PLR0913
         vtksz_paths = _get_file_paths(build_images_dir, ext="vtksz")
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            for vtksz_path in vtksz_paths:
-                html_path = _vtksz_to_html(vtksz_path, tmppath)
-                _html_screenshot(html_path, tmppath)
+            html_paths = _vtksz_to_html_files(vtksz_paths, tmppath)
+            _html_screenshots(html_paths, tmppath)
             input_paths = _get_file_paths(tmppath, ext="png")
             output_paths = _preprocess_input_paths(input_paths, relative_to=tmppath)
         return _get_output(vtksz_paths, output_paths)
@@ -180,28 +179,36 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
-def _vtksz_to_html(vtksz_file: Path, output_dir: Path) -> Path:
+def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path]:
     from trame_vtk.tools.vtksz2html import embed_data_to_viewer_file  # noqa: PLC0415
 
-    with vtksz_file.open("rb") as file:
-        data = file.read()
+    output_paths: list[Path] = []
+    for path in vtksz_files:
+        with path.open("rb") as file:
+            data = file.read()
+        output_path = Path(output_dir) / f"{path.stem}.html"
+        output_paths.append(output_path)
+        embed_data_to_viewer_file(data, output_path)
+    return output_paths
 
-    output_path = Path(output_dir) / f"{vtksz_file.stem}.html"
-    embed_data_to_viewer_file(data, output_path)
-    return output_path
 
-
-def _html_screenshot(html_file: Path, output_dir: Path) -> Path:
+def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
-    output_path = Path(output_dir) / f"{html_file.stem}.png"
+    output_paths: list[Path] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
-        page.goto(f"file://{html_file}")
-        page.screenshot(path=output_path)
+        context = browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
+        page = context.new_page()
+
+        for html_file in html_files:
+            output_path = output_dir / f"{html_file.stem}.png"
+            page.goto(f"file://{html_file}")
+            page.screenshot(path=output_path)
+            output_paths.append(output_path)
         browser.close()
-    return output_path
+
+    return output_paths
 
 
 def _generate_test_cases(*, vtksz: bool = False) -> list[_DocVerifyImageCache]:  # noqa: C901
