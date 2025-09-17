@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 from dataclasses import dataclass
 from functools import cached_property
@@ -10,6 +11,7 @@ import io
 import json
 import os
 from pathlib import Path
+import pickle
 import platform
 import re
 import shutil
@@ -38,6 +40,8 @@ if TYPE_CHECKING:  # pragma: no cover
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
+PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
+PYVISTA_DOC_MODE_CACHE_DIRNAME = "pyvista_doc_mode_dir"
 
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
@@ -671,7 +675,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         cache_path = Path(cast("Path", value))
         cached_image_names = {f.name for f in cache_path.glob(f"*.{VerifyImageCache.image_format}")}
 
-        image_names_dir = getattr(config, "image_names_dir", None)
+        image_names_dir = getattr(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, None)
         if image_names_dir:
             visited_cached_image_names = _combine_temp_jsons(image_names_dir, "visited")
             skipped_cached_image_names = _combine_temp_jsons(image_names_dir, "skipped")
@@ -802,31 +806,54 @@ def __validate_image_cache_dir(cache_dir: Path, image_format: _AllowedImageForma
         raise InvalidCacheError(msg)
 
 
+def _make_config_cache_dir(config: pytest.Config, dirname: str) -> Path:
+    newdir = Path(config.cache.makedir(dirname))
+    newdir.mkdir(exist_ok=True)
+    setattr(config, dirname, newdir)
+
+    # ensure this directory is empty as it might be left over from a previous test
+    with contextlib.suppress(OSError):
+        for filename in newdir.iterdir():
+            filename.unlink()
+    return newdir
+
+
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
     if config.getoption("doc_mode"):
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _preprocess_image_test_cases  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase  # noqa: PLC0415
+
+        _VtkszFileSizeTestCase.init_from_config(config)
 
         _DocVerifyImageCache.init_from_config(config)
+        _DocVerifyImageCache._test_cases = _preprocess_image_test_cases()  # noqa: SLF001
 
-        if hasattr(config, "workerinput"):
-            # We're inside a worker, skip
-            return
-        # Preprocessing uses `multiprocessing` which we call here since we want it to run
-        # before any parallel workers are spawned, and only run it in the master worker
-        num_workers = int(os.environ.get("PYTEST_XDIST_WORKER_COUNT", "1"))
-        _DocVerifyImageCache._preprocess_image_test_cases(num_workers=num_workers)  # noqa: SLF001
+        key = "abc"
+        if not hasattr(config, "workerinput"):
+            # We're inside the master worker.
+            # Preprocess the images here before any parallel workers are spawned.
+            # Preprocessing uses `multiprocessing`, which we use instead of the xdist workers
+            num_workers = int(os.environ.get("PYTEST_XDIST_WORKER_COUNT", "1"))
+            test_cases = _preprocess_image_test_cases(num_workers=num_workers)
+            _DocVerifyImageCache._test_cases = test_cases  # noqa: SLF001
+
+            # Serialize test cases to be retrieved by the workers
+            serialized = base64.b64encode(pickle.dumps(test_cases)).decode("ascii")
+            config.cache.set(key, serialized)
+        else:
+            serialized = config.cache.get(key, None)
+            if serialized is None:
+                msg = "Preprocessed test cases not found in pytest cache"
+                raise RuntimeError(msg)
+            test_cases = pickle.loads(base64.b64decode(serialized.encode("ascii")))  # noqa: S301
+            _DocVerifyImageCache._test_cases = test_cases  # noqa: SLF001
 
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
-        config.image_names_dir = Path(config.cache.makedir("pyvista"))
-        config.image_names_dir.mkdir(exist_ok=True)
-
-        # ensure this directory is empty as it might be left over from a previous test
-        with contextlib.suppress(OSError):
-            for filename in config.image_names_dir.iterdir():
-                filename.unlink()
+        _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME)
 
 
 @pytest.fixture
@@ -920,7 +947,7 @@ def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
 @pytest.hookimpl
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
     """Write skipped and visited image names to disk."""
-    image_names_dir = getattr(session.config, "image_names_dir", None)
+    image_names_dir = getattr(session.config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, None)
     if image_names_dir:
         test_id = uuid.uuid4()
         visited_file = image_names_dir / f"visited_{test_id}_cache_names.json"
@@ -929,16 +956,6 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
         # Fixed: Write JSON instead of plain text
         visited_file.write_text(json.dumps(list(VISITED_CACHED_IMAGE_NAMES)))
         skipped_file.write_text(json.dumps(list(SKIPPED_CACHED_IMAGE_NAMES)))
-
-
-def pytest_unconfigure(config: pytest.Config) -> None:
-    """Remove temporary files."""
-    if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
-
-        for tempdir in _DocVerifyImageCache._tempdirs:  # noqa: SLF001
-            tempdir.cleanup()
-        _DocVerifyImageCache._tempdirs = []  # noqa: SLF001
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001

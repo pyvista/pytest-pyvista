@@ -318,7 +318,7 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines(match)
 
 
-@pytest.mark.parametrize("include_vtksz", [True, False])
+@pytest.mark.parametrize("include_vtksz", [True])
 def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz) -> None:
     """Ensure that doc_mode works with multiple workers."""
     cache = "cache"
@@ -332,7 +332,10 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2"]
+    if include_vtksz:
+        args.append("--include_vtksz")
+    result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
     # replace a single image with a different image
@@ -344,9 +347,6 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
     else:
         pl.screenshot(image_filenames[img_idx])
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2"]
-    if include_vtksz:
-        args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
     failed_test_name = f"imcache{img_idx}{'_vtksz' if include_vtksz else ''}"

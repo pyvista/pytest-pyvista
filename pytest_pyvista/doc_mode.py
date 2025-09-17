@@ -6,7 +6,6 @@ import multiprocessing
 from pathlib import Path
 import shutil
 import tempfile
-from typing import ClassVar
 from typing import Literal
 from typing import cast
 from typing import overload
@@ -24,6 +23,7 @@ from .pytest_pyvista import _EnvInfo
 from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_generated_image_path
 from .pytest_pyvista import _get_option_from_config_or_ini
+from .pytest_pyvista import _make_config_cache_dir
 from .pytest_pyvista import _test_compare_images
 from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
@@ -35,6 +35,13 @@ TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
 
 class _VtkszFileSizeTestCase:
+    _max_vtksz_file_size: int | None
+
+    @classmethod
+    def init_from_config(cls, config: pytest.Config) -> None:
+        max_file_size = _get_option_from_config_or_ini(config, "max_vtksz_file_size")
+        cls._max_vtksz_file_size = None if max_file_size is None else int(max_file_size)
+
     def __init__(self, test_name: str, input_path: Path, max_vtksz_file_size: int) -> None:
         self.test_name = test_name
         self.input_path = input_path
@@ -49,9 +56,7 @@ class _DocVerifyImageCache:
     doc_generate_subdirs: bool
     doc_image_format: _AllowedImageFormats
     include_vtksz: bool
-    _max_vtksz_file_size: int | None
-    _preprocessed_test_cases: list[_DocVerifyImageCache]
-    _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
+    _test_cases: list[_DocVerifyImageCache]
 
     @classmethod
     def init_from_config(cls, config: pytest.Config) -> None:
@@ -70,9 +75,7 @@ class _DocVerifyImageCache:
             """Fetch an optional directory option or create a TemporaryDirectory if missing."""
             path = _get_option_from_config_or_ini(config, option, is_dir=True)
             if path is None:
-                tempdir = tempfile.TemporaryDirectory(prefix=prefix)
-                cls._tempdirs.append(tempdir)
-                return Path(tempdir.name)
+                return _make_config_cache_dir(config, prefix)
             return path
 
         cls.doc_images_dir = require_existing_dir("doc_images_dir")
@@ -86,9 +89,6 @@ class _DocVerifyImageCache:
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
 
-        max_file_size = _get_option_from_config_or_ini(config, "max_vtksz_file_size")
-        cls._max_vtksz_file_size = None if max_file_size is None else int(max_file_size)
-
     def __init__(
         self, test_name: str, *, docs_image_path: Path | None, cached_image_path: Path | None, env_info: str | _EnvInfo, input_path: Path | None
     ) -> None:
@@ -97,16 +97,6 @@ class _DocVerifyImageCache:
         self.cached_image_path = cached_image_path
         self.env_info = env_info
         self.input_path = input_path
-
-    @classmethod
-    def _preprocess_image_test_cases(cls, num_workers: int = 1) -> None:
-        """Generate a separate test case for each image to be tested."""
-        test_cases = _generate_test_cases(num_workers=num_workers)  # cases for png, jpg, gif images
-
-        if _DocVerifyImageCache.include_vtksz:
-            test_cases.extend(_generate_test_cases(vtksz=True, num_workers=num_workers))  # cases for interactive vtksz files
-
-        cls._preprocessed_test_cases = test_cases
 
 
 def _flatten_path(path: Path) -> Path:
@@ -333,16 +323,28 @@ def _generate_test_cases(*, vtksz: bool = False, num_workers: int = 1) -> list[_
     return test_cases_list
 
 
+def _preprocess_image_test_cases(num_workers: int = 1) -> list[_DocVerifyImageCache]:
+    """Generate a separate test case for each image to be tested."""
+    test_cases = _generate_test_cases(num_workers=num_workers)  # cases for png, jpg, gif images
+
+    if _DocVerifyImageCache.include_vtksz:
+        test_cases.extend(_generate_test_cases(vtksz=True, num_workers=num_workers))  # cases for interactive vtksz files
+
+    return test_cases
+
+
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate parametrized tests."""
     if TEST_CASE_NAME in metafunc.fixturenames:
-        test_cases = _DocVerifyImageCache._preprocessed_test_cases  # noqa: SLF001
-        ids = [case.test_name for case in test_cases]
-        metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
+        if hasattr(_DocVerifyImageCache, "_test_cases"):
+            test_cases = _DocVerifyImageCache._test_cases  # noqa: SLF001
+            ids = [case.test_name for case in test_cases]
+            metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
+        else:
+            metafunc.parametrize(TEST_CASE_NAME, [])
 
-    max_vtksz_file_size = _DocVerifyImageCache._max_vtksz_file_size  # noqa: SLF001
     if TEST_CASE_NAME_VTKSZ_FILE_SIZE in metafunc.fixturenames:
-        if max_vtksz_file_size is None:
+        if (max_vtksz_file_size := _VtkszFileSizeTestCase._max_vtksz_file_size) is None:  # noqa: SLF001
             metafunc.parametrize(TEST_CASE_NAME_VTKSZ_FILE_SIZE, [])
             return
 
