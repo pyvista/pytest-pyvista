@@ -198,22 +198,17 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
 async def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
     from playwright.async_api import async_playwright  # noqa: PLC0415
 
+    output_paths: list[Path] = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
+        page = await context.new_page()
 
-        async def render_screenshot(html_file: Path) -> Path:
+        for html_file in html_files:
             output_path = output_dir / f"{html_file.stem}.png"
-            page = await context.new_page()
-            try:
-                await page.goto(f"file://{html_file}", wait_until="domcontentloaded")
-                await page.screenshot(path=output_path)
-            finally:
-                await page.close()
-            return output_path
-
-        # Render screenshots concurrently
-        output_paths = await asyncio.gather(*(render_screenshot(f) for f in html_files))
+            await page.goto(f"file://{html_file}", wait_until="domcontentloaded")
+            await page.screenshot(path=output_path)
+            output_paths.append(output_path)
 
         await browser.close()
 
