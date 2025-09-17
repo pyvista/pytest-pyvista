@@ -10,6 +10,7 @@ import pyvista as pv
 
 from pytest_pyvista.doc_mode import DEFAULT_IMAGE_HEIGHT
 from pytest_pyvista.doc_mode import DEFAULT_IMAGE_WIDTH
+from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
@@ -128,7 +129,7 @@ def test_both_images_exist(  # noqa: PLR0913
     if generated_image_dir:
         args.extend(["--doc_generated_image_dir", generated])
     result = pytester.runpytest(*args)
-    result.assert_outcomes(failed=1)
+    result.assert_outcomes(failed=1, skipped=1)
     result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
 
     assert Path(failed).is_dir() == failed_image_dir
@@ -354,7 +355,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
 @pytest.mark.parametrize("cli", [True, False])
 @pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) -> None:
+def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) -> None:  # noqa: PLR0915
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     cache_ini = cache + "ini"
@@ -385,6 +386,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     failed_ini = failed + "ini"
     failed_cli = failed + "cli"
 
+    max_size_cli = 10
+    max_size_ini = 20
+
     pytester.makeini(
         f"""
         [pytest]
@@ -394,6 +398,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
         doc_image_cache_dir = {cache_ini}
         doc_images_dir = {images_ini}
         doc_generate_subdirs = {generate_subdirs}
+        max_vtksz_file_size = {max_size_ini}
         """
     )
 
@@ -411,6 +416,8 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
                 generated_cli,
                 "--doc_image_format",
                 image_format_cli,
+                "--max_vtksz_file_size",
+                max_size_cli,
             ]
         )
         if generate_subdirs:
@@ -438,6 +445,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     num_files = 5
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)
+
+    expected_max_size = max_size_cli if cli else max_size_ini
+    assert _DocVerifyImageCache._max_vtksz_file_size == expected_max_size  # noqa: SLF001
 
 
 def test_customizing_tests(pytester: pytest.Pytester) -> None:
@@ -472,7 +482,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
         failed,
         "--doc_generate_subdirs",
     )
-    result.assert_outcomes(failed=1)
+    result.assert_outcomes(failed=1, skipped=1)
 
     expected_relpath = Path(Path(name).stem) / f"{custom_string}{Path(name).suffix}"
     assert Path(generated).is_dir()
