@@ -31,7 +31,14 @@ DEFAULT_IMAGE_WIDTH = 400  # pixels
 DEFAULT_IMAGE_HEIGHT = 300  # pixels
 MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
-TEST_CASE_NAME_VTKSZ = "_pytest_pyvista_test_case_vtksz"
+TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
+
+
+class _VtkszFileSizeTestCase:
+    def __init__(self, test_name: str, input_path: Path, max_vtksz_file_size: int) -> None:
+        self.test_name = test_name
+        self.input_path = input_path
+        self.max_vtksz_file_size = max_vtksz_file_size
 
 
 class _DocVerifyImageCache:
@@ -77,7 +84,9 @@ class _DocVerifyImageCache:
         cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
-        cls._max_vtksz_file_size = cast("int | None", _get_option_from_config_or_ini(config, "max_vtksz_file_size"))
+
+        max_file_size = _get_option_from_config_or_ini(config, "max_vtksz_file_size")
+        cls._max_vtksz_file_size = None if max_file_size is None else int(max_file_size)
 
     def __init__(
         self, test_name: str, *, docs_image_path: Path | None, cached_image_path: Path | None, env_info: str | _EnvInfo, input_path: Path | None
@@ -328,11 +337,18 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
         metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
 
-    # if _DocVerifyImageCache._max_vtksz_file_size is not None and TEST_CASE_NAME_VTKSZ in metafunc.fixturenames:
-    #     # Generate a separate test case for each vtksz file
-    #     files = _get_file_paths(_DocVerifyImageCache.doc_images_dir, ext="vtksz")
-    #     ids = [Path(file).stem for file in files]
-    #     metafunc.parametrize(TEST_CASE_NAME_VTKSZ, files, ids=ids)
+    max_vtksz_file_size = _DocVerifyImageCache._max_vtksz_file_size  # noqa: SLF001
+    if TEST_CASE_NAME_VTKSZ_FILE_SIZE in metafunc.fixturenames:
+        if max_vtksz_file_size is None:
+            metafunc.parametrize(TEST_CASE_NAME_VTKSZ_FILE_SIZE, [])
+            return
+
+        # Generate a separate test case for each vtksz file
+        vtksz_files = _get_file_paths(_DocVerifyImageCache.doc_images_dir, ext="vtksz")
+
+        test_cases_ = [_VtkszFileSizeTestCase(test_name=file.stem, input_path=file, max_vtksz_file_size=max_vtksz_file_size) for file in vtksz_files]
+        ids = [case.test_name for case in test_cases_]
+        metafunc.parametrize(TEST_CASE_NAME_VTKSZ_FILE_SIZE, test_cases_, ids=ids)
 
 
 def _save_failed_test_image(source_path: Path, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
@@ -361,8 +377,16 @@ def doc_verify_image_cache(request: pytest.FixtureRequest) -> _DocVerifyImageCac
     return test_case
 
 
+@pytest.fixture
+def max_vtksz_file_size(request: pytest.FixtureRequest) -> _VtkszFileSizeTestCase:
+    """Fixture to allow users to mutate test cases before they run."""
+    test_case: _VtkszFileSizeTestCase = request.node.callspec.params[TEST_CASE_NAME_VTKSZ_FILE_SIZE]
+    request.config.hook.pytest_pyvista_max_vtksz_file_size(test_case=test_case, request=request)
+    return test_case
+
+
 @pytest.mark.usefixtures("_validate_image_cache_dir")
-def test_static_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
+def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
     test_case = _pytest_pyvista_test_case
     _warn_cached_image_path(test_case.cached_image_path)
@@ -476,17 +500,18 @@ def _warn_cached_image_path(cached_image_path: Path | None) -> None:
             warnings.warn(msg, stacklevel=2)
 
 
-# def test_interactive_plot_file_size(vtksz_file: str):
-#     filepath = Path(vtksz_file)
-#     assert filepath.is_file()
-#     size_bytes = filepath.stat().st_size
-#     size_megabytes = round(size_bytes / 1_000_000)
-#     if size_megabytes > _DocVerifyImageCache.max_vtksz_file_size:
-#         rel_path = filepath.relative_to(_DocVerifyImageCache.doc_images_dir)
-#         msg = (
-#             f"The generated interactive plot file is too large: "
-#             f"\n\t{rel_path}\n"
-#             f"Its size is {size_megabytes} MB, but must be less than {_DocVerifyImageCache.max_vtksz_file_size} MB."
-#             f"\nConsider reducing the complexity of the plot or forcing it to be static."
-#         )
-#         pytest.fail(msg)
+def test_vtksz_file_size(_pytest_pyvista_test_case_vtksz: _VtkszFileSizeTestCase, max_vtksz_file_size: _VtkszFileSizeTestCase) -> None:  # noqa: PT019, ARG001
+    """Test vtksz file size is less than max allowed."""
+    test_case = _pytest_pyvista_test_case_vtksz
+    vtksz_file = test_case.input_path
+    assert vtksz_file.is_file()  # noqa: S101
+    size_bytes = vtksz_file.stat().st_size
+    size_megabytes = round(size_bytes / 100_000) / 10.0
+    if size_megabytes > test_case.max_vtksz_file_size:
+        msg = (
+            f"The interactive plot file is too large:"
+            f"\n\t{vtksz_file}\n"
+            f"Its size is {size_megabytes} MB, but must be less than {test_case.max_vtksz_file_size} MB."
+            f"\nConsider reducing the complexity of the plot or forcing it to be static."
+        )
+        pytest.fail(msg)

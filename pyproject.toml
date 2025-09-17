@@ -62,7 +62,7 @@ line-length = 150
 docstring-code-format = true
 
 [tool.ruff.lint]
-ignore = ["COM812", "D203", "D212", "ERA001", "ISC001"]
+ignore = ["COM812", "D203", "D212", "ISC001"]
 select = ["ALL"]
 
 [tool.ruff.lint.isort]
@@ -74,7 +74,7 @@ force-single-line = true
 required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.lint.per-file-ignores]
-"doc/**" = ["INP001"]
+"doc/**" = ["ERA001", "INP001"]
 "tests/**" = ["ANN001", "INP001", "S101"]
 
 [tool.ruff.lint.pyupgrade]

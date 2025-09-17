@@ -44,14 +44,17 @@ def test_arguments(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red", window_size=None) -> Path:
+def make_cached_images(  # noqa: PLR0913
+    test_path, path="image_cache_dir", name="imcache.png", color="red", window_size=None, mesh: pv.DataSet | None = None
+) -> Path:
     """Make image cache in `test_path/path`."""
     d = Path(test_path, path)
     d.mkdir(exist_ok=True, parents=True)
-    sphere = pv.Sphere()
+    if mesh is None:
+        mesh = pv.Sphere()
     kwargs = {"window_size": window_size} if window_size else {}
     plotter = pv.Plotter(**kwargs)
-    plotter.add_mesh(sphere, color=color)
+    plotter.add_mesh(mesh, color=color)
     filename = d / name
     if filename.suffix == ".vtksz":
         plotter.export_vtksz(filename)

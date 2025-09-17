@@ -452,7 +452,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     custom_string = "custom_string"
     pytester.makeconftest(
         f"""
-        def pytest_pyvista_doc_mode_hook(doc_verify_image_cache, request) -> None:
+        def pytest_pyvista_doc_mode_hook(doc_verify_image_cache, request):
             if doc_verify_image_cache.test_name == {Path(name).stem!r}:
                 doc_verify_image_cache.env_info = {custom_string!r}
             return doc_verify_image_cache
@@ -529,11 +529,12 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     if not include_vtksz:
-        result.assert_outcomes(skipped=1)
-        result.stdout.fnmatch_lines("::doc_mode.py::test_static_images[NOTSET] SKIPPED (got empty paramet...) [100%]")
+        result.assert_outcomes(skipped=2)
+        result.stdout.fnmatch_lines("::doc_mode.py::test_images[NOTSET] SKIPPED (got empty parameter set ...) [ 50%]")
+        result.stdout.fnmatch_lines("::doc_mode.py::test_vtksz_file_size[NOTSET] SKIPPED (got empty param...) [100%]")
         return
 
-    result.assert_outcomes(failed=1)
+    result.assert_outcomes(failed=1, skipped=1)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
 
     assert Path(generated).is_dir()
@@ -543,3 +544,47 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     assert Path(failed).is_dir()
     expected_file = Path(failed) / "errors" / "from_build" / name_generated
     assert expected_file.is_file()
+
+
+@pytest.mark.parametrize("max_size", [1, None, "custom"])
+def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) -> None:
+    """Test --max_vtksz_file_size option."""
+    name_vtksz = "im.vtksz"
+    cache = "cache"
+    Path(cache).mkdir()
+    images = "images"
+    complex_mesh = pv.Sphere(theta_resolution=100, phi_resolution=1000)
+    make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue", mesh=complex_mesh)
+
+    args = [
+        "--doc_mode",
+        "--doc_images_dir",
+        images,
+        "--doc_image_cache_dir",
+        cache,
+        "-v",
+    ]
+    if max_size == "custom":
+        max_size = 2
+        pytester.makeconftest(
+            f"""
+            def pytest_pyvista_max_vtksz_file_size(test_case, request):
+                if test_case.test_name == {Path(name_vtksz).stem!r}:
+                    test_case.max_vtksz_file_size = {max_size}
+                return test_case
+        """
+        )
+    if max_size:
+        args.extend(["--max_vtksz_file_size", max_size])
+    result = pytester.runpytest(*args)
+    if max_size is None:
+        result.assert_outcomes(skipped=2)
+        result.stdout.fnmatch_lines("::doc_mode.py::test_images[NOTSET] SKIPPED (got empty parameter set ...) [ 50%]")
+        result.stdout.fnmatch_lines("::doc_mode.py::test_vtksz_file_size[NOTSET] SKIPPED (got empty param...) [100%]")
+        return
+
+    result.assert_outcomes(failed=1, skipped=1)
+    result.stdout.fnmatch_lines("E           Failed: The interactive plot file is too large:")
+    result.stdout.fnmatch_lines(f"E           	*images/{name_vtksz}")
+    result.stdout.fnmatch_lines(f"E           Its size is 2.4 MB, but must be less than {max_size} MB.")
+    result.stdout.fnmatch_lines("E           Consider reducing the complexity of the plot or forcing it to be static.")
