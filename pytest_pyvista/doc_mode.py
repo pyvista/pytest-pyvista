@@ -212,8 +212,8 @@ def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
     return output_paths
 
 
-def _process_html_screenshots(batch: list[Path], output_dir: Path, max_concurrent: int) -> list[Path]:
-    return _html_screenshots(batch, output_dir, max_concurrent=max_concurrent)
+def _process_html_screenshots(batch: list[Path], output_dir: Path) -> list[Path]:
+    return _html_screenshots(batch, output_dir)
 
 
 def _render_all_html(
@@ -221,14 +221,13 @@ def _render_all_html(
     output_dir: Path,
     *,
     num_workers: int = 2,
-    max_concurrent: int = 4,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
     # Split into N roughly equal batches
     batches = [html_files[i::num_workers] for i in range(num_workers)]
 
     with multiprocessing.Pool(processes=num_workers) as pool:
-        results_nested = pool.starmap(_process_html_screenshots, [(batch, output_dir, max_concurrent) for batch in batches])
+        results_nested = pool.starmap(_process_html_screenshots, [(batch, output_dir) for batch in batches])
     # Flatten list of lists
     return [p for sublist in results_nested for p in sublist]
 
