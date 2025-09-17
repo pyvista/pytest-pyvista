@@ -810,6 +810,14 @@ def pytest_configure(config: pytest.Config) -> None:
 
         _DocVerifyImageCache.init_from_config(config)
 
+        if hasattr(config, "workerinput"):
+            # We're inside a worker, skip
+            return
+        # Preprocessing uses `multiprocessing` which we call here since we want it to run
+        # before any parallel workers are spawned, and only run it in the master worker
+        num_workers = int(os.environ.get("PYTEST_XDIST_WORKER_COUNT", "1"))
+        _DocVerifyImageCache._preprocess_image_test_cases(num_workers=num_workers)  # noqa: SLF001
+
     # create a image names directory for individual or multiple workers to write to
     if config.getoption("disallow_unused_cache"):
         config.image_names_dir = Path(config.cache.makedir("pyvista"))

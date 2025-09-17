@@ -50,6 +50,7 @@ class _DocVerifyImageCache:
     doc_image_format: _AllowedImageFormats
     include_vtksz: bool
     _max_vtksz_file_size: int | None
+    _preprocessed_test_cases: list[_DocVerifyImageCache]
     _tempdirs: ClassVar[list[tempfile.TemporaryDirectory]] = []
 
     @classmethod
@@ -97,6 +98,16 @@ class _DocVerifyImageCache:
         self.env_info = env_info
         self.input_path = input_path
 
+    @classmethod
+    def _preprocess_image_test_cases(cls, num_workers: int = 1) -> None:
+        """Generate a separate test case for each image to be tested."""
+        test_cases = _generate_test_cases(num_workers=num_workers)  # cases for png, jpg, gif images
+
+        if _DocVerifyImageCache.include_vtksz:
+            test_cases.extend(_generate_test_cases(vtksz=True, num_workers=num_workers))  # cases for interactive vtksz files
+
+        cls._preprocessed_test_cases = test_cases
+
 
 def _flatten_path(path: Path) -> Path:
     return Path("_".join(path.parts))
@@ -111,6 +122,7 @@ def _preprocess_build_images(
     generate_subdirs: bool = False,
     vtksz: bool = False,
     return_input_paths: Literal[False] = False,
+    num_workers: int = ...,
 ) -> list[Path]: ...
 @overload
 def _preprocess_build_images(
@@ -121,6 +133,7 @@ def _preprocess_build_images(
     generate_subdirs: bool = False,
     vtksz: bool = False,
     return_input_paths: Literal[True],
+    num_workers: int = ...,
 ) -> tuple[list[Path], list[Path]]: ...
 def _preprocess_build_images(  # noqa: PLR0913
     build_images_dir: Path,
@@ -130,6 +143,7 @@ def _preprocess_build_images(  # noqa: PLR0913
     generate_subdirs: bool = False,
     vtksz: bool = False,
     return_input_paths: bool = False,
+    num_workers: int = 1,
 ) -> list[Path] | tuple[list[Path], list[Path]]:
     """
     Read images from the build dir, resize them, and save to a flat output dir.
@@ -167,7 +181,7 @@ def _preprocess_build_images(  # noqa: PLR0913
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             html_paths = _vtksz_to_html_files(vtksz_paths, tmppath)
-            _render_all_html(html_paths, tmppath)
+            _render_all_html(html_paths, tmppath, num_workers=num_workers)
             input_paths = _get_file_paths(tmppath, ext="png")
             output_paths = _preprocess_input_paths(input_paths, relative_to=tmppath)
         return _get_output(vtksz_paths, output_paths)
@@ -229,7 +243,7 @@ def _render_all_html(
     html_files: list[Path],
     output_dir: Path,
     *,
-    num_workers: int = 2,
+    num_workers: int = 1,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
     # Split into N roughly equal batches
@@ -241,7 +255,7 @@ def _render_all_html(
     return [p for sublist in results_nested for p in sublist]
 
 
-def _generate_test_cases(*, vtksz: bool = False) -> list[_DocVerifyImageCache]:  # noqa: C901
+def _generate_test_cases(*, vtksz: bool = False, num_workers: int = 1) -> list[_DocVerifyImageCache]:  # noqa: C901
     """
     Generate a list of image test cases.
 
@@ -277,6 +291,7 @@ def _generate_test_cases(*, vtksz: bool = False) -> list[_DocVerifyImageCache]: 
         generate_subdirs=generate_subdirs,
         vtksz=vtksz,
         return_input_paths=True,
+        num_workers=num_workers,
     )
     for input_path, test_path in zip(input_paths, test_image_paths):
         add_to_dict(test_path.parent if generate_subdirs else test_path, "docs", input_path=input_path)  # type: ignore[func-returns-value]
@@ -321,20 +336,8 @@ def _generate_test_cases(*, vtksz: bool = False) -> list[_DocVerifyImageCache]: 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate parametrized tests."""
     if TEST_CASE_NAME in metafunc.fixturenames:
-        # Generate a separate test case for each image being tested
-
-        # Generate cases for png, jpg, gif images in the doc_images dir
-        test_cases = _generate_test_cases()
+        test_cases = _DocVerifyImageCache._preprocessed_test_cases  # noqa: SLF001
         ids = [case.test_name for case in test_cases]
-
-        if _DocVerifyImageCache.include_vtksz:
-            # Generate cases for interactive vtksz files in the doc_images dir
-            test_cases_vtksz = _generate_test_cases(vtksz=True)
-            ids_vtksz = [case.test_name for case in test_cases_vtksz]
-
-            test_cases.extend(test_cases_vtksz)
-            ids.extend(ids_vtksz)
-
         metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
 
     max_vtksz_file_size = _DocVerifyImageCache._max_vtksz_file_size  # noqa: SLF001
