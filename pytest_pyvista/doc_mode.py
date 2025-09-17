@@ -195,34 +195,29 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
     return output_paths
 
 
-async def _html_screenshots(
-    html_files: list[Path],
-    output_dir: Path,
-    *,
-    max_concurrent: int = 10,
-) -> list[Path]:
+async def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
     from playwright.async_api import async_playwright  # noqa: PLC0415
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
-        sem = asyncio.Semaphore(max_concurrent)
 
-        async def render_one(html_file: Path) -> Path:
-            async with sem:  # only N tasks can enter here at once
-                output_path = output_dir / f"{html_file.stem}.png"
-                page = await context.new_page()
-                try:
-                    await page.goto(f"file://{html_file}", wait_until="domcontentloaded")
-                    await page.screenshot(path=output_path)
-                finally:
-                    await page.close()
-                return output_path
+        async def render_screenshot(html_file: Path) -> Path:
+            output_path = output_dir / f"{html_file.stem}.png"
+            page = await context.new_page()
+            try:
+                await page.goto(f"file://{html_file}", wait_until="domcontentloaded")
+                await page.screenshot(path=output_path)
+            finally:
+                await page.close()
+            return output_path
 
-        results = await asyncio.gather(*(render_one(f) for f in html_files))
+        # Render screenshots concurrently
+        output_paths = await asyncio.gather(*(render_screenshot(f) for f in html_files))
+
         await browser.close()
 
-    return results
+    return output_paths
 
 
 def _process_html_screenshots(batch: list[Path], output_dir: Path, max_concurrent: int) -> list[Path]:
