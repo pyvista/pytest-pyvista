@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import multiprocessing
 from pathlib import Path
 import shutil
@@ -159,7 +158,6 @@ def _preprocess_build_images(  # noqa: PLR0913
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             html_paths = _vtksz_to_html_files(vtksz_paths, tmppath)
-            # asyncio.run(_html_screenshots())
             _render_all_html(html_paths, tmppath)
             input_paths = _get_file_paths(tmppath, ext="png")
             output_paths = _preprocess_input_paths(input_paths, relative_to=tmppath)
@@ -195,28 +193,27 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
     return output_paths
 
 
-async def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
-    from playwright.async_api import async_playwright  # noqa: PLC0415
+def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
+    from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
     output_paths: list[Path] = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
-        page = await context.new_page()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
+        page = context.new_page()
 
         for html_file in html_files:
             output_path = output_dir / f"{html_file.stem}.png"
-            await page.goto(f"file://{html_file}", wait_until="domcontentloaded")
-            await page.screenshot(path=output_path)
+            page.goto(f"file://{html_file}")
+            page.screenshot(path=output_path)
             output_paths.append(output_path)
-
-        await browser.close()
+        browser.close()
 
     return output_paths
 
 
 def _process_html_screenshots(batch: list[Path], output_dir: Path, max_concurrent: int) -> list[Path]:
-    return asyncio.run(_html_screenshots(batch, output_dir, max_concurrent=max_concurrent))
+    return _html_screenshots(batch, output_dir, max_concurrent=max_concurrent)
 
 
 def _render_all_html(
