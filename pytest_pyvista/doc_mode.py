@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 from pathlib import Path
 import shutil
 import tempfile
@@ -158,7 +159,8 @@ def _preprocess_build_images(  # noqa: PLR0913
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             html_paths = _vtksz_to_html_files(vtksz_paths, tmppath)
-            asyncio.run(_html_screenshots(html_paths, tmppath))
+            # asyncio.run(_html_screenshots())
+            _render_all_html(html_paths, tmppath)
             input_paths = _get_file_paths(tmppath, ext="png")
             output_paths = _preprocess_input_paths(input_paths, relative_to=tmppath)
         return _get_output(vtksz_paths, output_paths)
@@ -221,6 +223,27 @@ async def _html_screenshots(
         await browser.close()
 
     return results
+
+
+def _process_html_screenshots(batch: list[Path], output_dir: Path, max_concurrent: int) -> list[Path]:
+    return asyncio.run(_html_screenshots(batch, output_dir, max_concurrent=max_concurrent))
+
+
+def _render_all_html(
+    html_files: list[Path],
+    output_dir: Path,
+    *,
+    num_workers: int = 2,
+    max_concurrent: int = 4,
+) -> list[Path]:
+    """Dispatch rendering across multiple processes."""
+    # Split into N roughly equal batches
+    batches = [html_files[i::num_workers] for i in range(num_workers)]
+
+    with multiprocessing.Pool(processes=num_workers) as pool:
+        results_nested = pool.starmap(_process_html_screenshots, [(batch, output_dir, max_concurrent) for batch in batches])
+    # Flatten list of lists
+    return [p for sublist in results_nested for p in sublist]
 
 
 def _generate_test_cases(*, vtksz: bool = False) -> list[_DocVerifyImageCache]:  # noqa: C901

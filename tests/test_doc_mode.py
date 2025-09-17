@@ -331,7 +331,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2")
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.OK
 
     # replace a single image with a different image
