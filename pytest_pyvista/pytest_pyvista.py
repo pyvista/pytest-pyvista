@@ -807,15 +807,33 @@ def __validate_image_cache_dir(cache_dir: Path, image_format: _AllowedImageForma
 
 
 def _make_config_cache_dir(config: pytest.Config, dirname: str) -> Path:
+    def _clean_dir(path: Path) -> None:
+        """Remove files and directories inside `path`."""
+        with contextlib.suppress(OSError):
+            for item in path.iterdir():
+                if item.is_dir():
+                    shutil.rmtree(item)  # remove entire directory tree
+                else:
+                    item.unlink()  # remove file
+
     newdir = Path(config.cache.makedir(dirname))
     newdir.mkdir(exist_ok=True)
     setattr(config, dirname, newdir)
-
     # ensure this directory is empty as it might be left over from a previous test
-    with contextlib.suppress(OSError):
-        for filename in newdir.iterdir():
-            filename.unlink()
+    _clean_dir(newdir)
     return newdir
+
+
+def _get_num_workers_from_config(config: pytest.Config) -> int:
+    """Return number of xdist workers, or 1 if xdist is not installed or not used."""
+    try:
+        num = config.getoption("numprocesses")  # -n
+        if num is None:
+            return 1
+        return int(num)
+    except (AttributeError, ValueError):
+        # option doesn't exist → xdist not installed
+        return 1
 
 
 @pytest.hookimpl
@@ -836,7 +854,7 @@ def pytest_configure(config: pytest.Config) -> None:
             # We're inside the master worker.
             # Preprocess the images here before any parallel workers are spawned.
             # Preprocessing uses `multiprocessing`, which we use instead of the xdist workers
-            num_workers = int(os.environ.get("PYTEST_XDIST_WORKER_COUNT", "1"))
+            num_workers = _get_num_workers_from_config(config)
             test_cases = _preprocess_image_test_cases(num_workers=num_workers)
             _DocVerifyImageCache._test_cases = test_cases  # noqa: SLF001
 
@@ -956,6 +974,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
         # Fixed: Write JSON instead of plain text
         visited_file.write_text(json.dumps(list(VISITED_CACHED_IMAGE_NAMES)))
         skipped_file.write_text(json.dumps(list(SKIPPED_CACHED_IMAGE_NAMES)))
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Remove temporary files."""
+    _make_config_cache_dir(config, PYVISTA_DOC_MODE_CACHE_DIRNAME)
+    _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME)
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001

@@ -318,7 +318,7 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines(match)
 
 
-@pytest.mark.parametrize("include_vtksz", [True])
+@pytest.mark.parametrize("include_vtksz", [True, False])
 def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz) -> None:
     """Ensure that doc_mode works with multiple workers."""
     cache = "cache"
