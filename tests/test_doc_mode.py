@@ -10,10 +10,10 @@ import pyvista as pv
 
 from pytest_pyvista.doc_mode import DEFAULT_IMAGE_HEIGHT
 from pytest_pyvista.doc_mode import DEFAULT_IMAGE_WIDTH
-from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
+from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
@@ -447,7 +447,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     assert len(paths_ini) == (0 if cli else num_files)
 
     expected_max_size = max_size_cli if cli else max_size_ini
-    assert _DocVerifyImageCache._max_vtksz_file_size == expected_max_size  # noqa: SLF001
+    assert _VtkszFileSizeTestCase._max_vtksz_file_size == expected_max_size  # noqa: SLF001
 
 
 def test_customizing_tests(pytester: pytest.Pytester) -> None:
