@@ -260,7 +260,7 @@ def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = T
                 logger.info(msg)
 
             output_path = output_dir / f"{html_file.stem}.png"
-            page.goto(f"file://{html_file}")
+            page.goto(f"file://{html_file}", wait_until="load")
             page.screenshot(path=output_path)
             output_paths.append(output_path)
 
