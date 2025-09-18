@@ -18,11 +18,11 @@ templates_path = ["_templates"]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
-# source_suffix = ['.rst', '.md']  # noqa: ERA001
+# source_suffix = ['.rst', '.md']
 source_suffix = ".rst"
 
 # The encoding of source files.
-# source_encoding = 'utf-8-sig'  # noqa: ERA001
+# source_encoding = 'utf-8-sig'
 
 # The master toctree document.
 master_doc = "index"
@@ -44,9 +44,9 @@ language = "en"
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:
-# today = ''  # noqa: ERA001
+# today = ''
 # Else, today_fmt is used as the format for a strftime call.
-# today_fmt = '%B %d, %Y'  # noqa: ERA001
+# today_fmt = '%B %d, %Y'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -54,27 +54,27 @@ exclude_patterns = ["_build"]
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
-# default_role = None  # noqa: ERA001
+# default_role = None
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
-# add_function_parentheses = True  # noqa: ERA001
+# add_function_parentheses = True
 
 # If true, the current module name will be prepended to all description
 # unit titles (such as .. function::).
-# add_module_names = True  # noqa: ERA001
+# add_module_names = True
 
 # If true, sectionauthor and moduleauthor directives will be shown in the
 # output. They are ignored by default.
-# show_authors = False  # noqa: ERA001
+# show_authors = False
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"
 
 # A list of ignored prefixes for module index sorting.
-# modindex_common_prefix = []  # noqa: ERA001
+# modindex_common_prefix = []
 
 # If true, keep warnings as 'system message' paragraphs in the built documents.
-# keep_warnings = False  # noqa: ERA001
+# keep_warnings = False
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
@@ -85,7 +85,7 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 html_theme = "pydata_sphinx_theme"
-# html_theme_path = [pydata_sphinx_theme.get_html_theme_path()]  # noqa: ERA001
+# html_theme_path = [pydata_sphinx_theme.get_html_theme_path()]
 html_context = {
     "logo": "https://docs.pyvista.org/_static/pyvista_logo_sm.png",
     "github_user": "pyvista",
@@ -128,62 +128,62 @@ html_static_path = ["_static"]
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
 # directly to the root of the documentation.
-# html_extra_path = []  # noqa: ERA001
+# html_extra_path = []
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
-# html_last_updated_fmt = '%b %d, %Y'  # noqa: ERA001
+# html_last_updated_fmt = '%b %d, %Y'
 
 # If true, SmartyPants will be used to convert quotes and dashes to
 # typographically correct entities.
-# html_use_smartypants = True  # noqa: ERA001
+# html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-# html_sidebars = {}  # noqa: ERA001
+# html_sidebars = {}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
-# html_additional_pages = {}  # noqa: ERA001
+# html_additional_pages = {}
 
 # If false, no module index is generated.
-# html_domain_indices = True  # noqa: ERA001
+# html_domain_indices = True
 
 # If false, no index is generated.
-# html_use_index = True  # noqa: ERA001
+# html_use_index = True
 
 # If true, the index is split into individual pages for each letter.
-# html_split_index = False  # noqa: ERA001
+# html_split_index = False
 
 # If true, links to the reST sources are added to the pages.
-# html_show_sourcelink = True  # noqa: ERA001
+# html_show_sourcelink = True
 
 # If true, 'Created using Sphinx' is shown in the HTML footer. Default is True.
-# html_show_sphinx = True  # noqa: ERA001
+# html_show_sphinx = True
 
 # If true, '(C) Copyright ...' is shown in the HTML footer. Default is True.
-# html_show_copyright = True  # noqa: ERA001
+# html_show_copyright = True
 
 # If true, an OpenSearch description file will be output, and all pages will
 # contain a <link> tag referring to it.  The value of this option must be the
 # base URL from which the finished HTML is served.
-# html_use_opensearch = ''  # noqa: ERA001
+# html_use_opensearch = ''
 
 # This is the file name suffix for HTML files (e.g. '.xhtml').
-# html_file_suffix = None  # noqa: ERA001
+# html_file_suffix = None
 
 # Language to be used for generating the HTML full-text search index.
 # Sphinx supports the following languages:
 #   'da', 'de', 'en', 'es', 'fi', 'fr', 'hu', 'it', 'ja'
 #   'nl', 'no', 'pt', 'ro', 'ru', 'sv', 'tr'
-# html_search_language = 'en'  # noqa: ERA001
+# html_search_language = 'en'
 
 # A dictionary with options for the search language support, empty by default.
 # Now only 'ja' uses this config value
-# html_search_options = {'type': 'default'}  # noqa: ERA001
+# html_search_options = {'type': 'default'}
 
 # The name of a javascript file (relative to the configuration directory) that
 # implements a search results scorer. If empty, the default will be used.
-# html_search_scorer = 'scorer.js'  # noqa: ERA001
+# html_search_scorer = 'scorer.js'
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = "pytest-cookiecutterplugin_namedoc"
@@ -204,23 +204,23 @@ latex_documents = [
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
-# latex_logo = None  # noqa: ERA001
+# latex_logo = None
 
 # For 'manual' documents, if this is true, then toplevel headings are parts,
 # not chapters.
-# latex_use_parts = False  # noqa: ERA001
+# latex_use_parts = False
 
 # If true, show page references after internal links.
-# latex_show_pagerefs = False  # noqa: ERA001
+# latex_show_pagerefs = False
 
 # If true, show URL addresses after external links.
-# latex_show_urls = False  # noqa: ERA001
+# latex_show_urls = False
 
 # Documents to append as an appendix to all manuals.
-# latex_appendices = []  # noqa: ERA001
+# latex_appendices = []
 
 # If false, no module index is generated.
-# latex_domain_indices = True  # noqa: ERA001
+# latex_domain_indices = True
 
 
 # -- Options for manual page output ---------------------------------------
@@ -238,7 +238,7 @@ man_pages = [
 ]
 
 # If true, show URL addresses after external links.
-# man_show_urls = False  # noqa: ERA001
+# man_show_urls = False
 
 
 # -- Options for Texinfo output -------------------------------------------
@@ -259,13 +259,13 @@ texinfo_documents = [
 ]
 
 # Documents to append as an appendix to all manuals.
-# texinfo_appendices = []  # noqa: ERA001
+# texinfo_appendices = []
 
 # If false, no module index is generated.
-# texinfo_domain_indices = True  # noqa: ERA001
+# texinfo_domain_indices = True
 
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
-# texinfo_show_urls = 'footnote'  # noqa: ERA001
+# texinfo_show_urls = 'footnote'
 
 # If true, do not generate a @detailmenu in the 'Top' node's menu.
-# texinfo_no_detailmenu = False  # noqa: ERA001
+# texinfo_no_detailmenu = False
