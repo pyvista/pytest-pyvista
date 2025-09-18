@@ -42,6 +42,8 @@ TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 logger = logging.getLogger("html_render")
 logging.basicConfig(level=logging.INFO, format="%(process)d: %(message)s")
 
+multiprocessing.set_start_method("spawn", force=True)
+
 
 class _VtkszFileSizeTestCase:
     _max_vtksz_file_size: int | None
@@ -266,7 +268,7 @@ def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = T
     return output_paths
 
 
-def _process_html_screenshots(batch: list[Path], output_dir: Path, log: bool = True) -> list[Path]:
+def _process_html_screenshots(batch: list[Path], output_dir: Path, log: bool = True) -> list[Path]:  # noqa: FBT001, FBT002
     return _html_screenshots(batch, output_dir, log=log)
 
 
