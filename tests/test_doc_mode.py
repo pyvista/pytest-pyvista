@@ -129,7 +129,7 @@ def test_both_images_exist(  # noqa: PLR0913
     if generated_image_dir:
         args.extend(["--doc_generated_image_dir", generated])
     result = pytester.runpytest(*args)
-    result.assert_outcomes(failed=1, skipped=1)
+    result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
 
     assert Path(failed).is_dir() == failed_image_dir
@@ -482,7 +482,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
         failed,
         "--doc_generate_subdirs",
     )
-    result.assert_outcomes(failed=1, skipped=1)
+    result.assert_outcomes(failed=1)
 
     expected_relpath = Path(Path(name).stem) / f"{custom_string}{Path(name).suffix}"
     assert Path(generated).is_dir()
@@ -541,12 +541,10 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     if not include_vtksz:
-        result.assert_outcomes(skipped=2)
-        result.stdout.fnmatch_lines("::doc_mode.py::test_images[NOTSET] SKIPPED (got empty parameter set ...) [ 50%]")
-        result.stdout.fnmatch_lines("::doc_mode.py::test_vtksz_file_size[NOTSET] SKIPPED (got empty param...) [100%]")
+        result.assert_outcomes(skipped=0, passed=0, failed=0)
         return
 
-    result.assert_outcomes(failed=1, skipped=1)
+    result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
 
     assert Path(generated).is_dir()
@@ -591,12 +589,10 @@ def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) ->
         args.extend(["--max_vtksz_file_size", max_size])
     result = pytester.runpytest(*args)
     if max_size is None:
-        result.assert_outcomes(skipped=2)
-        result.stdout.fnmatch_lines("::doc_mode.py::test_images[NOTSET] SKIPPED (got empty parameter set ...) [ 50%]")
-        result.stdout.fnmatch_lines("::doc_mode.py::test_vtksz_file_size[NOTSET] SKIPPED (got empty param...) [100%]")
+        result.assert_outcomes(skipped=0, passed=0, failed=0)
         return
 
-    result.assert_outcomes(failed=1, skipped=1)
+    result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines("E           Failed: The interactive plot file is too large:")
     result.stdout.fnmatch_lines(f"E           	*images/{name_vtksz}")
     result.stdout.fnmatch_lines(f"E           Its size is 2.4 MB, but must be less than {max_size} MB.")

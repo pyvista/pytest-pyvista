@@ -1036,4 +1036,8 @@ def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config
         # Collect test items from the module
         module_collector = pytest.Module.from_parent(parent=session, path=module_file)
         collected_items = list(module_collector.collect())
+
+        # Remove tests if there are no test cases
+        collected_items = [item for item in collected_items if not item.name.endswith("[NOTSET]")]
+
         items.extend(collected_items)
