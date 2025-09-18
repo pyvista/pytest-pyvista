@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from functools import cached_property
 import importlib
@@ -810,8 +811,9 @@ def _make_config_cache_dir(config: pytest.Config, dirname: str, *, clean: bool =
     newdir = Path(config.cache.makedir(dirname))
     newdir.mkdir(exist_ok=True)
     if clean:
-        for item in newdir.iterdir():
-            item.unlink()
+        with contextlib.suppress(OSError):
+            for item in newdir.iterdir():
+                item.unlink()
     setattr(config, dirname, newdir)
     return newdir
 
