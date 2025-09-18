@@ -285,8 +285,6 @@ def _generate_test_cases(input_paths: list[Path], test_image_paths: list[Path], 
         (3) Merges the two lists together and returns separate test cases to
             comparing all docs images to all cached images
     """
-    if not input_paths and not test_image_paths:
-        return []
     test_cases_dict: dict = {}
 
     def add_to_dict(filepath: Path, key: str, input_path: Path | None = None) -> None:

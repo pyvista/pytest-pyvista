@@ -864,8 +864,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
         if is_master:
             # clear cached test files
-            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=True)
-            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=True)
+            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=False)
+            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=False)
 
             # Determine how many processes to use for preprocessing
             num_workers = _get_num_workers_from_config(config)
