@@ -864,8 +864,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
         if is_master:
             # clear cached test files
-            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=False)
-            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=False)
+            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=True)
+            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=True)
 
             # Determine how many processes to use for preprocessing
             num_workers = _get_num_workers_from_config(config)
@@ -889,7 +889,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
     """Modify each xdist worker."""
-    node.workerinput["paths"] = node.config.paths
+    if paths := getattr(node.config, "paths", None):
+        node.workerinput["paths"] = paths
 
 
 @pytest.fixture
