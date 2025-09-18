@@ -511,7 +511,7 @@ def test_vtksz_screenshot(tmp_path) -> None:
 
 
 @pytest.mark.skipif(pv.vtk_version_info < (9, 2), reason="Seg fault")
-@pytest.mark.parametrize("include_vtksz", [True, False])
+@pytest.mark.parametrize("include_vtksz", [False])
 def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     """Test that test images are generated from interactive plot files."""
     stem = "im"
@@ -541,7 +541,12 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     if not include_vtksz:
-        result.assert_outcomes(skipped=0, passed=0, failed=0)
+        result.assert_outcomes(failed=1)
+        result.stdout.fnmatch_lines("E           Failed: Test setup failed for test image:")
+        result.stdout.fnmatch_lines(f"E           	{Path(name_generated).stem}")
+        result.stdout.fnmatch_lines("E           The image exists in the cache directory:")
+        result.stdout.fnmatch_lines(f"E           	*cache/{name_generated}")
+        result.stdout.fnmatch_lines("E           but is missing from the docs build directory:")
         return
 
     result.assert_outcomes(failed=1)

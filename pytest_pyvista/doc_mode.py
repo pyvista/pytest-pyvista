@@ -303,8 +303,8 @@ def _generate_test_cases(input_paths: list[Path], test_image_paths: list[Path], 
     Generate a list of image test cases.
 
     This function:
-        (1) Generates a list of test images from the docs
-        (2) Generates a list of cached images
+        (1) Generates DocVerifyImageCache objects from build images (input_paths and test_image_paths)
+        (2) Generates DocVerifyImageCache objects from cache images
         (3) Merges the two lists together and returns separate test cases to
             comparing all docs images to all cached images
     """
@@ -358,8 +358,15 @@ def _generate_test_cases(input_paths: list[Path], test_image_paths: list[Path], 
         # Interactive test cases from vtksz files are mutually exclusive with regular image file tests
         if input_is_vtksz or cache_is_from_vtksz:
             if vtksz:
+                # We have a vtksz test case AND vtksz cases were requested, so keep it
                 test_cases_list.append(test_case)
+            elif not _DocVerifyImageCache.include_vtksz:
+                # We have a vtksz test cases, but no vtksz cases were requested AND they should not exist
+                # This is likely an unused cache image and should be included so that an error is raised later
+                test_cases_list.append(test_case)
+            # Else skip the test case
         elif not vtksz:
+            # Keep regular image cases (not vtksz files) otherwise
             test_cases_list.append(test_case)
 
     return test_cases_list
