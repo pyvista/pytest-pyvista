@@ -280,10 +280,13 @@ def _render_all_html(
     log: bool = True,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
-    # Split into N roughly equal batches
-    batches = [html_files[i::num_workers] for i in range(num_workers)]
 
-    # Pass log flag to child processes
+    def _split_batches(files: list[Path], n: int) -> list[list[Path]]:
+        """Split a list of files into n roughly equal contiguous batches."""
+        k, m = divmod(len(files), n)
+        return [files[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
+
+    batches = _split_batches(html_files, num_workers)
     with multiprocessing.Pool(processes=num_workers) as pool:
         results_nested = pool.starmap(
             _process_html_screenshots,
