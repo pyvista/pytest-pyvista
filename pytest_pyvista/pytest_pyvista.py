@@ -861,7 +861,7 @@ def pytest_configure(config: pytest.Config) -> None:
     is_master = _is_master(config)
     doc_mode = config.getoption("doc_mode")
     disallow_unused_cache = config.getoption("disallow_unused_cache")
-    if disallow_unused_cache:
+    if is_master and disallow_unused_cache:
         # create a image names directory for individual or multiple workers to write to
         _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=False)
 
@@ -1011,8 +1011,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
-    for dirname in [PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME]:
-        _make_config_cache_dir(config, dirname, clean=True)
+    if _is_master(config):
+        for dirname in [PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME]:
+            _make_config_cache_dir(config, dirname, clean=True)
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
