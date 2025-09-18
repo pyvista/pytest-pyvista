@@ -21,7 +21,7 @@ def pytest_pyvista_doc_mode_hook(doc_verify_image_cache: _DocVerifyImageCache, r
 
 
 @pytest.hookspec
-def pytest_pyvista_max_vtksz_file_size(test_case: _VtkszFileSizeTestCase, request: pytest.FixtureRequest) -> _VtkszFileSizeTestCase:  # type:ignore[empty-body]
+def pytest_pyvista_max_vtksz_file_size_hook(test_case: _VtkszFileSizeTestCase, request: pytest.FixtureRequest) -> _VtkszFileSizeTestCase:  # type:ignore[empty-body]
     """
     Function called for each generated test before it executes.
 

@@ -601,7 +601,7 @@ def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) ->
         max_size = 2
         pytester.makeconftest(
             f"""
-            def pytest_pyvista_max_vtksz_file_size(test_case, request):
+            def pytest_pyvista_max_vtksz_file_size_hook(test_case, request):
                 if test_case.test_name == {Path(name_vtksz).stem!r}:
                     test_case.max_vtksz_file_size = {max_size}
                 return test_case

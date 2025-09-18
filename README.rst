@@ -365,7 +365,9 @@ These are the flags you can use when calling ``pytest`` in the command line:
 * Use ``--max_vtksz_file_size`` to include tests to limit the size of ``vtksz`` files.
   All ``vtksz`` files inside the ``doc_images_dir`` are collected and compared to the
   specified value. The value should be specified in megabytes (MB). ``20`` is a good
-  initial value to set.
+  initial value to set. The value can be customized on a per-test (i.e. per-file) basis,
+  see ``Customizing test cases`` for details. Setting this value override any configuration,
+  see below.
 
   .. note::
 
@@ -400,6 +402,17 @@ for unit tests above for more details about customizing the ``env_info`` string.
 
 Since the regular ``pytest`` ``request`` fixture is also exposed by the hook, users
 can further modify the test properties based based on node, markers, or other fixtures.
+
+If the ``--max_vtksz_file_size`` option is used, these tests may similarly be customized
+with a ``pytest_pyvista_max_vtksz_file_size_hook``. For example, to set the max
+allowed file size to ``50`` for the ``foo.vtksz`` file:
+
+.. code-block:: python
+
+    def pytest_pyvista_max_vtksz_file_size_hook(test_case, request)
+        if test_case.test_name == 'foo':
+            test_case.max_vtksz_file_size = 50
+        return test_case
 
 Configuration
 -------------

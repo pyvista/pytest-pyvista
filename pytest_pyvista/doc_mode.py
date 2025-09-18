@@ -436,7 +436,7 @@ def doc_verify_image_cache(request: pytest.FixtureRequest) -> _DocVerifyImageCac
 def max_vtksz_file_size(request: pytest.FixtureRequest) -> _VtkszFileSizeTestCase:
     """Fixture to allow users to mutate test cases before they run."""
     test_case: _VtkszFileSizeTestCase = request.node.callspec.params[TEST_CASE_NAME_VTKSZ_FILE_SIZE]
-    request.config.hook.pytest_pyvista_max_vtksz_file_size(test_case=test_case, request=request)
+    request.config.hook.pytest_pyvista_max_vtksz_file_size_hook(test_case=test_case, request=request)
     return test_case
 
 
