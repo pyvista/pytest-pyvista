@@ -851,7 +851,7 @@ def pytest_configure(config: pytest.Config) -> None:
     disallow_unused_cache = config.getoption("disallow_unused_cache")
     if is_master and disallow_unused_cache:
         # create a image names directory for individual or multiple workers to write to
-        _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=False)
+        _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=True)
 
     if doc_mode:
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
@@ -863,8 +863,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
         if is_master:
             # clear cached test files
-            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=False)
-            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=False)
+            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=True)
+            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=True)
 
             # Determine how many processes to use for preprocessing
             num_workers = _get_num_workers_from_config(config)
