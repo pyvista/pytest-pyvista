@@ -997,8 +997,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
     for dirname in [PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME]:
-        path = _make_config_cache_dir(config, dirname)
-        shutil.rmtree(path)
+        _make_config_cache_dir(config, dirname, clean=True)
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
