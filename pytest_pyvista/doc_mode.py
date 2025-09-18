@@ -7,6 +7,7 @@ import logging
 import multiprocessing
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 from typing import Literal
 from typing import cast
@@ -40,7 +41,7 @@ TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
 logger = logging.getLogger("html_render")
-logging.basicConfig(level=logging.INFO, format="%(process)d: %(message)s")
+logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(process)d: %(message)s")
 
 multiprocessing.set_start_method("spawn", force=True)
 
