@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import partial
+import logging
 import multiprocessing
 from pathlib import Path
 import shutil
@@ -38,6 +39,9 @@ MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
+logger = logging.getLogger("html_render")
+logging.basicConfig(level=logging.INFO, format="%(process)d: %(message)s")
+
 
 class _VtkszFileSizeTestCase:
     _max_vtksz_file_size: int | None
@@ -61,7 +65,6 @@ class _DocVerifyImageCache:
     doc_generate_subdirs: bool
     doc_image_format: _AllowedImageFormats
     include_vtksz: bool
-    _test_paths_json: Path
 
     @classmethod
     def init_from_config(cls, config: pytest.Config) -> None:
@@ -223,11 +226,15 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
-def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path]:
+def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path, *, log: bool = True) -> list[Path]:
     from trame_vtk.tools.vtksz2html import embed_data_to_viewer_file  # noqa: PLC0415
 
     output_paths: list[Path] = []
     for path in vtksz_files:
+        if log:
+            msg = f"[VTKSZ → HTML] Converting {path.name}"
+            logger.info(msg)
+
         with path.open("rb") as file:
             data = file.read()
         output_path = Path(output_dir) / f"{path.stem}.html"
@@ -236,27 +243,31 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
     return output_paths
 
 
-def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
+def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = True) -> list[Path]:
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
     output_paths: list[Path] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
+        context = browser.new_context(viewport={"width": 800, "height": 600})
         page = context.new_page()
 
         for html_file in html_files:
+            if log:
+                msg = f"[HTML -> PNG] Rendering {html_file.name}"
+                logger.info(msg)
+
             output_path = output_dir / f"{html_file.stem}.png"
             page.goto(f"file://{html_file}")
             page.screenshot(path=output_path)
             output_paths.append(output_path)
-        browser.close()
 
+        browser.close()
     return output_paths
 
 
-def _process_html_screenshots(batch: list[Path], output_dir: Path) -> list[Path]:
-    return _html_screenshots(batch, output_dir)
+def _process_html_screenshots(batch: list[Path], output_dir: Path, log: bool = True) -> list[Path]:
+    return _html_screenshots(batch, output_dir, log=log)
 
 
 def _render_all_html(
@@ -264,13 +275,19 @@ def _render_all_html(
     output_dir: Path,
     *,
     num_workers: int = 1,
+    log: bool = True,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
     # Split into N roughly equal batches
     batches = [html_files[i::num_workers] for i in range(num_workers)]
 
+    # Pass log flag to child processes
     with multiprocessing.Pool(processes=num_workers) as pool:
-        results_nested = pool.starmap(_process_html_screenshots, [(batch, output_dir) for batch in batches])
+        results_nested = pool.starmap(
+            _process_html_screenshots,
+            [(batch, output_dir, log) for batch in batches],
+        )
+
     # Flatten list of lists
     return [p for sublist in results_nested for p in sublist]
 
