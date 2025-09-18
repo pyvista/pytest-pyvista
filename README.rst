@@ -366,7 +366,7 @@ These are the flags you can use when calling ``pytest`` in the command line:
   All ``vtksz`` files inside the ``doc_images_dir`` are collected and compared to the
   specified value. The value should be specified in megabytes (MB). ``20`` is a good
   initial value to set. The value can be customized on a per-test (i.e. per-file) basis,
-  see ``Customizing test cases`` for details. Setting this value override any configuration,
+  see ``Customizing test cases`` for details. Setting this value overrides any configuration,
   see below.
 
   .. note::
