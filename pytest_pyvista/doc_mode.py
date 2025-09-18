@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 import multiprocessing
 from pathlib import Path
 import shutil
@@ -17,13 +18,17 @@ import pyvista as pv
 
 from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
 from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
+from .pytest_pyvista import PYVISTA_FAILED_IMAGE_CACHE_DIRNAME
+from .pytest_pyvista import PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME
 from .pytest_pyvista import _AllowedImageFormats
 from .pytest_pyvista import _check_compare_fail
 from .pytest_pyvista import _EnvInfo
 from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_generated_image_path
 from .pytest_pyvista import _get_option_from_config_or_ini
+from .pytest_pyvista import _is_master
 from .pytest_pyvista import _make_config_cache_dir
+from .pytest_pyvista import _paths_from_strings
 from .pytest_pyvista import _test_compare_images
 from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
@@ -56,7 +61,7 @@ class _DocVerifyImageCache:
     doc_generate_subdirs: bool
     doc_image_format: _AllowedImageFormats
     include_vtksz: bool
-    _test_cases: list[_DocVerifyImageCache]
+    _test_paths_json: Path
 
     @classmethod
     def init_from_config(cls, config: pytest.Config) -> None:
@@ -71,18 +76,19 @@ class _DocVerifyImageCache:
                 raise ValueError(msg)
             return path
 
-        def optional_dir_with_temp(option: str, prefix: str) -> Path:
+        def optional_dir_else_cache(option: str, dirname: str) -> Path:
             """Fetch an optional directory option or create a TemporaryDirectory if missing."""
             path = _get_option_from_config_or_ini(config, option, is_dir=True)
             if path is None:
-                return _make_config_cache_dir(config, prefix)
+                # Save to cache
+                return _make_config_cache_dir(config, dirname)
             return path
 
         cls.doc_images_dir = require_existing_dir("doc_images_dir")
         cls.doc_image_cache_dir = require_existing_dir("doc_image_cache_dir")
 
-        cls.doc_generated_image_dir = optional_dir_with_temp("doc_generated_image_dir", prefix="pytest_doc_generated_image_dir")
-        cls.doc_failed_image_dir = optional_dir_with_temp("doc_failed_image_dir", prefix="pytest_doc_failed_image_dir")
+        cls.doc_generated_image_dir = optional_dir_else_cache("doc_generated_image_dir", dirname=PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
+        cls.doc_failed_image_dir = optional_dir_else_cache("doc_failed_image_dir", dirname=PYVISTA_FAILED_IMAGE_CACHE_DIRNAME)
 
         cls.doc_image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
         cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
@@ -101,6 +107,30 @@ class _DocVerifyImageCache:
 
 def _flatten_path(path: Path) -> Path:
     return Path("_".join(path.parts))
+
+
+def _preprocess_all_images_for_test_cases(num_workers: int = 1) -> tuple[list[Path], list[Path], list[Path], list[Path]]:  # process test images
+    pp = partial(
+        _preprocess_build_images,
+        _DocVerifyImageCache.doc_images_dir,
+        _DocVerifyImageCache.doc_generated_image_dir,
+        image_format=_DocVerifyImageCache.doc_image_format,
+        generate_subdirs=_DocVerifyImageCache.doc_generate_subdirs,
+        return_input_paths=True,
+        num_workers=num_workers,
+    )
+    # preprocess png, jpg, gif images
+    input_paths: list[Path]
+    test_image_paths: list[Path]
+    input_paths, test_image_paths = pp(vtksz=False)  # type:ignore[assignment]
+
+    vtksz_input_paths: list[Path] = []
+    vtksz_test_image_paths: list[Path] = []
+    if _DocVerifyImageCache.include_vtksz:
+        # preprocess interactive vtksz files
+        vtksz_input_paths, vtksz_test_image_paths = pp(vtksz=True)  # type:ignore[assignment]
+
+    return input_paths, test_image_paths, vtksz_input_paths, vtksz_test_image_paths
 
 
 @overload
@@ -245,7 +275,7 @@ def _render_all_html(
     return [p for sublist in results_nested for p in sublist]
 
 
-def _generate_test_cases(*, vtksz: bool = False, num_workers: int = 1) -> list[_DocVerifyImageCache]:  # noqa: C901
+def _generate_test_cases(input_paths: list[Path], test_image_paths: list[Path], *, vtksz: bool = False) -> list[_DocVerifyImageCache]:  # noqa: C901
     """
     Generate a list of image test cases.
 
@@ -255,6 +285,8 @@ def _generate_test_cases(*, vtksz: bool = False, num_workers: int = 1) -> list[_
         (3) Merges the two lists together and returns separate test cases to
             comparing all docs images to all cached images
     """
+    if not input_paths and not test_image_paths:
+        return []
     test_cases_dict: dict = {}
 
     def add_to_dict(filepath: Path, key: str, input_path: Path | None = None) -> None:
@@ -272,19 +304,8 @@ def _generate_test_cases(*, vtksz: bool = False, num_workers: int = 1) -> list[_
         if input_path:
             test_cases_dict[test_name]["input_path"] = input_path
 
-    # process test images
-    generate_subdirs = _DocVerifyImageCache.doc_generate_subdirs
-    input_paths, test_image_paths = _preprocess_build_images(
-        _DocVerifyImageCache.doc_images_dir,
-        _DocVerifyImageCache.doc_generated_image_dir,
-        image_format=_DocVerifyImageCache.doc_image_format,
-        generate_subdirs=generate_subdirs,
-        vtksz=vtksz,
-        return_input_paths=True,
-        num_workers=num_workers,
-    )
     for input_path, test_path in zip(input_paths, test_image_paths):
-        add_to_dict(test_path.parent if generate_subdirs else test_path, "docs", input_path=input_path)  # type: ignore[func-returns-value]
+        add_to_dict(test_path.parent if _DocVerifyImageCache.doc_generate_subdirs else test_path, "docs", input_path=input_path)  # type: ignore[func-returns-value]
 
     # process cached images
     cache_dir = _DocVerifyImageCache.doc_image_cache_dir
@@ -323,25 +344,24 @@ def _generate_test_cases(*, vtksz: bool = False, num_workers: int = 1) -> list[_
     return test_cases_list
 
 
-def _preprocess_image_test_cases(num_workers: int = 1) -> list[_DocVerifyImageCache]:
-    """Generate a separate test case for each image to be tested."""
-    test_cases = _generate_test_cases(num_workers=num_workers)  # cases for png, jpg, gif images
-
-    if _DocVerifyImageCache.include_vtksz:
-        test_cases.extend(_generate_test_cases(vtksz=True, num_workers=num_workers))  # cases for interactive vtksz files
-
-    return test_cases
-
-
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate parametrized tests."""
     if TEST_CASE_NAME in metafunc.fixturenames:
-        if hasattr(_DocVerifyImageCache, "_test_cases"):
-            test_cases = _DocVerifyImageCache._test_cases  # noqa: SLF001
-            ids = [case.test_name for case in test_cases]
-            metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
-        else:
-            metafunc.parametrize(TEST_CASE_NAME, [])
+        # Get paths that were generated by master
+        paths = metafunc.config.paths if _is_master(metafunc.config) else metafunc.config.workerinput["paths"]
+
+        input_paths = _paths_from_strings(paths["input_paths"])
+        test_image_paths = _paths_from_strings(paths["test_image_paths"])
+        vtksz_input_paths = _paths_from_strings(paths["vtksz_input_paths"])
+        vtksz_test_image_paths = _paths_from_strings(paths["vtksz_test_image_paths"])
+
+        test_cases: list[_DocVerifyImageCache] = _generate_test_cases(input_paths, test_image_paths)
+        if _DocVerifyImageCache.include_vtksz:
+            test_cases_vtksz: list[_DocVerifyImageCache] = _generate_test_cases(vtksz_input_paths, vtksz_test_image_paths, vtksz=True)
+            test_cases.extend(test_cases_vtksz)
+
+        ids = [case.test_name for case in test_cases]
+        metafunc.parametrize(TEST_CASE_NAME, test_cases, ids=ids)
 
     if TEST_CASE_NAME_VTKSZ_FILE_SIZE in metafunc.fixturenames:
         if (max_vtksz_file_size := _VtkszFileSizeTestCase._max_vtksz_file_size) is None:  # noqa: SLF001

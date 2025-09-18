@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import contextlib
 from dataclasses import dataclass
 from functools import cached_property
 import importlib
@@ -11,7 +9,6 @@ import io
 import json
 import os
 from pathlib import Path
-import pickle
 import platform
 import re
 import shutil
@@ -38,10 +35,13 @@ from pytest_pyvista import hooks
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
+    import xdist.workermanage
+
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
-PYVISTA_DOC_MODE_CACHE_DIRNAME = "pyvista_doc_mode_dir"
+PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME = "pyvista_generated_image_dir"
+PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
 
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
@@ -607,7 +607,7 @@ def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_
     name = name.with_stem(name.stem + "_vtksz") if vtksz else name
     generated_image_path = parent / name.with_suffix("") / f"{env_info}{name.suffix}" if generate_subdirs else parent / name
     generated_image_path.parent.mkdir(exist_ok=True, parents=True)
-    return generated_image_path
+    return generated_image_path.resolve()
 
 
 def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
@@ -806,21 +806,16 @@ def __validate_image_cache_dir(cache_dir: Path, image_format: _AllowedImageForma
         raise InvalidCacheError(msg)
 
 
-def _make_config_cache_dir(config: pytest.Config, dirname: str) -> Path:
-    def _clean_dir(path: Path) -> None:
-        """Remove files and directories inside `path`."""
-        with contextlib.suppress(OSError):
-            for item in path.iterdir():
-                if item.is_dir():
-                    shutil.rmtree(item)  # remove entire directory tree
-                else:
-                    item.unlink()  # remove file
-
+def _make_config_cache_dir(config: pytest.Config, dirname: str, *, clean: bool = False) -> Path:
     newdir = Path(config.cache.makedir(dirname))
-    newdir.mkdir(exist_ok=True)
+    if clean:
+        # only clear the contents, not the directory itself
+        for item in newdir.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
     setattr(config, dirname, newdir)
-    # ensure this directory is empty as it might be left over from a previous test
-    _clean_dir(newdir)
     return newdir
 
 
@@ -836,42 +831,65 @@ def _get_num_workers_from_config(config: pytest.Config) -> int:
         return 1
 
 
+def _is_master(config: pytest.Config) -> bool:
+    """Return True if running in a xdist master node or not running xdist at all."""
+    return not hasattr(config, "workerinput")
+
+
+def _strings_from_paths(paths: list[Path]) -> list[str]:
+    return [str(p) for p in paths]
+
+
+def _paths_from_strings(strings: list[str]) -> list[Path]:
+    return [Path(s) for s in strings]
+
+
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
-    if config.getoption("doc_mode"):
+    is_master = _is_master(config)
+    doc_mode = config.getoption("doc_mode")
+    disallow_unused_cache = config.getoption("disallow_unused_cache")
+    if is_master and disallow_unused_cache:
+        # create a image names directory for individual or multiple workers to write to
+        _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=True)
+
+    if doc_mode:
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
-        from pytest_pyvista.doc_mode import _preprocess_image_test_cases  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _preprocess_all_images_for_test_cases  # noqa: PLC0415
         from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase  # noqa: PLC0415
 
         _VtkszFileSizeTestCase.init_from_config(config)
-
         _DocVerifyImageCache.init_from_config(config)
-        _DocVerifyImageCache._test_cases = _preprocess_image_test_cases()  # noqa: SLF001
 
-        key = "abc"
-        if not hasattr(config, "workerinput"):
-            # We're inside the master worker.
-            # Preprocess the images here before any parallel workers are spawned.
-            # Preprocessing uses `multiprocessing`, which we use instead of the xdist workers
+        if is_master:
+            # clear cached test files
+            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=True)
+            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=True)
+
+            # Determine how many processes to use for preprocessing
             num_workers = _get_num_workers_from_config(config)
-            test_cases = _preprocess_image_test_cases(num_workers=num_workers)
-            _DocVerifyImageCache._test_cases = test_cases  # noqa: SLF001
 
-            # Serialize test cases to be retrieved by the workers
-            serialized = base64.b64encode(pickle.dumps(test_cases)).decode("ascii")
-            config.cache.set(key, serialized)
-        else:
-            serialized = config.cache.get(key, None)
-            if serialized is None:
-                msg = "Preprocessed test cases not found in pytest cache"
-                raise RuntimeError(msg)
-            test_cases = pickle.loads(base64.b64decode(serialized.encode("ascii")))  # noqa: S301
-            _DocVerifyImageCache._test_cases = test_cases  # noqa: SLF001
+            # Run preprocessing once in the master
+            (
+                input_paths,
+                test_image_paths,
+                vtksz_input_paths,
+                vtksz_test_image_paths,
+            ) = _preprocess_all_images_for_test_cases(num_workers=num_workers)
 
-    # create a image names directory for individual or multiple workers to write to
-    if config.getoption("disallow_unused_cache"):
-        _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME)
+            # Also store in config for xdist workers
+            config.paths = {
+                "input_paths": _strings_from_paths(input_paths),
+                "test_image_paths": _strings_from_paths(test_image_paths),
+                "vtksz_input_paths": _strings_from_paths(vtksz_input_paths),
+                "vtksz_test_image_paths": _strings_from_paths(vtksz_test_image_paths),
+            }
+
+
+def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
+    """Modify each xdist worker."""
+    node.workerinput["paths"] = node.config.paths
 
 
 @pytest.fixture
@@ -978,8 +996,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
-    _make_config_cache_dir(config, PYVISTA_DOC_MODE_CACHE_DIRNAME)
-    _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME)
+    for dirname in [PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME]:
+        path = _make_config_cache_dir(config, dirname)
+        shutil.rmtree(path)
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
