@@ -14,7 +14,6 @@ import platform
 import re
 import shutil
 import sys
-import time
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
@@ -844,17 +843,6 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
     return [Path(s) for s in strings]
 
 
-def _wait_for_paths(paths: list[Path], *, timeout: float = 60.0, poll: float = 0.1) -> None:
-    # Wait for all files to render
-    start = time.time()
-    while not all(p.exists() for p in paths):
-        time.sleep(poll)
-
-        if time.time() - start > timeout:
-            msg = "Timeout waiting for files. Missing: %s", [str(p) for p in paths if not p.exists()]
-            raise RuntimeError(msg)
-
-
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
@@ -888,9 +876,6 @@ def pytest_configure(config: pytest.Config) -> None:
                 vtksz_input_paths,
                 vtksz_test_image_paths,
             ) = _preprocess_all_images_for_test_cases(num_workers=num_workers)
-
-            paths = [*input_paths, *test_image_paths, *vtksz_input_paths, *vtksz_test_image_paths]
-            _wait_for_paths(paths)
 
             # Store in config for xdist workers
             config.paths = {
