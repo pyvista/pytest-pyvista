@@ -493,6 +493,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     expected_file = Path(failed) / "errors" / "from_build" / expected_relpath
     assert expected_file.is_file()
 
+
 @pytest.mark.skipif(pv.vtk_version_info < (9, 2), reason="Seg fault")
 def test_vtksz_screenshot(tmp_path) -> None:
     """Test converting vtksz file to image screenshot."""
@@ -507,6 +508,7 @@ def test_vtksz_screenshot(tmp_path) -> None:
     small_error = 30
     actual_error = pv.compare_images(str(expected_screenshot), str(png_file))
     assert actual_error < small_error
+
 
 @pytest.mark.skipif(pv.vtk_version_info < (9, 2), reason="Seg fault")
 @pytest.mark.parametrize("include_vtksz", [True, False])
