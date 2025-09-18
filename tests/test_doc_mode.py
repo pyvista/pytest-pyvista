@@ -508,7 +508,7 @@ def test_vtksz_screenshot(tmp_path) -> None:
     actual_error = pv.compare_images(str(expected_screenshot), str(png_file))
     assert actual_error < small_error
 
-
+@pytest.mark.skipif(pv.vtk_version_info < (9, 2), reason="Seg fault")
 @pytest.mark.parametrize("include_vtksz", [True, False])
 def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     """Test that test images are generated from interactive plot files."""
