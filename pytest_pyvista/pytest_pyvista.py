@@ -850,7 +850,7 @@ def pytest_configure(config: pytest.Config) -> None:
     is_master = _is_master(config)
     doc_mode = config.getoption("doc_mode")
     disallow_unused_cache = config.getoption("disallow_unused_cache")
-    if is_master and disallow_unused_cache:
+    if disallow_unused_cache:
         # create a image names directory for individual or multiple workers to write to
         _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=True)
 
