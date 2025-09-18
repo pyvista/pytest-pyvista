@@ -251,7 +251,7 @@ def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = T
     output_paths: list[Path] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 800, "height": 600})
+        context = browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
         page = context.new_page()
 
         for html_file in html_files:
