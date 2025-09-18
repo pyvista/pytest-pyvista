@@ -40,8 +40,8 @@ MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
-logger = logging.getLogger("html_render")
-logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(process)d: %(message)s")
+logger = logging.getLogger("pytest-pyvista")
+logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="[pytest-pyvista] %(message)s")
 
 multiprocessing.set_start_method("spawn", force=True)
 
@@ -235,7 +235,7 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path, *, log: bool
     output_paths: list[Path] = []
     for path in vtksz_files:
         if log:
-            msg = f"[VTKSZ → HTML] Converting {path.name}"
+            msg = f"Converting {path.name}"
             logger.info(msg)
 
         with path.open("rb") as file:
@@ -257,7 +257,7 @@ def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = T
 
         for html_file in html_files:
             if log:
-                msg = f"[HTML -> PNG] Rendering {html_file.name}"
+                msg = f"Rendering {html_file.name}"
                 logger.info(msg)
 
             output_path = output_dir / f"{html_file.stem}.png"
@@ -281,6 +281,8 @@ def _render_all_html(
     log: bool = True,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
+    if num_workers == 1:
+        return _process_html_screenshots(html_files, output_dir, log)
 
     def _split_batches(files: list[Path], n: int) -> list[list[Path]]:
         """Split a list of files into n roughly equal contiguous batches."""
