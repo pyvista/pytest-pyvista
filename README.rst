@@ -409,7 +409,7 @@ allowed file size to ``50`` for the ``foo.vtksz`` file:
 
 .. code-block:: python
 
-    def pytest_pyvista_max_vtksz_file_size_hook(test_case, request)
+    def pytest_pyvista_max_vtksz_file_size_hook(test_case, request):
         if test_case.test_name == 'foo':
             test_case.max_vtksz_file_size = 50
         return test_case
