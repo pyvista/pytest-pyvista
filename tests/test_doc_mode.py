@@ -493,7 +493,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     expected_file = Path(failed) / "errors" / "from_build" / expected_relpath
     assert expected_file.is_file()
 
-
+@pytest.mark.skipif(pv.vtk_version_info < (9, 2), reason="Seg fault")
 def test_vtksz_screenshot(tmp_path) -> None:
     """Test converting vtksz file to image screenshot."""
     name = "im.vtksz"
