@@ -79,7 +79,7 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
 @pytest.mark.parametrize("failed_image_dir", [True, False])
 @pytest.mark.parametrize("generate_subdirs", [True, False])
 @pytest.mark.parametrize("missing_is_empty_dir", [True, False])
-@pytest.mark.parametrize("missing", ["build"])
+@pytest.mark.parametrize("missing", ["build", "cache"])
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
 def test_both_images_exist(  # noqa: PLR0913
     *,

@@ -808,6 +808,7 @@ def __validate_image_cache_dir(cache_dir: Path, image_format: _AllowedImageForma
 
 def _make_config_cache_dir(config: pytest.Config, dirname: str, *, clean: bool = False) -> Path:
     newdir = Path(config.cache.makedir(dirname))
+    newdir.mkdir(exist_ok=True)
     if clean:
         # only clear the contents, not the directory itself
         for item in newdir.iterdir():
