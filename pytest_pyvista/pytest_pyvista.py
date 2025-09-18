@@ -536,10 +536,7 @@ class VerifyImageCache:
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
         generated_image_path = _get_generated_image_path(
-            parent=parent,
-            image_name=image_name,
-            generate_subdirs=self.generate_subdirs,
-            env_info=self.env_info,
+            parent=parent, image_name=image_name, generate_subdirs=self.generate_subdirs, env_info=self.env_info
         )
         plotter.screenshot(generated_image_path)
 
@@ -862,7 +859,7 @@ def pytest_configure(config: pytest.Config) -> None:
         _DocVerifyImageCache.init_from_config(config)
 
         if is_master:
-            # clear cached test files
+            # Clear any cached test files
             _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=True)
             _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=True)
 
