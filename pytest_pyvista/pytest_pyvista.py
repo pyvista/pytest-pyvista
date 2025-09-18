@@ -810,12 +810,8 @@ def _make_config_cache_dir(config: pytest.Config, dirname: str, *, clean: bool =
     newdir = Path(config.cache.makedir(dirname))
     newdir.mkdir(exist_ok=True)
     if clean:
-        # only clear the contents, not the directory itself
         for item in newdir.iterdir():
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
+            item.unlink()
     setattr(config, dirname, newdir)
     return newdir
 
