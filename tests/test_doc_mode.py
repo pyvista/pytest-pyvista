@@ -558,6 +558,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     assert expected_file.is_file()
 
 
+@pytest.mark.skipif(pv.vtk_version_info < (9, 2), reason="Seg fault")
 @pytest.mark.parametrize("max_size", [1, None, "custom"])
 def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) -> None:
     """Test --max_vtksz_file_size option."""
