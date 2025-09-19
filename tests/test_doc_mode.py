@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.doc_mode import DEFAULT_IMAGE_HEIGHT
+from pytest_pyvista.doc_mode import DEFAULT_IMAGE_WIDTH
+from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _preprocess_build_images
+from pytest_pyvista.doc_mode import _vtksz_to_html_files
+from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
@@ -313,33 +319,44 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines(match)
 
 
-def test_multiple_cache_images_parallel(pytester: pytest.Pytester) -> None:
+@pytest.mark.parametrize("include_vtksz", [True, False])
+def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz) -> None:
     """Ensure that doc_mode works with multiple workers."""
     cache = "cache"
     images = "images"
 
     n_images = 50
-    make_multiple_cached_images(pytester.path, cache, n_images=n_images)
-    image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images)
+    name_cache = "imcache{index}_vtksz.png" if include_vtksz else "imcache{index}.png"
+    make_multiple_cached_images(pytester.path, cache, n_images=n_images, name=name_cache)
+    name_build = "imcache{index}.vtksz" if include_vtksz else "imcache{index}.png"
+    image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images, name=name_build)
 
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2")
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2"]
+    if include_vtksz:
+        args.append("--include_vtksz")
+    result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
     # replace a single image with a different image
     img_idx = 34
-    pv.Cube().plot(screenshot=image_filenames[img_idx])
+    pl = pv.Plotter()
+    pl.add_mesh(pv.Cube())
+    if include_vtksz:
+        pl.export_vtksz(image_filenames[img_idx])
+    else:
+        pl.screenshot(image_filenames[img_idx])
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2")
+    result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
-
-    assert f"imcache{img_idx} Exceeded image regression error" in str(result.stdout)
+    failed_test_name = f"imcache{img_idx}{'_vtksz' if include_vtksz else ''}"
+    assert f"{failed_test_name} Exceeded image regression error" in str(result.stdout)
 
 
 @pytest.mark.parametrize("cli", [True, False])
 @pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) -> None:
+def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) -> None:  # noqa: PLR0915
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     cache_ini = cache + "ini"
@@ -370,6 +387,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     failed_ini = failed + "ini"
     failed_cli = failed + "cli"
 
+    max_size_cli = 10
+    max_size_ini = 20
+
     pytester.makeini(
         f"""
         [pytest]
@@ -379,6 +399,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
         doc_image_cache_dir = {cache_ini}
         doc_images_dir = {images_ini}
         doc_generate_subdirs = {generate_subdirs}
+        max_vtksz_file_size = {max_size_ini}
         """
     )
 
@@ -396,6 +417,8 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
                 generated_cli,
                 "--doc_image_format",
                 image_format_cli,
+                "--max_vtksz_file_size",
+                max_size_cli,
             ]
         )
         if generate_subdirs:
@@ -424,6 +447,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)
 
+    expected_max_size = max_size_cli if cli else max_size_ini
+    assert _VtkszFileSizeTestCase._max_vtksz_file_size == expected_max_size  # noqa: SLF001
+
 
 def test_customizing_tests(pytester: pytest.Pytester) -> None:
     """Test that individual test cases can be customized."""
@@ -437,7 +463,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     custom_string = "custom_string"
     pytester.makeconftest(
         f"""
-        def pytest_pyvista_doc_mode_hook(doc_verify_image_cache, request) -> None:
+        def pytest_pyvista_doc_mode_hook(doc_verify_image_cache, request):
             if doc_verify_image_cache.test_name == {Path(name).stem!r}:
                 doc_verify_image_cache.env_info = {custom_string!r}
             return doc_verify_image_cache
@@ -445,7 +471,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     )
     generated = "generated"
     failed = "failed"
-    pytester.runpytest(
+    result = pytester.runpytest(
         "--doc_mode",
         "--doc_images_dir",
         images,
@@ -457,6 +483,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
         failed,
         "--doc_generate_subdirs",
     )
+    result.assert_outcomes(failed=1)
 
     expected_relpath = Path(Path(name).stem) / f"{custom_string}{Path(name).suffix}"
     assert Path(generated).is_dir()
@@ -466,3 +493,126 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     assert Path(failed).is_dir()
     expected_file = Path(failed) / "errors" / "from_build" / expected_relpath
     assert expected_file.is_file()
+
+
+def test_vtksz_screenshot(tmp_path) -> None:
+    """Test converting vtksz file to image screenshot."""
+    name = "im.vtksz"
+    vtksz_file = make_cached_images(tmp_path, name=name)
+    html_files = _vtksz_to_html_files([vtksz_file], tmp_path)
+    png_files = _html_screenshots(html_files, tmp_path)
+    png_file = png_files[0]
+    assert png_file.suffix == ".png"
+
+    expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT))
+    small_error = 30
+    actual_error = pv.compare_images(str(expected_screenshot), str(png_file))
+    assert actual_error < small_error
+
+
+@pytest.mark.parametrize("include_vtksz", [True, False])
+def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
+    """Test that test images are generated from interactive plot files."""
+    # Capture logs for testing since logger output is not captured by pytester
+    captured_logs = []
+
+    class ListHandler(logging.Handler):
+        def emit(self, record):  # noqa: ANN202
+            captured_logs.append(record.getMessage())
+
+    handler = ListHandler()
+    logger = logging.getLogger("pytest-pyvista")
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    stem = "im"
+    name_vtksz = f"{stem}.vtksz"
+    name_generated = stem + "_vtksz.png"
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue")
+    make_cached_images(pytester.path, path=cache, name=name_generated, color="red")
+    _preprocess_build_images(Path(cache), Path(cache))
+
+    generated = "generated"
+    failed = "failed"
+    args = [
+        "--doc_mode",
+        "--doc_images_dir",
+        images,
+        "--doc_image_cache_dir",
+        cache,
+        "--doc_generated_image_dir",
+        generated,
+        "--doc_failed_image_dir",
+        failed,
+        "-v",
+    ]
+    if include_vtksz:
+        args.append("--include_vtksz")
+    result = pytester.runpytest(*args)
+
+    expected_logs = [f"Converting {name_vtksz}", f"Rendering {stem}.html"]
+    if not include_vtksz:
+        result.assert_outcomes(failed=1)
+        result.stdout.fnmatch_lines("E           Failed: Test setup failed for test image:")
+        result.stdout.fnmatch_lines(f"E           	{Path(name_generated).stem}")
+        result.stdout.fnmatch_lines("E           The image exists in the cache directory:")
+        result.stdout.fnmatch_lines(f"E           	*cache/{name_generated}")
+        result.stdout.fnmatch_lines("E           but is missing from the docs build directory:")
+        assert captured_logs == []
+        return
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
+    assert captured_logs == expected_logs
+
+    assert Path(generated).is_dir()
+    expected_file = Path(generated) / name_generated
+    assert expected_file.is_file()
+
+    assert Path(failed).is_dir()
+    expected_file = Path(failed) / "errors" / "from_build" / name_generated
+    assert expected_file.is_file()
+
+
+@pytest.mark.parametrize("max_size", [1, None, "custom"])
+def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) -> None:
+    """Test --max_vtksz_file_size option."""
+    name_vtksz = "im.vtksz"
+    cache = "cache"
+    Path(cache).mkdir()
+    images = "images"
+    complex_mesh = pv.Sphere(theta_resolution=100, phi_resolution=1000)
+    make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue", mesh=complex_mesh)
+
+    args = [
+        "--doc_mode",
+        "--doc_images_dir",
+        images,
+        "--doc_image_cache_dir",
+        cache,
+        "-v",
+    ]
+    if max_size == "custom":
+        max_size = 2
+        pytester.makeconftest(
+            f"""
+            def pytest_pyvista_max_vtksz_file_size_hook(test_case, request):
+                if test_case.test_name == {Path(name_vtksz).stem!r}:
+                    test_case.max_vtksz_file_size = {max_size}
+                return test_case
+        """
+        )
+    if max_size:
+        args.extend(["--max_vtksz_file_size", max_size])
+    result = pytester.runpytest(*args)
+    if max_size is None:
+        result.assert_outcomes(skipped=0, passed=0, failed=0)
+        return
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines("E           Failed: The interactive plot file is too large:")
+    result.stdout.fnmatch_lines(f"E           	*images/{name_vtksz}")
+    result.stdout.fnmatch_lines(f"E           Its size is 2.4 MB, but must be less than {max_size} MB.")
+    result.stdout.fnmatch_lines("E           Consider reducing the complexity of the plot or forcing it to be static.")
