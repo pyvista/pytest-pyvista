@@ -17,6 +17,7 @@ import sys
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Literal
+from typing import Union
 from typing import cast
 from typing import get_args
 from typing import overload
@@ -35,13 +36,19 @@ from pytest_pyvista import hooks
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
+    import xdist.workermanage
+
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
+PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
+PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME = "pyvista_generated_image_dir"
+PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
 
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
 
-_ImageFormats = Literal["png", "jpg"]
+_AllowedImageFormats = Literal["png", "jpg"]
+_OriginalImageFormats = Union[_AllowedImageFormats, Literal["gif", "vtksz"]]
 
 
 @dataclass
@@ -214,6 +221,29 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="Path to the documentation images.",
     )
+    group.addoption(
+        "--include_vtksz",
+        action="store_true",
+        help="Include tests for interactive images with the .vtksz file format.",
+    )
+    parser.addini(
+        "include_vtksz",
+        type="bool",
+        default=False,
+        help="Include tests for interactive images with the .vtksz file format.",
+    )
+    group.addoption(
+        "--max_vtksz_file_size",
+        action="store",
+        default=None,
+        help="Maximum size allowed for vtksz interactive plot files.",
+    )
+    parser.addini(
+        "max_vtksz_file_size",
+        default=None,
+        type="int",
+        help="Maximum size allowed for vtksz interactive plot files.",
+    )
     _add_common_pytest_options(parser, doc=True)
 
 
@@ -266,7 +296,7 @@ def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: A
     group.addoption(
         f"--{prefix}image_format",
         action="store",
-        choices=get_args(_ImageFormats),
+        choices=get_args(_AllowedImageFormats),
         default=None,
         help="Image format to use when generating test images.",
     )
@@ -340,7 +370,7 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
     generate_subdirs: bool = False
-    image_format: _ImageFormats
+    image_format: _AllowedImageFormats
 
     def __init__(  # noqa: PLR0913
         self,
@@ -570,11 +600,12 @@ def _test_name_from_image_name(image_name: str) -> str:
     return "test_" + remove_suffix(image_name)
 
 
-def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo) -> Path:
+def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo, vtksz: bool = False) -> Path:
     name = Path(image_name)
+    name = name.with_stem(name.stem + "_vtksz") if vtksz else name
     generated_image_path = parent / name.with_suffix("") / f"{env_info}{name.suffix}" if generate_subdirs else parent / name
     generated_image_path.parent.mkdir(exist_ok=True, parents=True)
-    return generated_image_path
+    return generated_image_path.resolve()
 
 
 def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
@@ -642,7 +673,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         cache_path = Path(cast("Path", value))
         cached_image_names = {f.name for f in cache_path.glob(f"*.{VerifyImageCache.image_format}")}
 
-        image_names_dir = getattr(config, "image_names_dir", None)
+        image_names_dir = getattr(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, None)
         if image_names_dir:
             visited_cached_image_names = _combine_temp_jsons(image_names_dir, "visited")
             skipped_cached_image_names = _combine_temp_jsons(image_names_dir, "skipped")
@@ -742,12 +773,12 @@ def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
         image_format = _DocVerifyImageCache.doc_image_format
     else:
         image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
-        image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+        image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
     __validate_image_cache_dir(image_cache_dir, image_format)
 
 
-def __validate_image_cache_dir(cache_dir: Path, image_format: _ImageFormats) -> None:
-    def check_image_format(format_to_check: _ImageFormats) -> None:
+def __validate_image_cache_dir(cache_dir: Path, image_format: _AllowedImageFormats) -> None:
+    def check_image_format(format_to_check: _AllowedImageFormats) -> None:
         image_paths = [str(p.relative_to(cache_dir)) for p in _get_file_paths(cache_dir, ext=format_to_check)]
         if image_paths and image_format != format_to_check:
             msg = (
@@ -773,23 +804,89 @@ def __validate_image_cache_dir(cache_dir: Path, image_format: _ImageFormats) -> 
         raise InvalidCacheError(msg)
 
 
+def _make_config_cache_dir(config: pytest.Config, dirname: str, *, clean: bool = False) -> Path:
+    newdir = Path(config.cache.makedir(dirname))
+    newdir.mkdir(exist_ok=True)
+    if clean:
+        with contextlib.suppress(OSError):
+            for item in newdir.iterdir():
+                item.unlink()
+    setattr(config, dirname, newdir)
+    return newdir
+
+
+def _get_num_workers_from_config(config: pytest.Config) -> int:
+    """Return number of xdist workers, or 1 if xdist is not installed or not used."""
+    try:
+        num = config.getoption("numprocesses")  # -n
+        if num is None:
+            return 1
+        return int(num)
+    except (AttributeError, ValueError):
+        # option doesn't exist → xdist not installed
+        return 1
+
+
+def _is_master(config: pytest.Config) -> bool:
+    """Return True if running in a xdist master node or not running xdist at all."""
+    return not hasattr(config, "workerinput")
+
+
+def _strings_from_paths(paths: list[Path]) -> list[str]:
+    return [str(p) for p in paths]
+
+
+def _paths_from_strings(strings: list[str]) -> list[Path]:
+    return [Path(s) for s in strings]
+
+
 @pytest.hookimpl
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
-    if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
+    is_master = _is_master(config)
+    doc_mode = config.getoption("doc_mode")
+    disallow_unused_cache = config.getoption("disallow_unused_cache")
+    if is_master and disallow_unused_cache:
+        # create a image names directory for individual or multiple workers to write to
+        _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=True)
 
+    if doc_mode:
+        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _preprocess_all_images_for_test_cases  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase  # noqa: PLC0415
+
+        _VtkszFileSizeTestCase.init_from_config(config)
         _DocVerifyImageCache.init_from_config(config)
 
-    # create a image names directory for individual or multiple workers to write to
-    if config.getoption("disallow_unused_cache"):
-        config.image_names_dir = Path(config.cache.makedir("pyvista"))
-        config.image_names_dir.mkdir(exist_ok=True)
+        if is_master:
+            # Clear any cached test files
+            _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=True)
+            _make_config_cache_dir(config, PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, clean=True)
 
-        # ensure this directory is empty as it might be left over from a previous test
-        with contextlib.suppress(OSError):
-            for filename in config.image_names_dir.iterdir():
-                filename.unlink()
+            # Determine how many processes to use for preprocessing
+            num_workers = _get_num_workers_from_config(config)
+
+            # Run preprocessing once in the master
+            (
+                input_paths,
+                test_image_paths,
+                vtksz_input_paths,
+                vtksz_test_image_paths,
+            ) = _preprocess_all_images_for_test_cases(num_workers=num_workers)
+
+            # Store in config for xdist workers
+            config.paths = {
+                "input_paths": _strings_from_paths(input_paths),
+                "test_image_paths": _strings_from_paths(test_image_paths),
+                "vtksz_input_paths": _strings_from_paths(vtksz_input_paths),
+                "vtksz_test_image_paths": _strings_from_paths(vtksz_test_image_paths),
+            }
+
+
+def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
+    """Modify each xdist worker."""
+    if paths := getattr(node.config, "paths", None):
+        node.workerinput["paths"] = paths
 
 
 @pytest.fixture
@@ -807,7 +904,7 @@ def verify_image_cache(
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
-    VerifyImageCache.image_format = cast("_ImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+    VerifyImageCache.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
@@ -883,7 +980,7 @@ def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
 @pytest.hookimpl
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
     """Write skipped and visited image names to disk."""
-    image_names_dir = getattr(session.config, "image_names_dir", None)
+    image_names_dir = getattr(session.config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, None)
     if image_names_dir:
         test_id = uuid.uuid4()
         visited_file = image_names_dir / f"visited_{test_id}_cache_names.json"
@@ -896,12 +993,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
-    if config.getoption("doc_mode"):
-        from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
-
-        for tempdir in _DocVerifyImageCache._tempdirs:  # noqa: SLF001
-            tempdir.cleanup()
-        _DocVerifyImageCache._tempdirs = []  # noqa: SLF001
+    if _is_master(config):
+        for dirname in [PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME]:
+            _make_config_cache_dir(config, dirname, clean=True)
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:  # noqa: ARG001
@@ -924,4 +1018,8 @@ def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config
         # Collect test items from the module
         module_collector = pytest.Module.from_parent(parent=session, path=module_file)
         collected_items = list(module_collector.collect())
+
+        # Remove tests if there are no test cases
+        collected_items = [item for item in collected_items if not item.name.endswith("[NOTSET]")]
+
         items.extend(collected_items)
