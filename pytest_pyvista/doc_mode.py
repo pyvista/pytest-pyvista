@@ -53,21 +53,28 @@ class _Terminal:
         cls._verbose = config.option.verbose
 
     @classmethod
+    def _safe_write(cls, func, *args, **kwargs) -> None:  # noqa: ANN001, ANN002, ANN003
+        if cls._tr is None:
+            return
+        try:
+            func(*args, **kwargs)
+        except ValueError:
+            # pytest's stream is closed, ignore
+            cls._tr = None
+
+    @classmethod
     def write_item(cls, msg: str) -> None:
         if cls._tr is None:
             return
-
         if cls._verbose:
-            # Behave like pytest -v: one line per item
-            cls._tr.write_line(msg, flush=True)
+            cls._safe_write(cls._tr.write_line, msg, flush=True)
         else:
-            # Behave like pytest default: print progress as dots
             msg = "."
             cls._char_count += 1
             if cls._char_count >= cls._max_chars:
                 msg += "\n"
                 cls._char_count = 0
-            cls._tr.write(msg, flush=True)
+            cls._safe_write(cls._tr.write, msg, flush=True)
 
     @classmethod
     def write_header(cls, msg: str) -> None:
@@ -75,20 +82,19 @@ class _Terminal:
             return
         if cls._char_count > 0:
             cls.write_newline()
-
         msg = f"[pyvista] {msg}"
         if cls._verbose:
-            cls._tr.write_line(msg, flush=True, bold=True)
+            cls._safe_write(cls._tr.write_line, msg, flush=True, bold=True)
         else:
             msg += " "
-            cls._tr.write(msg, flush=True)
-            cls._char_count = len(msg)  # reset count
+            cls._safe_write(cls._tr.write, msg, flush=True)
+            cls._char_count = len(msg)
 
     @classmethod
     def write_newline(cls) -> None:
         if cls._tr is None:
             return
-        cls._tr.write("\n", flush=True)
+        cls._safe_write(cls._tr.write, "\n", flush=True)
 
 
 class _VtkszFileSizeTestCase:
