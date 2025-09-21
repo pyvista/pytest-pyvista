@@ -777,7 +777,7 @@ def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, 
 
     # Special case, set default cache dir
     if option == "image_cache_dir":
-        value = "doc_image_cache_dir" if doc_mode else "image_cache_dir"
+        value = f"{'doc_' if doc_mode else ''}image_cache_dir"
         return _resolve(value)
 
     return None
