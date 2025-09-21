@@ -247,62 +247,87 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     _add_common_pytest_options(parser, doc=True)
 
 
-def _add_common_pytest_options(parser, *, doc: bool = False) -> None:  # noqa: ANN001
+def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> None:
+    """
+    Add CLI and INI options common to both regular unit tests and doc mode.
+
+    The CLI argument name is the same for unit tests and doc mode. For the INI config, a ``doc_``
+    prefix is added..
+
+    Important:
+        A default value for INI options should *NOT* be set when ``doc`` is True, i.e. the default
+        should be None for this case. This is needed because any INI options with a `doc_`` prefix
+        has priority over the non-prefixed version, and should only be set by users that want to
+        explicitly override the non-prefixed INI value.
+
+        One exception to this is the "image_cache_dir" option, where a default value is set to
+        avoid defaulting to the unit test cache images which would create erroneous test failures.
+
+    """
     prefix = "doc_" if doc else ""
     group = parser.getgroup("pyvista")
-    group.addoption(
-        f"--{prefix}image_cache_dir",
-        action="store",
-        help="Path to the image cache folder.",
-    )
+
+    if not doc:
+        group.addoption(
+            "--image_cache_dir",
+            action="store",
+            help="Path to the image cache folder.",
+        )
     parser.addini(
         f"{prefix}image_cache_dir",
-        default=None if doc else "image_cache_dir",
+        default="doc_image_cache_dir" if doc else "image_cache_dir",
         help="Path to the image cache folder.",
     )
-    group.addoption(
-        f"--{prefix}generated_image_dir",
-        action="store",
-        help="Path to dump test images from the current run.",
-    )
+
+    if not doc:
+        group.addoption(
+            "--generated_image_dir",
+            action="store",
+            help="Path to dump test images from the current run.",
+        )
     parser.addini(
         f"{prefix}generated_image_dir",
         default=None,
         help="Path to dump test images from the current run.",
     )
-    group.addoption(
-        f"--{prefix}failed_image_dir",
-        action="store",
-        help="Path to dump images from failed tests from the current run.",
-    )
+
+    if not doc:
+        group.addoption(
+            "--failed_image_dir",
+            action="store",
+            help="Path to dump images from failed tests from the current run.",
+        )
     parser.addini(
         f"{prefix}failed_image_dir",
         default=None,
         help="Path to dump images from failed tests from the current run.",
     )
-    group.addoption(
-        f"--{prefix}generate_subdirs",
-        action="store_const",
-        const=True,
-        default=None,
-        help="Save generated images to sub-directories. The image names are determined by the environment info.",
-    )
+
+    if not doc:
+        group.addoption(
+            "--generate_subdirs",
+            action="store_const",
+            const=True,
+            default=None,
+            help="Save generated images to sub-directories. The image names are determined by the environment info.",
+        )
     parser.addini(
         f"{prefix}generate_subdirs",
-        default=False,
-        type="bool",
+        default=None,
         help="Save generated images to sub-directories. The image names are determined by the environment info.",
     )
-    group.addoption(
-        f"--{prefix}image_format",
-        action="store",
-        choices=get_args(_AllowedImageFormats),
-        default=None,
-        help="Image format to use when generating test images.",
-    )
+
+    if not doc:
+        group.addoption(
+            "--image_format",
+            action="store",
+            choices=get_args(_AllowedImageFormats),
+            default=None,
+            help="Image format to use when generating test images.",
+        )
     parser.addini(
         f"{prefix}image_format",
-        default="png",
+        default=None if doc else "png",
         help="Image format to use when generating test images.",
     )
 
@@ -721,15 +746,36 @@ def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, 
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[True] = True) -> Path | None: ...
 @overload
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | bool | None: ...
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | bool | None:
-    value = pytestconfig.getoption(option)
-    if value is None:
-        value = pytestconfig.getini(option)
-
-    if value is None:
+def _get_option_from_config_or_ini(
+    pytestconfig: pytest.Config, option: str, *, is_dir: bool = False, prioritize_doc_prefix: bool = False
+) -> Path | str | bool | None:
+    def _resolve(value: str | bool) -> Path | str | bool:  # noqa: FBT001
+        if is_dir:
+            return pytestconfig.rootpath / value
+        if str(value).lower() == "true":
+            return True
+        if str(value).lower() == "false":
+            return False
         return value
 
-    return pytestconfig.rootpath / value if is_dir else value
+    # CLI always wins, and only plain name without additional doc prefix
+    if option == "doc_images_dir":
+        ...
+    value = pytestconfig.getoption(option)
+    if value is not None:
+        return _resolve(value)
+
+    # ini fallback
+    if prioritize_doc_prefix:
+        value = pytestconfig.getini(f"doc_{option}")
+        if value:
+            return _resolve(value)
+
+    value = pytestconfig.getini(option)
+    if value:
+        return _resolve(value)
+
+    return None
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -769,8 +815,8 @@ def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
     if pytestconfig.getoption("doc_mode"):
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
-        image_cache_dir = _DocVerifyImageCache.doc_image_cache_dir
-        image_format = _DocVerifyImageCache.doc_image_format
+        image_cache_dir = _DocVerifyImageCache.image_cache_dir
+        image_format = _DocVerifyImageCache.image_format
     else:
         image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
         image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
