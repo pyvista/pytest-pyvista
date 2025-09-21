@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
 
@@ -510,21 +509,10 @@ def test_vtksz_screenshot(tmp_path) -> None:
     assert actual_error < small_error
 
 
+@pytest.mark.parametrize("verbose", [True, False])
 @pytest.mark.parametrize("include_vtksz", [True, False])
-def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
+def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, verbose) -> None:
     """Test that test images are generated from interactive plot files."""
-    # Capture logs for testing since logger output is not captured by pytester
-    captured_logs = []
-
-    class ListHandler(logging.Handler):
-        def emit(self, record):  # noqa: ANN202
-            captured_logs.append(record.getMessage())
-
-    handler = ListHandler()
-    logger = logging.getLogger("pytest-pyvista")
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
     stem = "im"
     name_vtksz = f"{stem}.vtksz"
     name_generated = stem + "_vtksz.png"
@@ -546,13 +534,13 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         generated,
         "--doc_failed_image_dir",
         failed,
-        "-v",
     ]
+    if verbose:
+        args.append("--verbose")
     if include_vtksz:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
 
-    expected_logs = [f"Converting {name_vtksz}", f"Rendering {stem}.html"]
     if not include_vtksz:
         result.assert_outcomes(failed=1)
         result.stdout.fnmatch_lines("E           Failed: Test setup failed for test image:")
@@ -560,12 +548,19 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         result.stdout.fnmatch_lines("E           The image exists in the cache directory:")
         result.stdout.fnmatch_lines(f"E           	*cache/{name_generated}")
         result.stdout.fnmatch_lines("E           but is missing from the docs build directory:")
-        assert captured_logs == []
         return
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
-    assert captured_logs == expected_logs
+
+    if verbose:
+        result.stdout.fnmatch_lines("[pyvista] Converting VTKSZ -> HTML")
+        result.stdout.fnmatch_lines("Converting im.vtksz")
+        result.stdout.fnmatch_lines("[pyvista] Rendering HTML -> PNG")
+        result.stdout.fnmatch_lines("Rendering im.html")
+    else:
+        result.stdout.fnmatch_lines("[pyvista] Converting VTKSZ -> HTML .")
+        result.stdout.fnmatch_lines("[pyvista] Rendering HTML -> PNG .")
 
     assert Path(generated).is_dir()
     expected_file = Path(generated) / name_generated

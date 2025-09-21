@@ -51,6 +51,10 @@ _AllowedImageFormats = Literal["png", "jpg"]
 _OriginalImageFormats = Union[_AllowedImageFormats, Literal["gif", "vtksz"]]
 
 
+class _TerminalReporter:
+    tr: pytest.TerminalReporter | None
+
+
 @dataclass
 class _EnvInfo:
     prefix: str = ""
@@ -840,7 +844,7 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
     return [Path(s) for s in strings]
 
 
-@pytest.hookimpl
+@pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
     is_master = _is_master(config)
@@ -853,10 +857,12 @@ def pytest_configure(config: pytest.Config) -> None:
     if doc_mode:
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
         from pytest_pyvista.doc_mode import _preprocess_all_images_for_test_cases  # noqa: PLC0415
+        from pytest_pyvista.doc_mode import _Terminal  # noqa: PLC0415
         from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase  # noqa: PLC0415
 
         _VtkszFileSizeTestCase.init_from_config(config)
         _DocVerifyImageCache.init_from_config(config)
+        _Terminal.init_from_config(config)
 
         if is_master:
             # Clear any cached test files
