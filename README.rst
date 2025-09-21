@@ -105,10 +105,10 @@ cache images.
 
 Unit tests
 ----------
-Once installed, you only need to use the command `pl.show()` in your test. The
+Once installed, you only need to use the command ``pl.show()`` in your test. The
 plugin will automatically manage the cache generation if it does not exist, and
-the image comparison itself. Make sure you enable `pv.OFF_SCREEN` when loading
-PyVista, so the `pl.show()` doesn't pop up any window while testing.  By default,
+the image comparison itself. Make sure you enable ``pv.OFF_SCREEN`` when loading
+PyVista, so the ``pl.show()`` doesn't pop up any window while testing.  By default,
 the verify_image_cache fixture should be used for each test for image comparison:
 
 .. code-block:: python
@@ -135,7 +135,7 @@ a wrapped version could be used
 
 
 If you need to use any flag inside the tests, you can modify the
-`verify_image_cache` object in the test
+``verify_image_cache`` object in the test
 
 .. code-block:: python
 
@@ -150,109 +150,6 @@ If you need to use any flag inside the tests, you can modify the
         pl.add_mesh(pyvista.Sphere(), show_edges=True)
         pl.show()
 
-
-Global flags
-============
-These are the flags you can use when calling ``pytest`` in the command line:
-
-* ``--reset_image_cache`` creates a new image for each test in
-  ``tests/plotting/test_plotting.py`` and is not recommended except for
-  testing or for potentially a major or minor release. 
-
-* You can use ``--ignore_image_cache`` if you want to
-  temporarily ignore regression testing, e.g. on a particular CI action.
-  
-* ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
-  directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
-  This will override any configuration, see below.
-
-* ``--generate_subdirs`` saves generated test images in separate sub-directories
-  instead of saving them directly to the ``generated_image_dir``. Without this option,
-  generated images are saved as ``generated_image_dir/<test_name>.png``; with this
-  option enabled, they are instead saved as
-  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has the format
-  ``<os-version>_<machine>_<gpu-vendor>_<python-version>_<pyvista-version>_<vtk-version>_<using-ci>``.
-  This can be useful for providing context about how an image was generated. See the
-  ``Test specific flags`` section for customizing the info.
-
-* ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
-  there is a warning or error raised. This directory is useful for reviewing test
-  failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
-  This will override any configuration, see below.
-
-* ``--add_missing_images`` adds any missing images from the test run to the cache.
-
-* ``--image_cache_dir <DIR>`` sets the image cache directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
-  This will override any configuration, see below.
-
-* ``--reset_only_failed`` reset the image cache of the failed tests only.
-
-* Use ``--allow_unused_generated`` to prevent an error from being raised when a
-  test image is generated but not used. A test image is considered "used" if it has a
-  corresponding cached image to compare against, or is used to reset or update the
-  cache (e.g. if using ``--add_missing_images``). Otherwise, an error is raised by
-  default.
-
-* ``--disallow_unused_cache`` report test failure if there are any images in the cache
-  which are not compared to any generated images.
-
-* Use ``--allow_useless_fixture`` to prevent test failure when the ``verify_image_cache``
-  fixture is used but no images are generated. If no images are generated (i.e. there are
-  no calls made to ``Plotter.show()`` or ``mesh.plot()``), then these tests will fail
-  by default. Set this CLI flag to allow this globally, or use the test-specific flag
-  by the same name below to configure this on a per-test basis.
-
-* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
-  ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
-  This will override any configuration, see below.
-
-Test specific flags
-===================
-These are attributes of ``verify_image_cache``. You can set them as ``True`` if needed
-in the beginning of your test function.
-
-* ``high_variance_test``: If necessary, the threshold for determining if a test
-  will pass or not is incremented to another predetermined threshold. This is
-  currently done due to the use of an unstable version of VTK, in stable
-  versions this shouldn't be necessary.
-
-* ``windows_skip_image_cache``: For test where the plotting in Windows is different
-  from MacOS/Linux.
-
-* ``macos_skip_image_cache``: For test where the plotting in MacOS is different
-  from Windows/Linux.
-
-* ``skip``: If you have a test that plots a figure, but you don't want to compare
-  its output against the cache, you can skip it with this flag.
-
-* ``allow_useless_fixture``: Set this flag to ``True`` to prevent test failure when the
-  ``verify_image_cache`` fixture is used but no images are generated. The value of this
-  flag takes precedence over the global flag by the same name (see above).
-
-* ``env_info``: Dataclass for controlling the environment info used to name the generated
-  test image(s) when the ``--generate_dirs`` option is used. The info can be test-specific
-  or can be modified globally by wrapping the ``verify_image_cache`` fixture, e.g.:
-
-  .. code-block:: python
-
-    @pytest.fixture(autouse=True)
-    def wrapped_verify_image_cache(verify_image_cache):
-        # Customize the environment info (NOTE: Default values are shown)
-        info = verify_image_cache.env_info
-        info.prefix: str = ""  # Add a custom prefix
-        info.os: bool = True  # Show/hide the os version (e.g. ubuntu, macOS, Windows)
-        info.machine: bool = True  # Show/hide the machine info (e.g. arm64)
-        info.gpu: bool = True  # Show/hide the gpu vendor (e.g. NVIDIA)
-        info.python: bool = True  # Show/hide the python version
-        info.pyvista: bool = True  # Show/hide the pyvista version
-        info.vtk: bool = True  # Show/hide the vtk version
-        info.ci: bool = True  # Show/hide if generated in CI
-        info.suffix: str = ""  # Add a custom suffix
-
-        # Alternatively, set a custom string
-        verify_image_cache.env_info = 'my_custom_string'
-
-        return verify_image_cache
 
 Documentation image tests
 -------------------------
@@ -299,9 +196,75 @@ The tests have three main modes of failure:
    Use the ``--failed_image_dir`` flag to save copies of the images for
    failed tests.
 
+
 Global flags
+------------
+These are the flags you can use when calling ``pytest`` in the command line.
+
+Common flags
 ============
-These are the flags you can use when calling ``pytest`` in the command line:
+These flags may be used with regular unit testing or with ``--doc_mode`` enabled.
+
+* ``--image_cache_dir <DIR>`` sets the image cache directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  This will override any configuration, see below.
+
+* ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
+  directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  This will override any configuration, see below.
+
+* ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
+  there is a warning or error raised. This directory is useful for reviewing test
+  failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  This will override any configuration, see below.
+
+* ``--generate_subdirs`` saves generated test images in separate sub-directories
+  instead of saving them directly to the ``generated_image_dir``. Without this option,
+  generated images are saved as ``generated_image_dir/<test_name>.png``; with this
+  option enabled, they are instead saved as
+  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has the format
+  ``<os-version>_<machine>_<gpu-vendor>_<python-version>_<pyvista-version>_<vtk-version>_<using-ci>``.
+  This can be useful for providing context about how an image was generated. See the
+  ``Customizing test cases`` section for customizing the info.
+
+* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
+  ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
+  This will override any configuration, see below.
+
+Unit testing flags
+==================
+These flags are specific to the unit tests. They cannot be used with
+``--doc_mode`` enabled.
+
+* ``--reset_image_cache`` creates a new image for each test in
+  ``tests/plotting/test_plotting.py`` and is not recommended except for
+  testing or for potentially a major or minor release. 
+
+* You can use ``--ignore_image_cache`` if you want to
+  temporarily ignore regression testing, e.g. on a particular CI action.
+
+* ``--add_missing_images`` adds any missing images from the test run to the cache.
+
+* ``--reset_only_failed`` reset the image cache of the failed tests only.
+
+* Use ``--allow_unused_generated`` to prevent an error from being raised when a
+  test image is generated but not used. A test image is considered "used" if it has a
+  corresponding cached image to compare against, or is used to reset or update the
+  cache (e.g. if using ``--add_missing_images``). Otherwise, an error is raised by
+  default.
+
+* ``--disallow_unused_cache`` report test failure if there are any images in the cache
+  which are not compared to any generated images.
+
+* Use ``--allow_useless_fixture`` to prevent test failure when the ``verify_image_cache``
+  fixture is used but no images are generated. If no images are generated (i.e. there are
+  no calls made to ``Plotter.show()`` or ``mesh.plot()``), then these tests will fail
+  by default. Set this CLI flag to allow this globally, or use the test-specific flag
+  by the same name below to configure this on a per-test basis.
+
+Documentation testing flags
+===========================
+These flags are specific to documentation tests. They cannot be used with regular unit
+tests.
 
 * ``--doc_mode`` is a required flag for testing documentation images. It configures
   pytest to only collect tests relevant for the image testing.
@@ -311,35 +274,6 @@ These are the flags you can use when calling ``pytest`` in the command line:
   .. note::
 
      With Sphinx, build images are typically saved to ``doc/_build/html/_images``.
-
-* ``--image_cache_dir <DIR>`` sets the doc image cache directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
-  This will override any configuration, see below.
-
-* ``--generated_image_dir <DIR>`` dumps all doc generated test images into the provided
-  directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
-  This will override any configuration, see below.
-
-  .. note::
-    These are the pre-processed images generated for the tests. They are `not` the images
-    generated by a documentation build (use ``--doc_images_dir`` for specifying that).
-
-* ``--generate_subdirs`` saves generated test images in separate sub-directories
-  instead of saving them directly to the ``generated_image_dir``. Without this option,
-  generated images are saved as ``<generated_image_dir>/<test_name>.png``; with this
-  option enabled, they are instead saved as
-  ``<generated_image_dir>/<test_name>/<image_name>.png``, where the image name has the format
-  ``<os-version>_<machine>_<gpu-vendor>_<python-version>_<pyvista-version>_<vtk-version>_<using-ci>``.
-  This can be useful for providing context about how an image was generated. See the
-  ``Customizing test cases`` section below for customizing the info.
-
-* ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
-  there is a warning or error raised. This directory is useful for reviewing test
-  failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
-  This will override any configuration, see below.
-
-* Use ``--image_format`` to save test images in either ``png`` or ``jpg`` format.
-  ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
-  This will override any configuration, see below.
 
 * Use ``--include_vtksz`` to include tests for interactive plots which are generated by
   PyVista's plot-directive as ``vtksz`` files. When enabled, each ``vtksz`` file
@@ -375,7 +309,59 @@ These are the flags you can use when calling ``pytest`` in the command line:
      sizes may be tested without any additional installation.
 
 Customizing test cases
+----------------------
+Both the regular unit tests and documentation tests allow for some level of customization.
+
+Customizing unit tests
 ======================
+These are attributes of ``verify_image_cache``. You can set them as ``True`` if needed
+in the beginning of your test function.
+
+* ``high_variance_test``: If necessary, the threshold for determining if a test
+  will pass or not is incremented to another predetermined threshold. This is
+  currently done due to the use of an unstable version of VTK, in stable
+  versions this shouldn't be necessary.
+
+* ``windows_skip_image_cache``: For test where the plotting in Windows is different
+  from MacOS/Linux.
+
+* ``macos_skip_image_cache``: For test where the plotting in MacOS is different
+  from Windows/Linux.
+
+* ``skip``: If you have a test that plots a figure, but you don't want to compare
+  its output against the cache, you can skip it with this flag.
+
+* ``allow_useless_fixture``: Set this flag to ``True`` to prevent test failure when the
+  ``verify_image_cache`` fixture is used but no images are generated. The value of this
+  flag takes precedence over the global flag by the same name (see above).
+
+* ``env_info``: Dataclass for controlling the environment info used to name the generated
+  test image(s) when the ``--generate_dirs`` option is used. The info can be test-specific
+  or can be modified globally by wrapping the ``verify_image_cache`` fixture, e.g.:
+
+  .. code-block:: python
+
+    @pytest.fixture(autouse=True)
+    def wrapped_verify_image_cache(verify_image_cache):
+        # Customize the environment info (NOTE: Default values are shown)
+        info = verify_image_cache.env_info
+        info.prefix: str = ""  # Add a custom prefix
+        info.os: bool = True  # Show/hide the os version (e.g. ubuntu, macOS, Windows)
+        info.machine: bool = True  # Show/hide the machine info (e.g. arm64)
+        info.gpu: bool = True  # Show/hide the gpu vendor (e.g. NVIDIA)
+        info.python: bool = True  # Show/hide the python version
+        info.pyvista: bool = True  # Show/hide the pyvista version
+        info.vtk: bool = True  # Show/hide the vtk version
+        info.ci: bool = True  # Show/hide if generated in CI
+        info.suffix: str = ""  # Add a custom suffix
+
+        # Alternatively, set a custom string
+        verify_image_cache.env_info = 'my_custom_string'
+
+        return verify_image_cache
+
+Customizing documentation tests
+===============================
 Similar to how the unit tests may be customized using the ``verify_image_cache`` fixture,
 the documentation tests can be customized using a ``doc_verify_image_cache`` object.
 Instead of a fixture, a pytest hook function is used.
@@ -459,15 +445,29 @@ Configure the image format to be ``jpg`` for both unit tests and when using ``--
 
     [tool.pytest.ini_options]
     image_format = "jpg"
-    image_format = "jpg"
+
+Or, set them to use different image formats:
+
+.. code-block:: toml
+
+    [tool.pytest.ini_options]
+    image_format = "png"
+    doc_image_format = "jpg"
 
 Enable the generation of test images inside of sub-directories for both unit tests and when using ``--doc_mode``.
 
 .. code-block:: toml
 
     [tool.pytest.ini_options]
-    generate_subdirs = True
-    generate_subdirs = True
+    generate_subdirs = true
+
+Or, set them to different values:
+
+.. code-block:: toml
+
+    [tool.pytest.ini_options]
+    generate_subdirs = true
+    doc_generate_subdirs = false
 
 Contributing
 ------------
