@@ -431,9 +431,9 @@ Configure directories for when ``--doc_mode`` is used:
 .. code-block:: toml
 
     [tool.pytest.ini_options]
-    failed_image_dir = "failed_test_images"
-    generated_image_dir = "generated_test_images"
-    image_cache_dir = "tests/doc/doc_image_cache"
+    doc_failed_image_dir = "failed_test_images"
+    doc_generated_image_dir = "generated_test_images"
+    doc_image_cache_dir = "tests/doc/doc_image_cache"
     doc_images_dir = "doc/_build/html/_images"
 
 Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
