@@ -72,9 +72,9 @@ class _DocVerifyImageCache:
 
     @classmethod
     def init_from_config(cls, config: pytest.Config) -> None:
-        def require_existing_dir(option: str, *, prioritize_doc_prefix: bool = False) -> Path:
+        def require_existing_dir(option: str) -> Path:
             """Fetch a required directory option and ensure it's valid."""
-            path = _get_option_from_config_or_ini(config, option, is_dir=True, prioritize_doc_prefix=prioritize_doc_prefix)
+            path = _get_option_from_config_or_ini(config, option, is_dir=True)
             if path is None:
                 msg = f"{option!r} must be specified when using --doc_mode"
                 raise ValueError(msg)
@@ -83,25 +83,23 @@ class _DocVerifyImageCache:
                 raise ValueError(msg)
             return path
 
-        def optional_dir_else_cache(option: str, dirname: str, *, prioritize_doc_prefix: bool = False) -> Path:
+        def optional_dir_else_cache(option: str, dirname: str) -> Path:
             """Fetch an optional directory option or save to cache if missing."""
-            path = _get_option_from_config_or_ini(config, option, is_dir=True, prioritize_doc_prefix=prioritize_doc_prefix)
+            path = _get_option_from_config_or_ini(config, option, is_dir=True)
             if path is None:
                 # Save to cache
                 return _make_config_cache_dir(config, dirname)
             return path
 
         cls.doc_images_dir = require_existing_dir("doc_images_dir")
-        cls.image_cache_dir = _get_option_from_config_or_ini(config, "image_cache_dir", is_dir=True, prioritize_doc_prefix=True)
+        cls.image_cache_dir = cast("Path", _get_option_from_config_or_ini(config, "image_cache_dir", is_dir=True))
         _ensure_dir_exists(cls.image_cache_dir, "cache image dir")
 
-        cls.generated_image_dir = optional_dir_else_cache(
-            "generated_image_dir", dirname=PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, prioritize_doc_prefix=True
-        )
-        cls.failed_image_dir = optional_dir_else_cache("failed_image_dir", dirname=PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, prioritize_doc_prefix=True)
+        cls.generated_image_dir = optional_dir_else_cache("generated_image_dir", dirname=PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
+        cls.failed_image_dir = optional_dir_else_cache("failed_image_dir", dirname=PYVISTA_FAILED_IMAGE_CACHE_DIRNAME)
 
-        cls.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "image_format", prioritize_doc_prefix=True))
-        cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs", prioritize_doc_prefix=True))
+        cls.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "image_format"))
+        cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
 

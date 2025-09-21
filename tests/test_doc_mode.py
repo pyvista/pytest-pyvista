@@ -444,6 +444,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
     paths_cli = _get_file_paths(pytester.path, ext=image_format_cli)
     paths_ini = _get_file_paths(pytester.path, ext=image_format_ini)
 
+    # Expect five images: 1 in cache dir, 1 in images dir, 1 in generated dir, 2 in failed dir
     num_files = 5
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)

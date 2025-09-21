@@ -44,6 +44,7 @@ PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
 PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME = "pyvista_generated_image_dir"
 PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
 
+PARSER_GROUP_NAME = "pyvista"
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
 
@@ -172,7 +173,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
     _add_common_pytest_options(parser)
 
-    group = parser.getgroup("pyvista")
+    group = parser.getgroup(PARSER_GROUP_NAME)
     group.addoption(
         "--reset_image_cache",
         action="store_true",
@@ -260,12 +261,9 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
         has priority over the non-prefixed version, and should only be set by users that want to
         explicitly override the non-prefixed INI value.
 
-        One exception to this is the "image_cache_dir" option, where a default value is set to
-        avoid defaulting to the unit test cache images which would create erroneous test failures.
-
     """
     prefix = "doc_" if doc else ""
-    group = parser.getgroup("pyvista")
+    group = parser.getgroup(PARSER_GROUP_NAME)
 
     if not doc:
         group.addoption(
@@ -275,7 +273,7 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
         )
     parser.addini(
         f"{prefix}image_cache_dir",
-        default="doc_image_cache_dir" if doc else "image_cache_dir",
+        default=None,  # Default is set when getting from config or ini
         help="Path to the image cache folder.",
     )
 
@@ -746,9 +744,7 @@ def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, 
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[True] = True) -> Path | None: ...
 @overload
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | bool | None: ...
-def _get_option_from_config_or_ini(
-    pytestconfig: pytest.Config, option: str, *, is_dir: bool = False, prioritize_doc_prefix: bool = False
-) -> Path | str | bool | None:
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | bool | None:  # noqa: C901
     def _resolve(value: str | bool) -> Path | str | bool:  # noqa: FBT001
         if is_dir:
             return pytestconfig.rootpath / value
@@ -759,20 +755,29 @@ def _get_option_from_config_or_ini(
         return value
 
     # CLI always wins, and only plain name without additional doc prefix
-    if option == "doc_images_dir":
-        ...
     value = pytestconfig.getoption(option)
     if value is not None:
         return _resolve(value)
 
-    # ini fallback
-    if prioritize_doc_prefix:
-        value = pytestconfig.getini(f"doc_{option}")
-        if value:
-            return _resolve(value)
+    # Get from ini with `doc_` prefix, if available
+    if doc_mode := pytestconfig.getoption("doc_mode"):
+        try:
+            value = pytestconfig.getini(f"doc_{option}")
+        except ValueError:
+            # Not defined, continue
+            ...
+        else:
+            if value is not None:
+                return _resolve(value)
 
+    # Get from ini
     value = pytestconfig.getini(option)
-    if value:
+    if value is not None:
+        return _resolve(value)
+
+    # Special case, set default cache dir
+    if option == "image_cache_dir":
+        value = "doc_image_cache_dir" if doc_mode else "image_cache_dir"
         return _resolve(value)
 
     return None

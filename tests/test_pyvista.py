@@ -1197,7 +1197,7 @@ def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format,
     make_cached_images(pytester.path, path=cache, name=name)
     make_cached_images(pytester.path / cache, path=test_name, name=name)
 
-    args = [f"--{'doc_' if doc_mode else ''}image_format", valid_format]
+    args = ["--image_format", valid_format]
     if doc_mode:
         images = "images"
         _preprocess_build_images(Path(cache), Path(images), image_format=valid_format)
