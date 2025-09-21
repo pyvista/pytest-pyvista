@@ -42,7 +42,7 @@ multiprocessing.set_start_method("spawn", force=True)
 
 
 class _Terminal:
-    _tr: pytest.TerminalReporter | None
+    _tr: pytest.TerminalReporter | None = None
     _verbose: int
     _char_count: int = 0
     _max_chars: int = 80

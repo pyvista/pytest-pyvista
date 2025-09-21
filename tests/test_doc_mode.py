@@ -57,22 +57,22 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
     """Test errors generated when using CLI."""
     result = pytester.runpytest("--doc_mode")
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines(["*ValueError: 'doc_images_dir' must be specified when using --doc_mode"])
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_images_dir' must be specified when using --doc_mode"])
 
     images_path = pytester.path / "images"
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines(["*ValueError: 'doc_images_dir' must be a valid directory. Got:", "*/images."])
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_images_dir' must be a valid directory. Got:", "*/images."])
 
     images_path.mkdir()
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be specified when using --doc_mode"])
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be specified when using --doc_mode"])
 
     cache_path = pytester.path / "cache"
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path), "--doc_image_cache_dir", str(cache_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be a valid directory. Got:", "*/cache."])
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be a valid directory. Got:", "*/cache."])
 
 
 @pytest.mark.parametrize("generated_image_dir", [True, False])
