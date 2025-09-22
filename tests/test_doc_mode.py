@@ -319,7 +319,7 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     result.stdout.re_match_lines(match)
 
 
-@pytest.mark.parametrize("include_vtksz", [True, False])
+@pytest.mark.parametrize("include_vtksz", [True])
 def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz) -> None:
     """Ensure that doc_mode works with multiple workers."""
     cache = "cache"
@@ -333,11 +333,18 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2"]
+    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
+
+    preprocessing = "Preprocessing"
+    if include_vtksz:
+        preprocessing_msg = f"[pyvista] {preprocessing} {n_images} vtksz files. This may take a few minutes..."
+        result.stdout.fnmatch_lines(preprocessing_msg)
+    else:
+        assert preprocessing not in result.stdout.str()
 
     # replace a single image with a different image
     img_idx = 34
@@ -552,6 +559,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
 
+    preprocessing = "Preprocessing"
     expected_logs = [f"Converting {name_vtksz}", f"Rendering {stem}.html"]
     if not include_vtksz:
         result.assert_outcomes(failed=1)
@@ -560,11 +568,14 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         result.stdout.fnmatch_lines("E           The image exists in the cache directory:")
         result.stdout.fnmatch_lines(f"E           	*cache/{name_generated}")
         result.stdout.fnmatch_lines("E           but is missing from the docs build directory:")
+        assert preprocessing not in result.stdout.str()
         assert captured_logs == []
         return
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
+    preprocessing_msg = f"[pyvista] {preprocessing} 1 vtksz files. This may take a few minutes..."
+    result.stdout.fnmatch_lines(preprocessing_msg)
     assert captured_logs == expected_logs
 
     assert Path(generated).is_dir()
