@@ -135,7 +135,7 @@ a wrapped version could be used
 
 
 If you need to use any flag inside the tests, you can modify the
-``verify_image_cache`` object in the test
+``verify_image_cache`` object in the test:
 
 .. code-block:: python
 
