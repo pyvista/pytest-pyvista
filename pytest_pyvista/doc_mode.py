@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from functools import partial
+import logging
 import multiprocessing
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 from typing import Literal
 from typing import cast
@@ -38,63 +40,10 @@ MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
+logger = logging.getLogger("pytest-pyvista")
+logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="[pytest-pyvista] %(message)s")
+
 multiprocessing.set_start_method("spawn", force=True)
-
-
-class _Terminal:
-    _tr: pytest.TerminalReporter | None = None
-    _verbose: int
-    _char_count: int = 0
-    _max_chars: int = 80
-
-    @classmethod
-    def init_from_config(cls, config: pytest.Config) -> None:
-        cls._tr = config.pluginmanager.get_plugin("terminalreporter")
-        cls._verbose = config.option.verbose
-
-    @classmethod
-    def _safe_write(cls, func, *args, **kwargs) -> None:  # noqa: ANN001, ANN002, ANN003
-        if cls._tr is None:
-            return
-        try:
-            func(*args, **kwargs)
-        except ValueError:
-            # pytest's stream is closed, ignore
-            cls._tr = None
-
-    @classmethod
-    def write_item(cls, msg: str) -> None:
-        if cls._tr is None:
-            return
-        if cls._verbose:
-            cls._safe_write(cls._tr.write_line, msg, flush=True)
-        else:
-            msg = "."
-            cls._char_count += 1
-            if cls._char_count >= cls._max_chars:
-                msg += "\n"
-                cls._char_count = 0
-            cls._safe_write(cls._tr.write, msg, flush=True)
-
-    @classmethod
-    def write_header(cls, msg: str) -> None:
-        if cls._tr is None:
-            return
-        if cls._char_count > 0:
-            cls.write_newline()
-        msg = f"[pyvista] {msg}"
-        if cls._verbose:
-            cls._safe_write(cls._tr.write_line, msg, flush=True, bold=True)
-        else:
-            msg += " "
-            cls._safe_write(cls._tr.write, msg, flush=True)
-            cls._char_count = len(msg)
-
-    @classmethod
-    def write_newline(cls) -> None:
-        if cls._tr is None:
-            return
-        cls._safe_write(cls._tr.write, "\n", flush=True)
 
 
 class _VtkszFileSizeTestCase:
@@ -280,29 +229,26 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
-def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path]:
+def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path, *, log: bool = True) -> list[Path]:
     from trame_vtk.tools.vtksz2html import embed_data_to_viewer_file  # noqa: PLC0415
 
     output_paths: list[Path] = []
-    _Terminal.write_newline()
-    _Terminal.write_header("Converting VTKSZ -> HTML")
     for path in vtksz_files:
-        _Terminal.write_item(f"Converting {path.name}")
+        if log:
+            msg = f"Converting {path.name}"
+            logger.info(msg)
 
         with path.open("rb") as file:
             data = file.read()
         output_path = Path(output_dir) / f"{path.stem}.html"
         output_paths.append(output_path)
         embed_data_to_viewer_file(data, output_path)
-
-    _Terminal.write_newline()
     return output_paths
 
 
-def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
+def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = True) -> list[Path]:
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
-    _Terminal.write_header("Rendering HTML -> PNG")
     output_paths: list[Path] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -310,7 +256,9 @@ def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
         page = context.new_page()
 
         for html_file in html_files:
-            _Terminal.write_item(f"Rendering {html_file.name}")
+            if log:
+                msg = f"Rendering {html_file.name}"
+                logger.info(msg)
 
             output_path = output_dir / f"{html_file.stem}.png"
             page.goto(f"file://{html_file}")
@@ -318,8 +266,11 @@ def _html_screenshots(html_files: list[Path], output_dir: Path) -> list[Path]:
             output_paths.append(output_path)
 
         browser.close()
-    _Terminal.write_newline()
     return output_paths
+
+
+def _process_html_screenshots(batch: list[Path], output_dir: Path, log: bool = True) -> list[Path]:  # noqa: FBT001, FBT002
+    return _html_screenshots(batch, output_dir, log=log)
 
 
 def _render_all_html(
@@ -327,10 +278,11 @@ def _render_all_html(
     output_dir: Path,
     *,
     num_workers: int = 1,
+    log: bool = True,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
     if num_workers == 1:
-        return _html_screenshots(html_files, output_dir)
+        return _process_html_screenshots(html_files, output_dir, log)
 
     def _split_batches(files: list[Path], n: int) -> list[list[Path]]:
         """Split a list of files into n roughly equal contiguous batches."""
@@ -340,8 +292,8 @@ def _render_all_html(
     batches = _split_batches(html_files, num_workers)
     with multiprocessing.Pool(processes=num_workers) as pool:
         results_nested = pool.starmap(
-            _html_screenshots,
-            [(batch, output_dir) for batch in batches],
+            _process_html_screenshots,
+            [(batch, output_dir, log) for batch in batches],
         )
 
     # Flatten list of lists
