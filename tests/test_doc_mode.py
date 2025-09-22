@@ -68,7 +68,7 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
     images_path.mkdir()
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines("INTERNALERROR> RuntimeError: No doc images or cache images found! The doc images dir:")
+    result.stderr.fnmatch_lines("INTERNALERROR> RuntimeError: No doc images or cache images found. The doc images dir:")
     result.stderr.fnmatch_lines("INTERNALERROR>   */images")
     result.stderr.fnmatch_lines("INTERNALERROR> and image cache dir:")
     result.stderr.fnmatch_lines("INTERNALERROR>   */doc_image_cache_dir")

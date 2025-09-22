@@ -202,7 +202,8 @@ These are the flags you can use when calling ``pytest`` in the command line.
 
 Common flags
 ============
-These flags may be used with regular unit testing or with ``--doc_mode`` enabled.
+These flags may be used with regular unit testing or documentation testing with
+``--doc_mode`` enabled.
 
 * ``--image_cache_dir <DIR>`` sets the image cache directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
   This will override any configuration, see below.
@@ -268,7 +269,7 @@ tests.
 * ``--doc_mode`` is a required flag for testing documentation images. It configures
   pytest to only collect tests relevant for the image testing.
 
-* ``--doc_images_dir <DIR>``> sets the target directory of images to be tested.
+* ``--doc_images_dir <DIR>`` sets the target directory of images to be tested.
 
   .. note::
 

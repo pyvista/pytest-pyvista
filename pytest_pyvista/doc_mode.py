@@ -105,7 +105,7 @@ class _DocVerifyImageCache:
 
         if not any(cls.doc_images_dir.iterdir()) and not any(cls.image_cache_dir.iterdir()):
             msg = (
-                "No doc images or cache images found! The doc images dir:\n"
+                "No doc images or cache images found. The doc images dir:\n"
                 f"  {cls.doc_images_dir}\n"
                 "and image cache dir:\n"
                 f"  {cls.image_cache_dir}\n"

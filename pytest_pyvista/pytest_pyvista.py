@@ -253,11 +253,11 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     Add CLI and INI options common to both regular unit tests and doc mode.
 
     The CLI argument name is the same for unit tests and doc mode. For the INI config, a ``doc_``
-    prefix is added..
+    prefix is added.
 
     Important:
         A default value for INI options should *NOT* be set when ``doc`` is True, i.e. the default
-        should be None for this case. This is needed because any INI options with a `doc_`` prefix
+        should be None for this case. This is needed because any INI options with a ``doc_`` prefix
         has priority over the non-prefixed version, and should only be set by users that want to
         explicitly override the non-prefixed INI value.
 
