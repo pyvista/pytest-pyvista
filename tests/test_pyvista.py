@@ -1268,7 +1268,7 @@ def test_cli_args_classified() -> None:
     missing = defined - classified
     extra = classified - defined
 
-    set_names = "classification sets _UNIT_TEST_CLI_ARGS, _UNIT_TEST_CLI_ARGS"
+    set_names = "classification sets _UNIT_TEST_CLI_ARGS, _DOC_MODE_CLI_ARGS"
     assert not missing, f"Parser options are not included in {set_names}:\n{missing}"
     assert not extra, f"{set_names} contain unknown options:\n{extra}"
 
