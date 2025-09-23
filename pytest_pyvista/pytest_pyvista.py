@@ -212,72 +212,28 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         """
         option = "image_cache_dir"
         help_ = "Path to the image cache folder."
-        _add_common_cli_option(
-            f"--{option}",
-            action="store",
-            help=help_,
-        )
-        _add_common_ini_option(
-            option,
-            default=None,  # Default is set when getting from config or ini
-            help=help_,
-        )
+        _add_common_cli_option(f"--{option}", action="store", help=help_)
+        _add_common_ini_option(option, default=None, help=help_)  # Default is set when getting from config or ini
 
         option = "generated_image_dir"
         help_ = "Path to dump test images from the current run."
-        _add_common_cli_option(
-            f"--{option}",
-            action="store",
-            help=help_,
-        )
-        _add_common_ini_option(
-            option,
-            default=None,
-            help=help_,
-        )
+        _add_common_cli_option(f"--{option}", action="store", help=help_)
+        _add_common_ini_option(option, default=None, help=help_)
 
         option = "failed_image_dir"
         help_ = "Path to dump images from failed tests from the current run."
-        _add_common_cli_option(
-            f"--{option}",
-            action="store",
-            help=help_,
-        )
-        _add_common_ini_option(
-            option,
-            default=None,
-            help=help_,
-        )
+        _add_common_cli_option(f"--{option}", action="store", help=help_)
+        _add_common_ini_option(option, default=None, help=help_)
 
         option = "generate_subdirs"
         help_ = "Save generated images to sub-directories. The image names are determined by the environment info."
-        _add_common_cli_option(
-            f"--{option}",
-            action="store_const",
-            const=True,
-            default=None,
-            help=help_,
-        )
-        _add_common_ini_option(
-            option,
-            default=None,
-            help=help_,
-        )
+        _add_common_cli_option(f"--{option}", action="store_const", const=True, default=None, help=help_)
+        _add_common_ini_option(option, default=None, help=help_)
 
         option = "image_format"
         help_ = "Image format to use when generating test images."
-        _add_common_cli_option(
-            f"--{option}",
-            action="store",
-            choices=get_args(_AllowedImageFormats),
-            default=None,
-            help=help_,
-        )
-        _add_common_ini_option(
-            option,
-            default=None,
-            help=help_,
-        )
+        _add_common_cli_option(f"--{option}", action="store", choices=get_args(_AllowedImageFormats), default=None, help=help_)
+        _add_common_ini_option(option, default=None, help=help_) # Default is set when getting from config or ini
 
     def _add_unit_test_cli_and_ini_options() -> None:
         """Add options specific to regular unit tests."""
