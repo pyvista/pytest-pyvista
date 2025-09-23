@@ -921,7 +921,7 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
     return [Path(s) for s in strings]
 
 
-@pytest.hookimpl
+@pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
     # Validate CLI args
