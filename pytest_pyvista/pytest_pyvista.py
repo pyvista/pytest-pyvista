@@ -47,6 +47,8 @@ PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
 PARSER_GROUP_NAME = "pyvista"
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
+_DOC_MODE_CLI_ARGS: set[str] = set()
+_UNIT_TEST_CLI_ARGS: set[str] = set()
 
 _AllowedImageFormats = Literal["png", "jpg"]
 _OriginalImageFormats = Union[_AllowedImageFormats, Literal["gif", "vtksz"]]
@@ -170,49 +172,158 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Adds new flag options to the pyvista plugin."""  # noqa: D401
-    _add_common_pytest_options(parser)
+    """Add new flag options to the pyvista plugin."""
+
+    def _add_unit_test_cli_option(option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        """Add a CLI option reserved for regular unit tests only."""
+        group.addoption(option, *args, **kwargs)
+        _UNIT_TEST_CLI_ARGS.add(option)
+
+    def _add_doc_cli_option(option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        """Add a CLI option reserved for documentation tests only."""
+        group.addoption(option, *args, **kwargs)
+        _DOC_MODE_CLI_ARGS.add(option)
+
+    def _add_common_cli_option(option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        """Add a CLI option common to regular unit tests and documentation tests."""
+        group.addoption(option, *args, **kwargs)
+        _UNIT_TEST_CLI_ARGS.add(option)
+        _DOC_MODE_CLI_ARGS.add(option)
+
+    def _add_common_pytest_options(*, doc: bool) -> None:
+        """
+        Add CLI and INI options common to both regular unit tests and doc mode.
+
+        The CLI argument name is the same for unit tests and doc mode. For the INI config, a ``doc_``
+        prefix is added.
+
+        Important:
+            A default value for INI options should *NOT* be set when ``doc`` is True, i.e. the default
+            should be None for this case. This is needed because any INI options with a ``doc_`` prefix
+            has priority over the non-prefixed version, and should only be set by users that want to
+            explicitly override the non-prefixed INI value.
+
+        """
+        prefix = "doc_" if doc else ""
+
+        if not doc:
+            _add_common_cli_option(
+                "--image_cache_dir",
+                action="store",
+                help="Path to the image cache folder.",
+            )
+        parser.addini(
+            f"{prefix}image_cache_dir",
+            default=None,  # Default is set when getting from config or ini
+            help="Path to the image cache folder.",
+        )
+
+        if not doc:
+            _add_common_cli_option(
+                "--generated_image_dir",
+                action="store",
+                help="Path to dump test images from the current run.",
+            )
+        parser.addini(
+            f"{prefix}generated_image_dir",
+            default=None,
+            help="Path to dump test images from the current run.",
+        )
+
+        if not doc:
+            _add_common_cli_option(
+                "--failed_image_dir",
+                action="store",
+                help="Path to dump images from failed tests from the current run.",
+            )
+        parser.addini(
+            f"{prefix}failed_image_dir",
+            default=None,
+            help="Path to dump images from failed tests from the current run.",
+        )
+
+        if not doc:
+            _add_common_cli_option(
+                "--generate_subdirs",
+                action="store_const",
+                const=True,
+                default=None,
+                help="Save generated images to sub-directories. The image names are determined by the environment info.",
+            )
+        parser.addini(
+            f"{prefix}generate_subdirs",
+            default=None,
+            help="Save generated images to sub-directories. The image names are determined by the environment info.",
+        )
+
+        if not doc:
+            _add_common_cli_option(
+                "--image_format",
+                action="store",
+                choices=get_args(_AllowedImageFormats),
+                default=None,
+                help="Image format to use when generating test images.",
+            )
+        parser.addini(
+            f"{prefix}image_format",
+            default=None if doc else "png",
+            help="Image format to use when generating test images.",
+        )
 
     group = parser.getgroup(PARSER_GROUP_NAME)
-    group.addoption(
+    _add_common_pytest_options(doc=False)
+    _add_common_pytest_options(doc=True)
+
+    _add_unit_test_cli_option(
         "--reset_image_cache",
         action="store_true",
         help="Reset the images in the PyVista cache.",
     )
-    group.addoption("--ignore_image_cache", action="store_true", help="Ignores the image cache.")
-    group.addoption(
+
+    _add_unit_test_cli_option(
+        "--ignore_image_cache",
+        action="store_true",
+        help="Ignores the image cache.",
+    )
+
+    _add_unit_test_cli_option(
         "--allow_unused_generated",
         action="store_true",
         help="Prevent test failure if a generated test image has no use.",
     )
-    group.addoption(
+
+    _add_unit_test_cli_option(
         "--add_missing_images",
         action="store_true",
         help="Adds images to cache if missing.",
     )
-    group.addoption(
+
+    _add_unit_test_cli_option(
         "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
     )
-    group.addoption(
+
+    _add_unit_test_cli_option(
         "--disallow_unused_cache",
         action="store_true",
         help="Report test failure if there are any images in the cache which are not compared to any generated images.",
     )
-    group.addoption(
+
+    _add_unit_test_cli_option(
         "--allow_useless_fixture",
         action="store_true",
         help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
     )
 
     # Doc-specific test options
-    group.addoption(
+    _add_doc_cli_option(
         "--doc_mode",
         action="store_true",
         help="Enable documentation image testing.",
     )
-    group.addoption(
+
+    _add_doc_cli_option(
         "--doc_images_dir",
         action="store",
         help="Path to the documentation images.",
@@ -222,7 +333,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         help="Path to the documentation images.",
     )
-    group.addoption(
+
+    _add_doc_cli_option(
         "--include_vtksz",
         action="store_true",
         help="Include tests for interactive images with the .vtksz file format.",
@@ -233,7 +345,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Include tests for interactive images with the .vtksz file format.",
     )
-    group.addoption(
+
+    _add_doc_cli_option(
         "--max_vtksz_file_size",
         action="store",
         default=None,
@@ -244,89 +357,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=None,
         type="int",
         help="Maximum size allowed for vtksz interactive plot files.",
-    )
-    _add_common_pytest_options(parser, doc=True)
-
-
-def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> None:
-    """
-    Add CLI and INI options common to both regular unit tests and doc mode.
-
-    The CLI argument name is the same for unit tests and doc mode. For the INI config, a ``doc_``
-    prefix is added.
-
-    Important:
-        A default value for INI options should *NOT* be set when ``doc`` is True, i.e. the default
-        should be None for this case. This is needed because any INI options with a ``doc_`` prefix
-        has priority over the non-prefixed version, and should only be set by users that want to
-        explicitly override the non-prefixed INI value.
-
-    """
-    prefix = "doc_" if doc else ""
-    group = parser.getgroup(PARSER_GROUP_NAME)
-
-    if not doc:
-        group.addoption(
-            "--image_cache_dir",
-            action="store",
-            help="Path to the image cache folder.",
-        )
-    parser.addini(
-        f"{prefix}image_cache_dir",
-        default=None,  # Default is set when getting from config or ini
-        help="Path to the image cache folder.",
-    )
-
-    if not doc:
-        group.addoption(
-            "--generated_image_dir",
-            action="store",
-            help="Path to dump test images from the current run.",
-        )
-    parser.addini(
-        f"{prefix}generated_image_dir",
-        default=None,
-        help="Path to dump test images from the current run.",
-    )
-
-    if not doc:
-        group.addoption(
-            "--failed_image_dir",
-            action="store",
-            help="Path to dump images from failed tests from the current run.",
-        )
-    parser.addini(
-        f"{prefix}failed_image_dir",
-        default=None,
-        help="Path to dump images from failed tests from the current run.",
-    )
-
-    if not doc:
-        group.addoption(
-            "--generate_subdirs",
-            action="store_const",
-            const=True,
-            default=None,
-            help="Save generated images to sub-directories. The image names are determined by the environment info.",
-        )
-    parser.addini(
-        f"{prefix}generate_subdirs",
-        default=None,
-        help="Save generated images to sub-directories. The image names are determined by the environment info.",
-    )
-
-    if not doc:
-        group.addoption(
-            "--image_format",
-            action="store",
-            choices=get_args(_AllowedImageFormats),
-            default=None,
-            help="Image format to use when generating test images.",
-        )
-    parser.addini(
-        f"{prefix}image_format",
-        default=None if doc else "png",
-        help="Image format to use when generating test images.",
     )
 
 
@@ -894,8 +924,21 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
-    is_master = _is_master(config)
+    # Validate CLI args
     doc_mode = config.getoption("doc_mode")
+
+    cli_args = config.invocation_params.args
+    plugin_options = _UNIT_TEST_CLI_ARGS | _DOC_MODE_CLI_ARGS
+    for arg in cli_args:
+        if arg in plugin_options:
+            if doc_mode and arg not in _DOC_MODE_CLI_ARGS:
+                msg = f"argument {arg} cannot be used with --doc_mode enabled"
+                raise pytest.UsageError(msg)
+            if not doc_mode and arg not in _UNIT_TEST_CLI_ARGS:
+                msg = f"argument {arg} can only be used with --doc_mode enabled"
+                raise pytest.UsageError(msg)
+
+    is_master = _is_master(config)
     disallow_unused_cache = config.getoption("disallow_unused_cache")
     if is_master and disallow_unused_cache:
         # create a image names directory for individual or multiple workers to write to

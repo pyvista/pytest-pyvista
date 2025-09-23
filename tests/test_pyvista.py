@@ -18,9 +18,13 @@ import pytest
 import pyvista as pv
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
+from pytest_pyvista.pytest_pyvista import _DOC_MODE_CLI_ARGS
 from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
+from pytest_pyvista.pytest_pyvista import _UNIT_TEST_CLI_ARGS
+from pytest_pyvista.pytest_pyvista import PARSER_GROUP_NAME
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _SystemProperties
+from pytest_pyvista.pytest_pyvista import pytest_addoption
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -1246,3 +1250,46 @@ def test_validate_cache_unique_names(*, pytester: pytest.Pytester, doc_mode: boo
     result.stdout.fnmatch_lines("E           An image's name must not share the same name as a subdirectory. Either the image")
     result.stdout.fnmatch_lines("E           or the subdirectory should be removed for the following test cases:")
     result.stdout.fnmatch_lines(f"E           {{{test_name!r}}}")
+
+
+def test_cli_args_classified() -> None:
+    """Ensure that all CLI options are added to either unit testing or doc mode options sets."""
+    # Add all options to a parser just like pytest would
+    parser = pytest.Parser()
+    pytest_addoption(parser)
+
+    # Get group options
+    group = parser.getgroup(PARSER_GROUP_NAME)
+    assert group is not None
+
+    defined = {name for opt in group.options for name in opt.names()}
+    classified = _UNIT_TEST_CLI_ARGS | _DOC_MODE_CLI_ARGS
+
+    missing = defined - classified
+    extra = classified - defined
+
+    set_names = "classification sets _UNIT_TEST_CLI_ARGS, _DOC_MODE_CLI_ARGS"
+    assert not missing, f"Parser options are not included in {set_names}:\n{missing}"
+    assert not extra, f"{set_names} contain unknown options:\n{extra}"
+
+
+@pytest.mark.parametrize("arg", sorted(_UNIT_TEST_CLI_ARGS - _DOC_MODE_CLI_ARGS))
+def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
+    """Run pytest with --doc_mode and forbidden args."""
+    result = pytester.runpytest("--doc_mode", arg)
+    result.stderr.fnmatch_lines([f"ERROR: argument {arg} cannot be used with --doc_mode enabled"])
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+
+
+@pytest.mark.parametrize("arg", sorted(_DOC_MODE_CLI_ARGS - _UNIT_TEST_CLI_ARGS - {"--doc_mode"}))
+def test_doc_mode_args_invalid_in_unit_test_mode(pytester, arg) -> None:
+    """Run pytest unit tests with forbidden args."""
+    args = [arg]
+    if arg == "--max_vtksz_file_size":
+        args.append("0")
+    elif arg == "--doc_images_dir":
+        args.append("foo")
+    result = pytester.runpytest(*args)
+
+    result.stderr.fnmatch_lines([f"ERROR: argument {arg} can only be used with --doc_mode enabled"])
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
