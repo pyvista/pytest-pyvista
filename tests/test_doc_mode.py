@@ -34,12 +34,12 @@ def test_doc_mode(pytester: pytest.Pytester, *, generated_image_dir: bool, gener
     make_cached_images(pytester.path, images, name=name)
     _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     generated = "generated"
     if generated_image_dir:
-        args.extend(["--doc_generated_image_dir", generated])
+        args.extend(["--generated_image_dir", generated])
     if generate_subdirs:
-        args.append("--doc_generate_subdirs")
+        args.append("--generate_subdirs")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
@@ -68,12 +68,11 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
     images_path.mkdir()
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stdout.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be specified when using --doc_mode"])
-
-    cache_path = pytester.path / "cache"
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path), "--doc_image_cache_dir", str(cache_path))
-    assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stdout.fnmatch_lines(["*ValueError: 'doc_image_cache_dir' must be a valid directory. Got:", "*/cache."])
+    result.stdout.fnmatch_lines("INTERNALERROR> RuntimeError: No doc images or cache images found. The doc images dir:")
+    result.stdout.fnmatch_lines("INTERNALERROR>   */images")
+    result.stdout.fnmatch_lines("INTERNALERROR> and image cache dir:")
+    result.stdout.fnmatch_lines("INTERNALERROR>   */doc_image_cache_dir")
+    result.stdout.fnmatch_lines("INTERNALERROR> cannot both be empty.")
 
 
 @pytest.mark.parametrize("generated_image_dir", [True, False])
@@ -120,15 +119,15 @@ def test_both_images_exist(  # noqa: PLR0913
 
     images_path.mkdir(exist_ok=True)
     cache_path.mkdir(exist_ok=True)
-    args = ["--doc_mode", "--doc_images_dir", images_path, "--doc_image_cache_dir", cache_path, "--doc_image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images_path, "--image_cache_dir", cache_path, "--image_format", image_format]
     if generate_subdirs:
-        args.append("--doc_generate_subdirs")
+        args.append("--generate_subdirs")
     failed = "failed"
     if failed_image_dir:
-        args.extend(["--doc_failed_image_dir", failed])
+        args.extend(["--failed_image_dir", failed])
     generated = "generated"
     if generated_image_dir:
-        args.extend(["--doc_generated_image_dir", generated])
+        args.extend(["--generated_image_dir", generated])
     result = pytester.runpytest(*args)
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*Failed: Test setup failed for test image:*", *expected_lines])
@@ -157,7 +156,7 @@ def test_compare_images_with_different_sizes(pytester: pytest.Pytester) -> None:
     make_cached_images(pytester.path, cache)
     make_cached_images(pytester.path, images)
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
     result.stdout.fnmatch_lines(["*Failed: RuntimeError('Input images are not the same size.')"])
 
@@ -170,7 +169,7 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     make_cached_images(pytester.path, images, color="blue")
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
 
     result.stdout.re_match_lines([r".*Failed: imcache Exceeded image regression error of 500\.0 with an image error equal to: [0-9]+\.[0-9]+"])
@@ -187,12 +186,12 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
     _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
     if failed_image_dir:
-        args.extend(["--doc_failed_image_dir", failed])
+        args.extend(["--failed_image_dir", failed])
     if generate_subdirs:
-        args.append("--doc_generate_subdirs")
+        args.append("--generate_subdirs")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
@@ -238,10 +237,10 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     build_filename = make_cached_images(pytester.path, images, name=name, color=build_color)
     _preprocess_build_images(cache_parent / subdir, cache_parent / subdir, image_format=image_format)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "--doc_image_format", image_format]
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
     if failed_image_dir:
-        args.extend(["--doc_failed_image_dir", failed])
+        args.extend(["--failed_image_dir", failed])
     result = pytester.runpytest(*args)
     assert result.ret == return_code
 
@@ -309,7 +308,7 @@ def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
     make_cached_images(pytester.path, images)
     _preprocess_build_images(pytester.path / cache / subdir, pytester.path / cache / subdir)
 
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache)
+    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.OK
     match = [
         ".*UserWarning: Cached image sub-directory only contains a single image.",
@@ -333,7 +332,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--doc_image_cache_dir", cache, "-n2", "-v"]
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
@@ -361,9 +360,10 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
     assert f"{failed_test_name} Exceeded image regression error" in str(result.stdout)
 
 
+@pytest.mark.parametrize("use_doc_prefix", [True, False])
 @pytest.mark.parametrize("cli", [True, False])
 @pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) -> None:  # noqa: PLR0915
+def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, use_doc_prefix: bool) -> None:  # noqa: PLR0915
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     cache_ini = cache + "ini"
@@ -397,15 +397,16 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     max_size_cli = 10
     max_size_ini = 20
 
+    prefix = "doc_" if use_doc_prefix else ""
     pytester.makeini(
         f"""
         [pytest]
-        doc_image_format = {image_format_ini}
-        doc_failed_image_dir = {failed_ini}
-        doc_generated_image_dir = {generated_ini}
-        doc_image_cache_dir = {cache_ini}
+        {prefix}image_format = {image_format_ini}
+        {prefix}failed_image_dir = {failed_ini}
+        {prefix}generated_image_dir = {generated_ini}
+        {prefix}image_cache_dir = {cache_ini}
         doc_images_dir = {images_ini}
-        doc_generate_subdirs = {generate_subdirs}
+        {prefix}generate_subdirs = {generate_subdirs}
         max_vtksz_file_size = {max_size_ini}
         """
     )
@@ -416,20 +417,20 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
             [
                 "--doc_images_dir",
                 images_cli,
-                "--doc_image_cache_dir",
+                "--image_cache_dir",
                 cache_cli,
-                "--doc_failed_image_dir",
+                "--failed_image_dir",
                 failed_cli,
-                "--doc_generated_image_dir",
+                "--generated_image_dir",
                 generated_cli,
-                "--doc_image_format",
+                "--image_format",
                 image_format_cli,
                 "--max_vtksz_file_size",
                 max_size_cli,
             ]
         )
         if generate_subdirs:
-            args.append("--doc_generate_subdirs")
+            args.append("--generate_subdirs")
 
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -450,6 +451,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool) ->
     paths_cli = _get_file_paths(pytester.path, ext=image_format_cli)
     paths_ini = _get_file_paths(pytester.path, ext=image_format_ini)
 
+    # Expect five images: 1 in cache dir, 1 in images dir, 1 in generated dir, 2 in failed dir
     num_files = 5
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)
@@ -482,13 +484,13 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
         "--doc_mode",
         "--doc_images_dir",
         images,
-        "--doc_image_cache_dir",
+        "--image_cache_dir",
         cache,
-        "--doc_generated_image_dir",
+        "--generated_image_dir",
         generated,
-        "--doc_failed_image_dir",
+        "--failed_image_dir",
         failed,
-        "--doc_generate_subdirs",
+        "--generate_subdirs",
     )
     result.assert_outcomes(failed=1)
 
@@ -547,11 +549,11 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         "--doc_mode",
         "--doc_images_dir",
         images,
-        "--doc_image_cache_dir",
+        "--image_cache_dir",
         cache,
-        "--doc_generated_image_dir",
+        "--generated_image_dir",
         generated,
-        "--doc_failed_image_dir",
+        "--failed_image_dir",
         failed,
         "-v",
     ]
@@ -601,7 +603,7 @@ def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) ->
         "--doc_mode",
         "--doc_images_dir",
         images,
-        "--doc_image_cache_dir",
+        "--image_cache_dir",
         cache,
         "-v",
     ]

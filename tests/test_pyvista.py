@@ -1197,11 +1197,11 @@ def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format,
     make_cached_images(pytester.path, path=cache, name=name)
     make_cached_images(pytester.path / cache, path=test_name, name=name)
 
-    args = [f"--{'doc_' if doc_mode else ''}image_format", valid_format]
+    args = ["--image_format", valid_format]
     if doc_mode:
         images = "images"
         _preprocess_build_images(Path(cache), Path(images), image_format=valid_format)
-        args.extend(["--doc_mode", "--doc_image_cache_dir", cache, "--doc_images_dir", images])
+        args.extend(["--doc_mode", "--image_cache_dir", cache, "--doc_images_dir", images])
     else:
         pytester.makepyfile(
             f"""def test_{test_name}(verify_image_cache):
@@ -1230,7 +1230,7 @@ def test_validate_cache_unique_names(*, pytester: pytest.Pytester, doc_mode: boo
     if doc_mode:
         images = "images"
         _preprocess_build_images(Path(cache), Path(images))
-        args = ["--doc_mode", "--doc_image_cache_dir", cache, "--doc_images_dir", images]
+        args = ["--doc_mode", "--image_cache_dir", cache, "--doc_images_dir", images]
     else:
         args = []
         pytester.makepyfile(
