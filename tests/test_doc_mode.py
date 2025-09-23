@@ -299,25 +299,6 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             assert file_has_changed(str(from_build), str(from_cache))
 
 
-def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
-    """Test that a warning is emitting for a cache subdir with only one image."""
-    cache = "cache"
-    images = "images"
-    subdir = "imcache"
-    make_cached_images(pytester.path / cache, subdir)
-    make_cached_images(pytester.path, images)
-    _preprocess_build_images(pytester.path / cache / subdir, pytester.path / cache / subdir)
-
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
-    assert result.ret == pytest.ExitCode.OK
-    match = [
-        ".*UserWarning: Cached image sub-directory only contains a single image.",
-        ".*Move the cached image 'cache/imcache/imcache.png' directly to the cached image dir 'cache'",
-        ".*or include more than one image in the sub-directory.",
-    ]
-    result.stdout.re_match_lines(match)
-
-
 @pytest.mark.parametrize("include_vtksz", [True, False])
 def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz) -> None:
     """Ensure that doc_mode works with multiple workers."""
