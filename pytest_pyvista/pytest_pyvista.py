@@ -202,10 +202,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         prefix is added.
 
         Important:
-            A default value for INI options should *NOT* be set when ``doc`` is True, i.e. the default
-            should be None for this case. This is needed because any INI options with a ``doc_`` prefix
-            has priority over the non-prefixed version, and should only be set by users that want to
-            explicitly override the non-prefixed INI value.
+            A default value for INI options should *NOT* be set, i.e. the default should be None.
+            This is needed because any INI options with a ``doc_`` prefix has priority over the
+            non-prefixed version, and should only be set by users that want to explicitly override
+            the non-prefixed INI value.
+
+            Non-None default values should be set inside "_get_option_from_config_or_ini" instead.
 
         """
         option = "image_cache_dir"
