@@ -171,19 +171,19 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
     pluginmanager.add_hookspecs(hooks)
 
 
-def _add_unit_test_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+def _add_unit_test_cli_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
     """Add a CLI option reserved for regular unit tests only."""
     group.addoption(option, *args, **kwargs)
     _UNIT_TEST_CLI_ARGS.add(option)
 
 
-def _add_doc_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+def _add_doc_cli_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
     """Add a CLI option reserved for documentation tests only."""
     group.addoption(option, *args, **kwargs)
     _DOC_MODE_CLI_ARGS.add(option)
 
 
-def _add_common_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+def _add_common_cli_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
     """Add a CLI option common to regular unit tests and documentation tests."""
     group.addoption(option, *args, **kwargs)
     _UNIT_TEST_CLI_ARGS.add(option)
@@ -196,49 +196,49 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
     group = parser.getgroup(PARSER_GROUP_NAME)
 
-    _add_unit_test_option(
+    _add_unit_test_cli_option(
         group,
         "--reset_image_cache",
         action="store_true",
         help="Reset the images in the PyVista cache.",
     )
 
-    _add_unit_test_option(
+    _add_unit_test_cli_option(
         group,
         "--ignore_image_cache",
         action="store_true",
         help="Ignores the image cache.",
     )
 
-    _add_unit_test_option(
+    _add_unit_test_cli_option(
         group,
         "--allow_unused_generated",
         action="store_true",
         help="Prevent test failure if a generated test image has no use.",
     )
 
-    _add_unit_test_option(
+    _add_unit_test_cli_option(
         group,
         "--add_missing_images",
         action="store_true",
         help="Adds images to cache if missing.",
     )
 
-    _add_unit_test_option(
+    _add_unit_test_cli_option(
         group,
         "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
     )
 
-    _add_unit_test_option(
+    _add_unit_test_cli_option(
         group,
         "--disallow_unused_cache",
         action="store_true",
         help="Report test failure if there are any images in the cache which are not compared to any generated images.",
     )
 
-    _add_unit_test_option(
+    _add_unit_test_cli_option(
         group,
         "--allow_useless_fixture",
         action="store_true",
@@ -246,14 +246,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
     # Doc-specific test options
-    _add_doc_option(
+    _add_doc_cli_option(
         group,
         "--doc_mode",
         action="store_true",
         help="Enable documentation image testing.",
     )
 
-    _add_doc_option(
+    _add_doc_cli_option(
         group,
         "--doc_images_dir",
         action="store",
@@ -265,7 +265,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Path to the documentation images.",
     )
 
-    _add_doc_option(
+    _add_doc_cli_option(
         group,
         "--include_vtksz",
         action="store_true",
@@ -278,7 +278,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Include tests for interactive images with the .vtksz file format.",
     )
 
-    _add_doc_option(
+    _add_doc_cli_option(
         group,
         "--max_vtksz_file_size",
         action="store",
@@ -313,7 +313,7 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     group = parser.getgroup(PARSER_GROUP_NAME)
 
     if not doc:
-        _add_common_option(
+        _add_common_cli_option(
             group,
             "--image_cache_dir",
             action="store",
@@ -326,7 +326,7 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        _add_common_option(
+        _add_common_cli_option(
             group,
             "--generated_image_dir",
             action="store",
@@ -339,7 +339,7 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        _add_common_option(
+        _add_common_cli_option(
             group,
             "--failed_image_dir",
             action="store",
@@ -352,7 +352,7 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        _add_common_option(
+        _add_common_cli_option(
             group,
             "--generate_subdirs",
             action="store_const",
@@ -367,7 +367,7 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        _add_common_option(
+        _add_common_cli_option(
             group,
             "--image_format",
             action="store",
