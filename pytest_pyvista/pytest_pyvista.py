@@ -251,7 +251,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
 
         option = "generate_subdirs"
         help_ = "Save generated images to sub-directories. The image names are determined by the environment info."
-        _add_common_cli_option(f"--{option}", action="store_const", const=True, default=None, help=help_)
+        _add_common_cli_option(
+            f"--{option}",
+            action="store_const",
+            const=True,
+            default=None,
+            help=help_,
+        )
         _add_common_ini_option(
             option,
             default=None,
