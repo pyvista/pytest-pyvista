@@ -233,7 +233,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         option = "image_format"
         help_ = "Image format to use when generating test images."
         _add_common_cli_option(f"--{option}", action="store", choices=get_args(_AllowedImageFormats), default=None, help=help_)
-        _add_common_ini_option(option, default=None, help=help_) # Default is set when getting from config or ini
+        _add_common_ini_option(option, default=None, help=help_)  # Default is set when getting from config or ini
 
     def _add_unit_test_cli_and_ini_options() -> None:
         """Add options specific to regular unit tests."""
