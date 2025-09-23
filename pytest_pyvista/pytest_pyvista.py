@@ -313,14 +313,12 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     group = parser.getgroup(PARSER_GROUP_NAME)
 
     if not doc:
-        option = "--image_cache_dir"
-        group.addoption(
-            option,
+        _add_common_option(
+            group,
+            "--image_cache_dir",
             action="store",
             help="Path to the image cache folder.",
         )
-        _UNIT_TEST_CLI_ARGS.add(option)
-        _DOC_MODE_CLI_ARGS.add(option)
     parser.addini(
         f"{prefix}image_cache_dir",
         default=None,  # Default is set when getting from config or ini
@@ -328,14 +326,12 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        option = "--generated_image_dir"
-        group.addoption(
-            option,
+        _add_common_option(
+            group,
+            "--generated_image_dir",
             action="store",
             help="Path to dump test images from the current run.",
         )
-        _UNIT_TEST_CLI_ARGS.add(option)
-        _DOC_MODE_CLI_ARGS.add(option)
     parser.addini(
         f"{prefix}generated_image_dir",
         default=None,
@@ -343,14 +339,12 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        option = "--failed_image_dir"
-        group.addoption(
-            option,
+        _add_common_option(
+            group,
+            "--failed_image_dir",
             action="store",
             help="Path to dump images from failed tests from the current run.",
         )
-        _UNIT_TEST_CLI_ARGS.add(option)
-        _DOC_MODE_CLI_ARGS.add(option)
     parser.addini(
         f"{prefix}failed_image_dir",
         default=None,
@@ -358,16 +352,14 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        option = "--generate_subdirs"
-        group.addoption(
-            option,
+        _add_common_option(
+            group,
+            "--generate_subdirs",
             action="store_const",
             const=True,
             default=None,
             help="Save generated images to sub-directories. The image names are determined by the environment info.",
         )
-        _UNIT_TEST_CLI_ARGS.add(option)
-        _DOC_MODE_CLI_ARGS.add(option)
     parser.addini(
         f"{prefix}generate_subdirs",
         default=None,
@@ -375,16 +367,14 @@ def _add_common_pytest_options(parser: pytest.Parser, *, doc: bool = False) -> N
     )
 
     if not doc:
-        option = "--image_format"
-        group.addoption(
-            option,
+        _add_common_option(
+            group,
+            "--image_format",
             action="store",
             choices=get_args(_AllowedImageFormats),
             default=None,
             help="Image format to use when generating test images.",
         )
-        _UNIT_TEST_CLI_ARGS.add(option)
-        _DOC_MODE_CLI_ARGS.add(option)
     parser.addini(
         f"{prefix}image_format",
         default=None if doc else "png",
