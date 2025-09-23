@@ -171,94 +171,106 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
     pluginmanager.add_hookspecs(hooks)
 
 
+def _add_unit_test_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    """Add a CLI option reserved for regular unit tests only."""
+    group.addoption(option, *args, **kwargs)
+    _UNIT_TEST_CLI_ARGS.add(option)
+
+
+def _add_doc_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    """Add a CLI option reserved for documentation tests only."""
+    group.addoption(option, *args, **kwargs)
+    _DOC_MODE_CLI_ARGS.add(option)
+
+
+def _add_common_option(group: pytest.OptionGroup, option: str, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    """Add a CLI option common to regular unit tests and documentation tests."""
+    group.addoption(option, *args, **kwargs)
+    _UNIT_TEST_CLI_ARGS.add(option)
+    _DOC_MODE_CLI_ARGS.add(option)
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Adds new flag options to the pyvista plugin."""  # noqa: D401
     _add_common_pytest_options(parser)
 
     group = parser.getgroup(PARSER_GROUP_NAME)
 
-    option = "--reset_image_cache"
-    group.addoption(
-        option,
+    _add_unit_test_option(
+        group,
+        "--reset_image_cache",
         action="store_true",
         help="Reset the images in the PyVista cache.",
     )
-    _UNIT_TEST_CLI_ARGS.add(option)
 
-    option = "--ignore_image_cache"
-    group.addoption(option, action="store_true", help="Ignores the image cache.")
-    _UNIT_TEST_CLI_ARGS.add(option)
+    _add_unit_test_option(
+        group,
+        "--ignore_image_cache",
+        action="store_true",
+        help="Ignores the image cache.",
+    )
 
-    option = "--allow_unused_generated"
-    group.addoption(
-        option,
+    _add_unit_test_option(
+        group,
+        "--allow_unused_generated",
         action="store_true",
         help="Prevent test failure if a generated test image has no use.",
     )
-    _UNIT_TEST_CLI_ARGS.add(option)
 
-    option = "--add_missing_images"
-    group.addoption(
-        option,
+    _add_unit_test_option(
+        group,
+        "--add_missing_images",
         action="store_true",
         help="Adds images to cache if missing.",
     )
-    _UNIT_TEST_CLI_ARGS.add(option)
 
-    option = "--reset_only_failed"
-    group.addoption(
-        option,
+    _add_unit_test_option(
+        group,
+        "--reset_only_failed",
         action="store_true",
         help="Reset only the failed images in the PyVista cache.",
     )
-    _UNIT_TEST_CLI_ARGS.add(option)
 
-    option = "--disallow_unused_cache"
-    group.addoption(
-        option,
+    _add_unit_test_option(
+        group,
+        "--disallow_unused_cache",
         action="store_true",
         help="Report test failure if there are any images in the cache which are not compared to any generated images.",
     )
-    _UNIT_TEST_CLI_ARGS.add(option)
 
-    option = "--allow_useless_fixture"
-    group.addoption(
-        option,
+    _add_unit_test_option(
+        group,
+        "--allow_useless_fixture",
         action="store_true",
         help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
     )
-    _UNIT_TEST_CLI_ARGS.add(option)
 
     # Doc-specific test options
-    option = "--doc_mode"
-    group.addoption(
-        option,
+    _add_doc_option(
+        group,
+        "--doc_mode",
         action="store_true",
         help="Enable documentation image testing.",
     )
-    _DOC_MODE_CLI_ARGS.add(option)
 
-    option = "--doc_images_dir"
-    group.addoption(
-        option,
+    _add_doc_option(
+        group,
+        "--doc_images_dir",
         action="store",
         help="Path to the documentation images.",
     )
-    _DOC_MODE_CLI_ARGS.add(option)
-
     parser.addini(
         "doc_images_dir",
         default=None,
         help="Path to the documentation images.",
     )
 
-    option = "--include_vtksz"
-    group.addoption(
-        option,
+    _add_doc_option(
+        group,
+        "--include_vtksz",
         action="store_true",
         help="Include tests for interactive images with the .vtksz file format.",
     )
-    _DOC_MODE_CLI_ARGS.add(option)
     parser.addini(
         "include_vtksz",
         type="bool",
@@ -266,14 +278,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Include tests for interactive images with the .vtksz file format.",
     )
 
-    option = "--max_vtksz_file_size"
-    group.addoption(
-        option,
+    _add_doc_option(
+        group,
+        "--max_vtksz_file_size",
         action="store",
         default=None,
         help="Maximum size allowed for vtksz interactive plot files.",
     )
-    _DOC_MODE_CLI_ARGS.add(option)
     parser.addini(
         "max_vtksz_file_size",
         default=None,
