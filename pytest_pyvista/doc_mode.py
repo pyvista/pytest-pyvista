@@ -24,6 +24,7 @@ from .pytest_pyvista import PYVISTA_FAILED_IMAGE_CACHE_DIRNAME
 from .pytest_pyvista import PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME
 from .pytest_pyvista import _AllowedImageFormats
 from .pytest_pyvista import _check_compare_fail
+from .pytest_pyvista import _ensure_dir_exists
 from .pytest_pyvista import _EnvInfo
 from .pytest_pyvista import _get_file_paths
 from .pytest_pyvista import _get_generated_image_path
@@ -62,11 +63,11 @@ class _VtkszFileSizeTestCase:
 
 class _DocVerifyImageCache:
     doc_images_dir: Path
-    doc_image_cache_dir: Path
-    doc_generated_image_dir: Path
-    doc_failed_image_dir: Path
-    doc_generate_subdirs: bool
-    doc_image_format: _AllowedImageFormats
+    image_cache_dir: Path
+    generated_image_dir: Path
+    failed_image_dir: Path
+    generate_subdirs: bool
+    image_format: _AllowedImageFormats
     include_vtksz: bool
 
     @classmethod
@@ -83,7 +84,7 @@ class _DocVerifyImageCache:
             return path
 
         def optional_dir_else_cache(option: str, dirname: str) -> Path:
-            """Fetch an optional directory option or create a TemporaryDirectory if missing."""
+            """Fetch an optional directory option or save to cache if missing."""
             path = _get_option_from_config_or_ini(config, option, is_dir=True)
             if path is None:
                 # Save to cache
@@ -91,15 +92,26 @@ class _DocVerifyImageCache:
             return path
 
         cls.doc_images_dir = require_existing_dir("doc_images_dir")
-        cls.doc_image_cache_dir = require_existing_dir("doc_image_cache_dir")
+        cls.image_cache_dir = cast("Path", _get_option_from_config_or_ini(config, "image_cache_dir", is_dir=True))
+        _ensure_dir_exists(cls.image_cache_dir, "cache image dir")
 
-        cls.doc_generated_image_dir = optional_dir_else_cache("doc_generated_image_dir", dirname=PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
-        cls.doc_failed_image_dir = optional_dir_else_cache("doc_failed_image_dir", dirname=PYVISTA_FAILED_IMAGE_CACHE_DIRNAME)
+        cls.generated_image_dir = optional_dir_else_cache("generated_image_dir", dirname=PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
+        cls.failed_image_dir = optional_dir_else_cache("failed_image_dir", dirname=PYVISTA_FAILED_IMAGE_CACHE_DIRNAME)
 
-        cls.doc_image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "doc_image_format"))
-        cls.doc_generate_subdirs = bool(_get_option_from_config_or_ini(config, "doc_generate_subdirs"))
+        cls.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "image_format"))
+        cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
+
+        if not any(cls.doc_images_dir.iterdir()) and not any(cls.image_cache_dir.iterdir()):
+            msg = (
+                "No doc images or cache images found. The doc images dir:\n"
+                f"  {cls.doc_images_dir}\n"
+                "and image cache dir:\n"
+                f"  {cls.image_cache_dir}\n"
+                "cannot both be empty."
+            )
+            raise RuntimeError(msg)
 
     def __init__(
         self, test_name: str, *, docs_image_path: Path | None, cached_image_path: Path | None, env_info: str | _EnvInfo, input_path: Path | None
@@ -119,9 +131,9 @@ def _preprocess_all_images_for_test_cases(num_workers: int = 1) -> tuple[list[Pa
     pp = partial(
         _preprocess_build_images,
         _DocVerifyImageCache.doc_images_dir,
-        _DocVerifyImageCache.doc_generated_image_dir,
-        image_format=_DocVerifyImageCache.doc_image_format,
-        generate_subdirs=_DocVerifyImageCache.doc_generate_subdirs,
+        _DocVerifyImageCache.generated_image_dir,
+        image_format=_DocVerifyImageCache.image_format,
+        generate_subdirs=_DocVerifyImageCache.generate_subdirs,
         return_input_paths=True,
         num_workers=num_workers,
     )
@@ -328,11 +340,11 @@ def _generate_test_cases(input_paths: list[Path], test_image_paths: list[Path], 
             test_cases_dict[test_name]["input_path"] = input_path
 
     for input_path, test_path in zip(input_paths, test_image_paths):
-        add_to_dict(test_path.parent if _DocVerifyImageCache.doc_generate_subdirs else test_path, "docs", input_path=input_path)  # type: ignore[func-returns-value]
+        add_to_dict(test_path.parent if _DocVerifyImageCache.generate_subdirs else test_path, "docs", input_path=input_path)  # type: ignore[func-returns-value]
 
     # process cached images
-    cache_dir = _DocVerifyImageCache.doc_image_cache_dir
-    cached_image_paths = _get_file_paths(cache_dir, ext=_DocVerifyImageCache.doc_image_format)
+    cache_dir = _DocVerifyImageCache.image_cache_dir
+    cached_image_paths = _get_file_paths(cache_dir, ext=_DocVerifyImageCache.image_format)
     for path in cached_image_paths:
         # Check if we have a single image or a dir with multiple images
         rel = path.relative_to(cache_dir)
@@ -408,16 +420,16 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 def _save_failed_test_image(source_path: Path, category: Literal["warnings", "errors", "errors_as_warnings"]) -> None:
     """Save test image from cache or build to the failed image dir."""
-    _DocVerifyImageCache.doc_failed_image_dir.mkdir(exist_ok=True)
+    _DocVerifyImageCache.failed_image_dir.mkdir(exist_ok=True)
 
-    if source_path.is_relative_to(_DocVerifyImageCache.doc_image_cache_dir):
-        rel = source_path.relative_to(_DocVerifyImageCache.doc_image_cache_dir)
+    if source_path.is_relative_to(_DocVerifyImageCache.image_cache_dir):
+        rel = source_path.relative_to(_DocVerifyImageCache.image_cache_dir)
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
-        rel = source_path.relative_to(_DocVerifyImageCache.doc_generated_image_dir)
+        rel = source_path.relative_to(_DocVerifyImageCache.generated_image_dir)
         dest_relative_dir = Path("from_build") / rel.parent
 
-    dest_dir = _DocVerifyImageCache.doc_failed_image_dir / category / dest_relative_dir
+    dest_dir = _DocVerifyImageCache.failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
     dest_path = dest_dir / source_path.name
     copy_method = shutil.copytree if source_path.is_dir() else shutil.copy
@@ -454,16 +466,14 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
 
     cached_image_path = cast("Path", test_case.cached_image_path)
     cached_input_is_file = cached_image_path.is_file()
-    cached_image_paths = (
-        [cached_image_path] if cached_input_is_file else _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
-    )
+    cached_image_paths = [cached_image_path] if cached_input_is_file else _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.image_format)
     cached_image_paths = cast("list[Path]", cached_image_paths)
     current_cached_image_path = cached_image_paths[0]
 
     # Ensure test path is an image
     test_image_path = cast("Path", test_case.test_image_path)
-    test_image_path = test_image_path if test_image_path.is_file() else _get_file_paths(test_image_path, ext=_DocVerifyImageCache.doc_image_format)[0]
-    if test_case.doc_generate_subdirs:
+    test_image_path = test_image_path if test_image_path.is_file() else _get_file_paths(test_image_path, ext=_DocVerifyImageCache.image_format)[0]
+    if test_case.generate_subdirs:
         # Need to update the filename in case it's been modified by a plugin hook
         new_path = test_image_path.with_stem(str(test_case.env_info))
         if not new_path.is_file():
@@ -491,7 +501,7 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
                 current_cached_image_path = path
                 break
         else:  # Loop completed - test still fails
-            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocVerifyImageCache.doc_image_cache_dir / test_case.test_name!s}"
+            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocVerifyImageCache.image_cache_dir / test_case.test_name!s}"
 
     if fail_msg:
         _save_failed_test_image(test_image_path, "errors")
@@ -509,7 +519,7 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
 
 def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_image_path: Path | None) -> tuple[str | None, Path | None]:
     def has_no_images(path: Path | None) -> bool:
-        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocVerifyImageCache.doc_image_format)) == 0)
+        return path is None or (path.is_dir() and len(_get_file_paths(path, ext=_DocVerifyImageCache.image_format)) == 0)
 
     build_has_no_images = has_no_images(docs_image_path)
     cache_has_no_images = has_no_images(cached_image_path)
@@ -526,7 +536,7 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
             exists = "docs build"
             missing = "cache"
             exists_path = _DocVerifyImageCache.doc_images_dir
-            missing_path = _DocVerifyImageCache.doc_image_cache_dir
+            missing_path = _DocVerifyImageCache.image_cache_dir
 
         msg = (
             f"Test setup failed for test image:\n"
@@ -543,9 +553,9 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
 def _warn_cached_image_path(cached_image_path: Path | None) -> None:
     """Warn if a subdir is used with only one cached image."""
     if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.doc_image_format)
+        cached_images = _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.image_format)
         if len(cached_images) == 1:
-            cache_dir = _DocVerifyImageCache.doc_image_cache_dir
+            cache_dir = _DocVerifyImageCache.image_cache_dir
             rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)
             msg = (
                 "Cached image sub-directory only contains a single image.\n"
