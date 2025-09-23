@@ -456,7 +456,6 @@ def max_vtksz_file_size(request: pytest.FixtureRequest) -> _VtkszFileSizeTestCas
 def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
     test_case = _pytest_pyvista_test_case
-    _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(
         filename=test_case.test_name, docs_image_path=test_case.test_image_path, cached_image_path=test_case.cached_image_path
     )
@@ -548,21 +547,6 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
         )
         return msg, source_path
     return None, None
-
-
-def _warn_cached_image_path(cached_image_path: Path | None) -> None:
-    """Warn if a subdir is used with only one cached image."""
-    if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.image_format)
-        if len(cached_images) == 1:
-            cache_dir = _DocVerifyImageCache.image_cache_dir
-            rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)
-            msg = (
-                "Cached image sub-directory only contains a single image.\n"
-                f"Move the cached image {rel_path.as_posix()!r} directly to the cached image dir {cache_dir.name!r}\n"
-                f"or include more than one image in the sub-directory."
-            )
-            warnings.warn(msg, stacklevel=2)
 
 
 def test_vtksz_file_size(_pytest_pyvista_test_case_vtksz: _VtkszFileSizeTestCase, max_vtksz_file_size: _VtkszFileSizeTestCase) -> None:  # noqa: PT019, ARG001
