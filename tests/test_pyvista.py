@@ -1273,7 +1273,7 @@ def test_cli_args_classified() -> None:
     assert not extra, f"{set_names} contain unknown options:\n{extra}"
 
 
-@pytest.mark.parametrize("arg", _UNIT_TEST_CLI_ARGS - _DOC_MODE_CLI_ARGS)
+@pytest.mark.parametrize("arg", sorted(_UNIT_TEST_CLI_ARGS - _DOC_MODE_CLI_ARGS))
 def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
     """Run pytest with --doc_mode and forbidden args."""
     result = pytester.runpytest("--doc_mode", arg)
@@ -1281,7 +1281,7 @@ def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
     assert result.ret == pytest.ExitCode.USAGE_ERROR
 
 
-@pytest.mark.parametrize("arg", _DOC_MODE_CLI_ARGS - _UNIT_TEST_CLI_ARGS - {"--doc_mode"})
+@pytest.mark.parametrize("arg", sorted(_DOC_MODE_CLI_ARGS - _UNIT_TEST_CLI_ARGS - {"--doc_mode"}))
 def test_doc_mode_args_invalid_in_unit_test_mode(pytester, arg) -> None:
     """Run pytest unit tests with forbidden args."""
     args = [arg]
