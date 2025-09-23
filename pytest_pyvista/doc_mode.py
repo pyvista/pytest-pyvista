@@ -222,7 +222,7 @@ def _preprocess_build_images(  # noqa: PLR0913
     if vtksz:
         vtksz_paths = _get_file_paths(build_images_dir, ext="vtksz")
         # Print a general statement before processing.
-        msg = f"[pyvista] Preprocessing {len(vtksz_paths)} vtksz files. This may take a few minutes..."
+        msg = f"[pyvista] Preprocessing {len(vtksz_paths)} vtksz files. This may take several minutes..."
         _DocVerifyImageCache._terminalreporter.write_line(msg, bold=True)  # noqa: SLF001
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)

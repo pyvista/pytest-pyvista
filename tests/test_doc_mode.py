@@ -340,7 +340,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     preprocessing = "Preprocessing"
     if include_vtksz:
-        preprocessing_msg = f"[pyvista] {preprocessing} {n_images} vtksz files. This may take a few minutes..."
+        preprocessing_msg = f"[pyvista] {preprocessing} {n_images} vtksz files. This may take several minutes..."
         result.stdout.fnmatch_lines(preprocessing_msg)
     else:
         assert preprocessing not in result.stdout.str()
@@ -576,7 +576,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
-    preprocessing_msg = f"[pyvista] {preprocessing} 1 vtksz files. This may take a few minutes..."
+    preprocessing_msg = f"[pyvista] {preprocessing} 1 vtksz files. This may take several minutes..."
     result.stdout.fnmatch_lines(preprocessing_msg)
     assert captured_logs == expected_logs
 
