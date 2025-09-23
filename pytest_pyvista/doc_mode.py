@@ -42,7 +42,7 @@ TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
 logger = logging.getLogger("pytest-pyvista")
-logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="[pytest-pyvista] %(message)s")
+logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
 multiprocessing.set_start_method("spawn", force=True)
 
@@ -69,6 +69,8 @@ class _DocVerifyImageCache:
     generate_subdirs: bool
     image_format: _AllowedImageFormats
     include_vtksz: bool
+    _verbose: bool = False
+    _terminalreporter: pytest.TerminalReporter = None
 
     @classmethod
     def init_from_config(cls, config: pytest.Config) -> None:
@@ -102,6 +104,9 @@ class _DocVerifyImageCache:
         cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
+
+        cls._verbose = config.option.verbose
+        cls._terminalreporter = config.pluginmanager.get_plugin("terminalreporter")
 
         if not any(cls.doc_images_dir.iterdir()) and not any(cls.image_cache_dir.iterdir()):
             msg = (
@@ -216,6 +221,9 @@ def _preprocess_build_images(  # noqa: PLR0913
 
     if vtksz:
         vtksz_paths = _get_file_paths(build_images_dir, ext="vtksz")
+        # Print a general statement before processing.
+        msg = f"[pyvista] Preprocessing {len(vtksz_paths)} vtksz files. This may take several minutes..."
+        _DocVerifyImageCache._terminalreporter.write_line(msg, bold=True)  # noqa: SLF001
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             html_paths = _vtksz_to_html_files(vtksz_paths, tmppath)
@@ -241,12 +249,12 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
-def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path, *, log: bool = True) -> list[Path]:
+def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path]:
     from trame_vtk.tools.vtksz2html import embed_data_to_viewer_file  # noqa: PLC0415
 
     output_paths: list[Path] = []
     for path in vtksz_files:
-        if log:
+        if _DocVerifyImageCache._verbose:  # noqa: SLF001
             msg = f"Converting {path.name}"
             logger.info(msg)
 
@@ -258,7 +266,7 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path, *, log: bool
     return output_paths
 
 
-def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = True) -> list[Path]:
+def _html_screenshots(html_files: list[Path], output_dir: Path, verbose: bool = False) -> list[Path]:  # noqa: FBT001, FBT002
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
     output_paths: list[Path] = []
@@ -268,7 +276,7 @@ def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = T
         page = context.new_page()
 
         for html_file in html_files:
-            if log:
+            if verbose:
                 msg = f"Rendering {html_file.name}"
                 logger.info(msg)
 
@@ -281,20 +289,16 @@ def _html_screenshots(html_files: list[Path], output_dir: Path, *, log: bool = T
     return output_paths
 
 
-def _process_html_screenshots(batch: list[Path], output_dir: Path, log: bool = True) -> list[Path]:  # noqa: FBT001, FBT002
-    return _html_screenshots(batch, output_dir, log=log)
-
-
 def _render_all_html(
     html_files: list[Path],
     output_dir: Path,
     *,
     num_workers: int = 1,
-    log: bool = True,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
+    verbose = _DocVerifyImageCache._verbose  # noqa: SLF001
     if num_workers == 1:
-        return _process_html_screenshots(html_files, output_dir, log)
+        return _html_screenshots(html_files, output_dir, verbose)
 
     def _split_batches(files: list[Path], n: int) -> list[list[Path]]:
         """Split a list of files into n roughly equal contiguous batches."""
@@ -304,8 +308,8 @@ def _render_all_html(
     batches = _split_batches(html_files, num_workers)
     with multiprocessing.Pool(processes=num_workers) as pool:
         results_nested = pool.starmap(
-            _process_html_screenshots,
-            [(batch, output_dir, log) for batch in batches],
+            _html_screenshots,
+            [(batch, output_dir, verbose) for batch in batches],
         )
 
     # Flatten list of lists
@@ -456,7 +460,6 @@ def max_vtksz_file_size(request: pytest.FixtureRequest) -> _VtkszFileSizeTestCas
 def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
     test_case = _pytest_pyvista_test_case
-    _warn_cached_image_path(test_case.cached_image_path)
     fail_msg, fail_source = _test_both_images_exist(
         filename=test_case.test_name, docs_image_path=test_case.test_image_path, cached_image_path=test_case.cached_image_path
     )
@@ -548,21 +551,6 @@ def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_
         )
         return msg, source_path
     return None, None
-
-
-def _warn_cached_image_path(cached_image_path: Path | None) -> None:
-    """Warn if a subdir is used with only one cached image."""
-    if cached_image_path is not None and cached_image_path.is_dir():
-        cached_images = _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.image_format)
-        if len(cached_images) == 1:
-            cache_dir = _DocVerifyImageCache.image_cache_dir
-            rel_path = cache_dir.name / cached_images[0].relative_to(cache_dir)
-            msg = (
-                "Cached image sub-directory only contains a single image.\n"
-                f"Move the cached image {rel_path.as_posix()!r} directly to the cached image dir {cache_dir.name!r}\n"
-                f"or include more than one image in the sub-directory."
-            )
-            warnings.warn(msg, stacklevel=2)
 
 
 def test_vtksz_file_size(_pytest_pyvista_test_case_vtksz: _VtkszFileSizeTestCase, max_vtksz_file_size: _VtkszFileSizeTestCase) -> None:  # noqa: PT019, ARG001

@@ -58,21 +58,21 @@ def test_cli_errors(pytester: pytest.Pytester) -> None:
     """Test errors generated when using CLI."""
     result = pytester.runpytest("--doc_mode")
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines(["*ValueError: 'doc_images_dir' must be specified when using --doc_mode"])
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_images_dir' must be specified when using --doc_mode"])
 
     images_path = pytester.path / "images"
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines(["*ValueError: 'doc_images_dir' must be a valid directory. Got:", "*/images."])
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_images_dir' must be a valid directory. Got:", "*/images."])
 
     images_path.mkdir()
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", str(images_path))
     assert result.ret == pytest.ExitCode.INTERNAL_ERROR
-    result.stderr.fnmatch_lines("INTERNALERROR> RuntimeError: No doc images or cache images found. The doc images dir:")
-    result.stderr.fnmatch_lines("INTERNALERROR>   */images")
-    result.stderr.fnmatch_lines("INTERNALERROR> and image cache dir:")
-    result.stderr.fnmatch_lines("INTERNALERROR>   */doc_image_cache_dir")
-    result.stderr.fnmatch_lines("INTERNALERROR> cannot both be empty.")
+    result.stdout.fnmatch_lines("INTERNALERROR> RuntimeError: No doc images or cache images found. The doc images dir:")
+    result.stdout.fnmatch_lines("INTERNALERROR>   */images")
+    result.stdout.fnmatch_lines("INTERNALERROR> and image cache dir:")
+    result.stdout.fnmatch_lines("INTERNALERROR>   */doc_image_cache_dir")
+    result.stdout.fnmatch_lines("INTERNALERROR> cannot both be empty.")
 
 
 @pytest.mark.parametrize("generated_image_dir", [True, False])
@@ -299,25 +299,6 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             assert file_has_changed(str(from_build), str(from_cache))
 
 
-def test_single_cache_image_in_subdir(pytester: pytest.Pytester) -> None:
-    """Test that a warning is emitting for a cache subdir with only one image."""
-    cache = "cache"
-    images = "images"
-    subdir = "imcache"
-    make_cached_images(pytester.path / cache, subdir)
-    make_cached_images(pytester.path, images)
-    _preprocess_build_images(pytester.path / cache / subdir, pytester.path / cache / subdir)
-
-    result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
-    assert result.ret == pytest.ExitCode.OK
-    match = [
-        ".*UserWarning: Cached image sub-directory only contains a single image.",
-        ".*Move the cached image 'cache/imcache/imcache.png' directly to the cached image dir 'cache'",
-        ".*or include more than one image in the sub-directory.",
-    ]
-    result.stdout.re_match_lines(match)
-
-
 @pytest.mark.parametrize("include_vtksz", [True, False])
 def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz) -> None:
     """Ensure that doc_mode works with multiple workers."""
@@ -332,11 +313,18 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2"]
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
+
+    preprocessing = "Preprocessing"
+    if include_vtksz:
+        preprocessing_msg = f"[pyvista] {preprocessing} {n_images} vtksz files. This may take several minutes..."
+        result.stdout.fnmatch_lines(preprocessing_msg)
+    else:
+        assert preprocessing not in result.stdout.str()
 
     # replace a single image with a different image
     img_idx = 34
@@ -554,6 +542,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
 
+    preprocessing = "Preprocessing"
     expected_logs = [f"Converting {name_vtksz}", f"Rendering {stem}.html"]
     if not include_vtksz:
         result.assert_outcomes(failed=1)
@@ -562,11 +551,14 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         result.stdout.fnmatch_lines("E           The image exists in the cache directory:")
         result.stdout.fnmatch_lines(f"E           	*cache/{name_generated}")
         result.stdout.fnmatch_lines("E           but is missing from the docs build directory:")
+        assert preprocessing not in result.stdout.str()
         assert captured_logs == []
         return
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
+    preprocessing_msg = f"[pyvista] {preprocessing} 1 vtksz files. This may take several minutes..."
+    result.stdout.fnmatch_lines(preprocessing_msg)
     assert captured_logs == expected_logs
 
     assert Path(generated).is_dir()
