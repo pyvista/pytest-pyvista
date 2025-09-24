@@ -241,10 +241,8 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
     # Resize image based on plotter window size and save to output
     with Image.open(input_path) as im:
         im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
-        width, height = pv.global_theme.window_size
-        if im.size[0] > width or im.size[1] > height:
-            max_dim = max(width, height)
-            im.thumbnail(size=(max_dim, max_dim))
+        max_dim = max(*pv.global_theme.window_size)
+        im.thumbnail(size=(max_dim, max_dim))
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
