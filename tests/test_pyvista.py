@@ -1293,3 +1293,46 @@ def test_doc_mode_args_invalid_in_unit_test_mode(pytester, arg) -> None:
 
     result.stderr.fnmatch_lines([f"ERROR: argument {arg} can only be used with --doc_mode enabled"])
     assert result.ret == pytest.ExitCode.USAGE_ERROR
+
+
+@pytest.mark.parametrize("window_size", [(400, 300), (300, 400)])
+@pytest.mark.parametrize("doc_mode", [True, False])
+def test_customize_window_size(pytester: pytest.Pytester, doc_mode, window_size) -> None:
+    """Test that generated image dimensions may be customized."""
+    test_name = "test"
+    generated = "generated"
+    args = ["--generated_image_dir", generated]
+
+    images_dir = "images"
+    if doc_mode:
+        make_cached_images(pytester.path, images_dir, f"{test_name}.png", window_size=window_size)
+        args.extend(["--doc_mode", "--doc_images_dir", images_dir])
+        pytester.makeconftest(
+            f"""
+            import pyvista as pv
+            pv.global_theme.window_size = {window_size}
+            """
+        )
+    else:
+        pytester.makepyfile(
+            f"""
+            import pytest
+            import pyvista as pv
+            pv.global_theme.window_size = {window_size}
+            pv.OFF_SCREEN = True
+            def test_{test_name}(verify_image_cache):
+                sphere = pv.Sphere()
+                plotter = pv.Plotter()
+                plotter.add_mesh(sphere, color="red")
+                plotter.show()
+            """
+        )
+
+    result = pytester.runpytest(*args)
+
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    gen_file = pytester.path / generated / f"{test_name}.png"
+    assert gen_file.is_file()
+    generaed_image = pv.read(gen_file)
+    assert generaed_image.dimensions == (*window_size, 1)

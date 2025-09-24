@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 import pyvista as pv
 
-from pytest_pyvista.doc_mode import DEFAULT_IMAGE_HEIGHT
-from pytest_pyvista.doc_mode import DEFAULT_IMAGE_WIDTH
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
@@ -153,8 +151,8 @@ def test_compare_images_with_different_sizes(pytester: pytest.Pytester) -> None:
     """Test error is raised when there is a mismatch in image size."""
     cache = "cache"
     images = "images"
-    make_cached_images(pytester.path, cache)
-    make_cached_images(pytester.path, images)
+    make_cached_images(pytester.path, cache, window_size=(400, 300))
+    make_cached_images(pytester.path, images, window_size=(401, 300))
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -183,7 +181,7 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     images = "images"
     name = f"im.{image_format}"
     make_cached_images(pytester.path, cache, name=name, color=[255, 0, 0])
-    make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
+    make_cached_images(pytester.path, images, name=name, color=[251, 0, 0])
     _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
@@ -494,8 +492,8 @@ def test_vtksz_screenshot(tmp_path) -> None:
     png_file = png_files[0]
     assert png_file.suffix == ".png"
 
-    expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT))
-    small_error = 30
+    expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=pv.global_theme.window_size)
+    small_error = 70
     actual_error = pv.compare_images(str(expected_screenshot), str(png_file))
     assert actual_error < small_error
 

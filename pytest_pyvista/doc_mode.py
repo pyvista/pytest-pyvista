@@ -35,9 +35,6 @@ from .pytest_pyvista import _paths_from_strings
 from .pytest_pyvista import _test_compare_images
 from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
-DEFAULT_IMAGE_WIDTH = 400  # pixels
-DEFAULT_IMAGE_HEIGHT = 300  # pixels
-MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
@@ -241,11 +238,12 @@ def _preprocess_build_images(  # noqa: PLR0913
 
 
 def _preprocess_image(input_path: Path, output_path: Path) -> None:
-    # Ensure image size is max 400x400 and save to output
+    # Resize image based on plotter window size and save to output
     with Image.open(input_path) as im:
         im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
-        if not (im.size[0] <= MAX_IMAGE_DIM and im.size[1] <= MAX_IMAGE_DIM):
-            im.thumbnail(size=(MAX_IMAGE_DIM, MAX_IMAGE_DIM))
+        max_dim = max(*pv.global_theme.window_size)
+        if not (im.size[0] <= max_dim and im.size[1] <= max_dim):
+            im.thumbnail(size=(max_dim, max_dim))
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
@@ -270,9 +268,10 @@ def _html_screenshots(html_files: list[Path], output_dir: Path, verbose: bool = 
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
     output_paths: list[Path] = []
+    width, height = pv.global_theme.window_size
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
+        context = browser.new_context(viewport={"width": width, "height": height})
         page = context.new_page()
 
         for html_file in html_files:

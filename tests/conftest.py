@@ -21,6 +21,14 @@ def close_all_plotters() -> Generator[None]:
     pv.close_all()
 
 
+@pytest.fixture(autouse=True)
+def reset_global_theme() -> Generator[None]:
+    """Reset theme."""
+    pv.set_plot_theme("document_build")
+    yield
+    pv.set_plot_theme("document_build")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def set_playwright_browsers_path() -> None:
     """Set env var so pytester can find the existing browser(s) installed with `playwright install`."""
