@@ -1305,7 +1305,7 @@ def test_customize_window_size(pytester: pytest.Pytester, doc_mode, window_size)
 
     images_dir = "images"
     if doc_mode:
-        scaled_window_size = tuple(map(lambda x: x*2, window_size))
+        scaled_window_size = tuple(x * 2 for x in window_size)
         make_cached_images(pytester.path, images_dir, f"{test_name}.png", window_size=scaled_window_size)
         args.extend(["--doc_mode", "--doc_images_dir", images_dir])
         pytester.makeconftest(
