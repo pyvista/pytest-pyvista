@@ -27,6 +27,8 @@ import warnings
 import numpy as np
 from PIL import Image
 import pytest
+import pyvista
+from pyvista import Plotter
 import vtkmodules
 
 from pytest_pyvista import hooks
@@ -34,8 +36,6 @@ from pytest_pyvista import hooks
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
-    import pyvista
-    from pyvista import Plotter
     import xdist.workermanage
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
@@ -67,8 +67,6 @@ class _EnvInfo:
     suffix: str = ""
 
     def __repr__(self) -> str:
-        import pyvista  # noqa: PLC0415
-
         os_version = f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}" if self.os else ""
         machine = f"{platform.machine()}" if self.machine else ""
         gpu = f"gpu-{_SYSTEM_PROPERTIES.gpu_vendor}" if self.gpu else ""
@@ -120,8 +118,6 @@ class _SystemProperties:
 
     @staticmethod
     def _gpu_vendor() -> str:
-        import pyvista  # noqa: PLC0415
-
         try:
             vendor = pyvista.GPUInfo().vendor
         except Exception:  # noqa: BLE001
@@ -640,8 +636,6 @@ def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
 
 
 def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path | str) -> float:
-    import pyvista  # noqa: PLC0415
-
     if isinstance(test_image, pyvista.Plotter) and Path(cached_image).suffix == ".jpg":
         # Need to process image to apply jpg compression
 
@@ -969,8 +963,6 @@ def verify_image_cache(
     _validate_image_cache_dir: None,
 ) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
-    import pyvista  # noqa: PLC0415
-
     # Set CMD options in class attributes
     VerifyImageCache.reset_image_cache = pytestconfig.getoption("reset_image_cache")
     VerifyImageCache.ignore_image_cache = pytestconfig.getoption("ignore_image_cache")
@@ -1011,8 +1003,8 @@ def verify_image_cache(
 
         return old_show(*args, **kwargs)
 
-    old_show = pyvista.Plotter.show
-    monkeypatch.setattr(pyvista.Plotter, "show", func_show)
+    old_show = Plotter.show
+    monkeypatch.setattr(Plotter, "show", func_show)
 
     yield verify_image_cache
 
