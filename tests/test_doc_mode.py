@@ -10,7 +10,6 @@ import pytest
 import pyvista as pv
 
 from pytest_pyvista.doc_mode import _html_screenshots
-from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
 from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
 from pytest_pyvista.pytest_pyvista import _EnvInfo
@@ -30,7 +29,6 @@ def test_doc_mode(pytester: pytest.Pytester, *, generated_image_dir: bool, gener
     name = f"imcache.{image_format}"
     make_cached_images(pytester.path, cache, name=name)
     make_cached_images(pytester.path, images, name=name)
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     generated = "generated"
@@ -95,7 +93,6 @@ def test_both_images_exist(  # noqa: PLR0913
     cache_path = pytester.path / "cache"
     if missing == "build":
         make_cached_images(cache_path.parent, cache_path.name, name=name)
-        _preprocess_build_images(cache_path, cache_path, image_format=image_format)
         expected_lines = [
             "*The image exists in the cache directory:",
             f"*{cache_path.name}/imcache.{image_format}",
@@ -165,7 +162,6 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     images = "images"
     make_cached_images(pytester.path, cache, color="red")
     make_cached_images(pytester.path, images, color="blue")
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -182,7 +178,6 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     name = f"im.{image_format}"
     make_cached_images(pytester.path, cache, name=name, color=[255, 0, 0])
     make_cached_images(pytester.path, images, name=name, color=[251, 0, 0])
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
@@ -233,7 +228,6 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     red_filename = make_cached_images(cache_parent, subdir, name=f"im1.{image_format}", color="red")
     blue_filename = make_cached_images(cache_parent, subdir, name=f"im2.{image_format}", color="blue")
     build_filename = make_cached_images(pytester.path, images, name=name, color=build_color)
-    _preprocess_build_images(cache_parent / subdir, cache_parent / subdir, image_format=image_format)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
@@ -308,8 +302,6 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
     make_multiple_cached_images(pytester.path, cache, n_images=n_images, name=name_cache)
     name_build = "imcache{index}.vtksz" if include_vtksz else "imcache{index}.png"
     image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images, name=name_build)
-
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
@@ -446,7 +438,6 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     name = "imcache.png"
     make_cached_images(pytester.path, cache, name=name, color="blue")
     make_cached_images(pytester.path, images, name=name, color="red")
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     custom_string = "custom_string"
     pytester.makeconftest(
@@ -520,7 +511,6 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     images = "images"
     make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue")
     make_cached_images(pytester.path, path=cache, name=name_generated, color="red")
-    _preprocess_build_images(Path(cache), Path(cache))
 
     generated = "generated"
     failed = "failed"
