@@ -16,7 +16,6 @@ import warnings
 
 from PIL import Image
 import pytest
-import pyvista as pv
 
 from .pytest_pyvista import DEFAULT_ERROR_THRESHOLD
 from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
@@ -238,6 +237,8 @@ def _preprocess_build_images(  # noqa: PLR0913
 
 
 def _preprocess_image(input_path: Path, output_path: Path) -> None:
+    import pyvista as pv  # noqa: PLC0415
+
     # Resize image based on plotter window size and save to output
     with Image.open(input_path) as im:
         im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
@@ -265,6 +266,7 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
 
 def _html_screenshots(html_files: list[Path], output_dir: Path, verbose: bool = False) -> list[Path]:  # noqa: FBT001, FBT002
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
+    import pyvista as pv  # noqa: PLC0415
 
     output_paths: list[Path] = []
     width, height = pv.global_theme.window_size
@@ -457,6 +459,8 @@ def max_vtksz_file_size(request: pytest.FixtureRequest) -> _VtkszFileSizeTestCas
 @pytest.mark.usefixtures("_validate_image_cache_dir")
 def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
+    import pyvista as pv  # noqa: PLC0415
+
     test_case = _pytest_pyvista_test_case
     fail_msg, fail_source = _test_both_images_exist(
         filename=test_case.test_name, docs_image_path=test_case.test_image_path, cached_image_path=test_case.cached_image_path
