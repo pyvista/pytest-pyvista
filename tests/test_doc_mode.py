@@ -347,6 +347,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
     image_format_ini = "jpg"
     image_format_cli = "png"
 
+    max_image_size_ini = 200
+    max_image_size_cli = 101
+
     name = "imcache"
     name_ini = f"{name}.{image_format_ini}"
     name_cli = f"{name}.{image_format_cli}"
@@ -365,20 +368,21 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
     failed_ini = failed + "ini"
     failed_cli = failed + "cli"
 
-    max_size_cli = 10
-    max_size_ini = 20
+    max_vtksz_file_size_cli = 10
+    max_vtksz_file_size_ini = 20
 
     prefix = "doc_" if use_doc_prefix else ""
     pytester.makeini(
         f"""
         [pytest]
         {prefix}image_format = {image_format_ini}
+        {prefix}max_image_size = {max_image_size_ini}
         {prefix}failed_image_dir = {failed_ini}
         {prefix}generated_image_dir = {generated_ini}
         {prefix}image_cache_dir = {cache_ini}
         doc_images_dir = {images_ini}
         {prefix}generate_subdirs = {generate_subdirs}
-        max_vtksz_file_size = {max_size_ini}
+        max_vtksz_file_size = {max_vtksz_file_size_ini}
         """
     )
 
@@ -396,8 +400,10 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
                 generated_cli,
                 "--image_format",
                 image_format_cli,
+                "--max_image_size",
+                max_image_size_cli,
                 "--max_vtksz_file_size",
-                max_size_cli,
+                max_vtksz_file_size_cli,
             ]
         )
         if generate_subdirs:
@@ -418,6 +424,15 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
 
     generated_image_path = Path(generated_cli if cli else generated_ini) / name
     assert generated_image_path.is_dir() is generate_subdirs
+    file = (
+        next(generated_image_path.iterdir())
+        if generated_image_path.is_dir()
+        else generated_image_path.with_suffix(f".{image_format_cli if cli else image_format_ini}")
+    )
+    assert file.is_file()
+
+    expected_max_image_size = max_image_size_cli if cli else max_image_size_ini
+    assert max(pv.read(file).dimensions) == expected_max_image_size
 
     paths_cli = _get_file_paths(pytester.path, ext=image_format_cli)
     paths_ini = _get_file_paths(pytester.path, ext=image_format_ini)
@@ -427,7 +442,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)
 
-    expected_max_size = max_size_cli if cli else max_size_ini
+    expected_max_size = max_vtksz_file_size_cli if cli else max_vtksz_file_size_ini
     assert _VtkszFileSizeTestCase._max_vtksz_file_size == expected_max_size  # noqa: SLF001
 
 

@@ -65,6 +65,7 @@ class _DocVerifyImageCache:
     failed_image_dir: Path
     generate_subdirs: bool
     image_format: _AllowedImageFormats
+    max_image_size: int | None
     include_vtksz: bool
     _verbose: bool = False
     _terminalreporter: pytest.TerminalReporter = None
@@ -98,6 +99,7 @@ class _DocVerifyImageCache:
         cls.failed_image_dir = optional_dir_else_cache("failed_image_dir", dirname=PYVISTA_FAILED_IMAGE_CACHE_DIRNAME)
 
         cls.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "image_format"))
+        cls.max_image_size = cast("int | None", _get_option_from_config_or_ini(config, "max_image_size"))
         cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
@@ -241,8 +243,8 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
     # Resize image based on plotter window size and save to output
     with Image.open(input_path) as im:
         im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
-        max_dim = max(*pv.global_theme.window_size)
-        im.thumbnail(size=(max_dim, max_dim))
+        max_size = _DocVerifyImageCache.max_image_size if _DocVerifyImageCache.max_image_size is not None else max(*pv.global_theme.window_size)
+        im.thumbnail(size=(max_size, max_size))
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
