@@ -230,11 +230,11 @@ These flags may be used with regular unit testing or documentation testing with
   ``png`` files are saved by default. Use ``jpg`` to reduce the image file size.
   This will override any configuration, see below.
 
-* Use ``--max_image_size`` to specify a single integer to limit the dimensions of
-  generated images to this value or smaller. By default, images have dimensions ``(1024, 768)``
-  as determined by the ``Plotter.window_size`` or ``pyvista.global_theme.window_size``.
-  If enabled, images are resized while preserving the aspect ratio. Images are only resized
-  to be smaller, and are not enlarged.
+* Use ``--max_image_size`` to specify a single integer that limits the maximum width or
+  height (whichever is larger) of generated images to this value or smaller. By default,
+  images have dimensions ``(1024, 768)`` as determined by the ``Plotter.window_size`` or
+  ``pyvista.global_theme.window_size``. If enabled, images are resized while preserving
+  the aspect ratio. Images are only resized to be smaller, and are not enlarged.
 
 Unit testing flags
 ==================
