@@ -238,7 +238,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         option = "max_image_size"
         help_ = "Saved images are resized so that dimensions will not exceed this value."
         _add_common_cli_option(f"--{option}", default=None, help=help_)
-        _add_common_ini_option(option, default=None, help=help_)  # Default is set when getting from config or ini
+        _add_common_ini_option(option, default=None, help=help_)
 
     def _add_unit_test_cli_and_ini_options() -> None:
         """Add options specific to regular unit tests."""
