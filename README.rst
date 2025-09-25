@@ -448,6 +448,7 @@ Note that these directories are relative to `pytest root path <https://docs.pyte
 Include additional vtksz file tests.
 
 .. code-block:: toml
+
     [tool.pytest.ini_options]
     include_vtksz = true
     max_vtksz_file_size = 20
