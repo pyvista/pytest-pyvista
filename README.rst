@@ -445,20 +445,31 @@ Configure directories for when ``--doc_mode`` is used:
 
 Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
 
+Include additional vtksz file tests.
+
+.. code-block:: toml
+    [tool.pytest.ini_options]
+    include_vtksz = true
+    max_vtksz_file_size = 20
+
 Configure the image format to be ``jpg`` for both unit tests and when using ``--doc_mode``.
+Limit the image dimensions to 400 pixels as well.
 
 .. code-block:: toml
 
     [tool.pytest.ini_options]
     image_format = "jpg"
+    max_image_size = 400
 
-Or, set them to use different image formats:
+Or, set them to use different image formats and sizes:
 
 .. code-block:: toml
 
     [tool.pytest.ini_options]
     image_format = "png"
+    max_image_size = 400
     doc_image_format = "jpg"
+    doc_max_image_size = 600
 
 Enable the generation of test images inside of sub-directories for both unit tests and when using ``--doc_mode``.
 
