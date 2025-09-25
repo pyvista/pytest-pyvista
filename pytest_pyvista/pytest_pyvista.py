@@ -663,14 +663,17 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
     return pyvista.compare_images(test_img, str(cached_image))
 
 
+def _get_thumbnail_size(current_size: tuple[int, int], max_image_size: int) -> tuple[int, int]:
+    ref_image = Image.fromarray(np.zeros(current_size).T)
+    ref_image.thumbnail(size=(max_image_size, max_image_size))
+    return ref_image.size
+
+
 def _screenshot(plotter: Plotter, *args, max_image_size: int | None, **kwargs) -> pyvista.pyvista_ndarray | None:  # noqa: ANN002, ANN003
-    old_window_size = plotter.window_size
+    old_window_size = cast("tuple[int, int]", tuple(plotter.window_size))
     do_resize = max_image_size is not None and any(size > max_image_size for size in old_window_size)
     if do_resize:
-        ref_image = Image.fromarray(np.zeros(old_window_size).T)
-        ref_image.thumbnail(size=(max_image_size, max_image_size))
-        new_size = ref_image.size
-        plotter.window_size = new_size
+        plotter.window_size = _get_thumbnail_size(old_window_size, max_image_size=cast("int", max_image_size))
 
     output = plotter.screenshot(*args, **kwargs)
 

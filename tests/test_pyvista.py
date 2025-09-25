@@ -14,8 +14,6 @@ from typing import TYPE_CHECKING
 from unittest import mock
 
 import matplotlib.pyplot as plt
-import numpy as np
-from PIL import Image
 import pytest
 import pyvista as pv
 
@@ -25,6 +23,7 @@ from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
 from pytest_pyvista.pytest_pyvista import _UNIT_TEST_CLI_ARGS
 from pytest_pyvista.pytest_pyvista import PARSER_GROUP_NAME
 from pytest_pyvista.pytest_pyvista import _EnvInfo
+from pytest_pyvista.pytest_pyvista import _get_thumbnail_size
 from pytest_pyvista.pytest_pyvista import _SystemProperties
 from pytest_pyvista.pytest_pyvista import pytest_addoption
 
@@ -1332,10 +1331,7 @@ def test_max_image_size(pytester: pytest.Pytester, doc_mode, original_size, max_
 
     gen_file = pytester.path / generated / f"{test_name}.png"
     assert gen_file.is_file()
+
     generated_image = pv.read(gen_file)
-
-    ref_image = Image.fromarray(np.zeros(original_size).T)
-    ref_image.thumbnail(size=(max_image_size, max_image_size))
-    expected_size = ref_image.size
-
+    expected_size = _get_thumbnail_size(original_size, max_image_size)
     assert generated_image.dimensions == (*expected_size, 1)

@@ -504,8 +504,9 @@ def test_vtksz_screenshot(tmp_path) -> None:
     assert actual_error < small_error
 
 
+@pytest.mark.parametrize("max_image_size", [400, None])
 @pytest.mark.parametrize("include_vtksz", [True, False])
-def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
+def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size) -> None:
     """Test that test images are generated from interactive plot files."""
     # Capture logs for testing since logger output is not captured by pytester
     captured_logs = []
@@ -525,7 +526,9 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     cache = "cache"
     images = "images"
     make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue")
-    make_cached_images(pytester.path, path=cache, name=name_generated, color="red")
+    # Need cached image to match the generated image size
+    cached_window_size = (max_image_size, int(max_image_size * 3 / 4)) if max_image_size else None
+    make_cached_images(pytester.path, path=cache, name=name_generated, color="red", window_size=cached_window_size)
 
     generated = "generated"
     failed = "failed"
@@ -543,6 +546,8 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     ]
     if include_vtksz:
         args.append("--include_vtksz")
+    if max_image_size:
+        args.extend(["--max_image_size", max_image_size])
     result = pytester.runpytest(*args)
 
     preprocessing = "Preprocessing"
