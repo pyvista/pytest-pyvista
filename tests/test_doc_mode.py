@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
 from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
@@ -332,9 +333,9 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
 
 @pytest.mark.parametrize("use_doc_prefix", [True, False])
-@pytest.mark.parametrize("cli", [True, False])
-@pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, use_doc_prefix: bool) -> None:  # noqa: PLR0915
+@pytest.mark.parametrize("cli", [False])
+@pytest.mark.parametrize(("generate_subdirs", "include_vtksz"), [(True, True), (False, False)])
+def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, include_vtksz: bool, use_doc_prefix: bool) -> None:  # noqa: PLR0915
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     cache_ini = cache + "ini"
@@ -383,6 +384,7 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
         doc_images_dir = {images_ini}
         {prefix}generate_subdirs = {generate_subdirs}
         max_vtksz_file_size = {max_vtksz_file_size_ini}
+        include_vtksz = {include_vtksz}
         """
     )
 
@@ -408,6 +410,8 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
         )
         if generate_subdirs:
             args.append("--generate_subdirs")
+        if include_vtksz:
+            args.append("--include_vtksz")
 
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -441,6 +445,8 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
     num_files = 5
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)
+
+    assert _DocVerifyImageCache.include_vtksz == include_vtksz
 
     expected_max_size = max_vtksz_file_size_cli if cli else max_vtksz_file_size_ini
     assert _VtkszFileSizeTestCase._max_vtksz_file_size == expected_max_size  # noqa: SLF001

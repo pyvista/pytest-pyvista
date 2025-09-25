@@ -306,12 +306,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         _add_doc_cli_option(
             "--include_vtksz",
             action="store_true",
+            default=None,
             help="Include tests for interactive images with the .vtksz file format.",
         )
         parser.addini(
             "include_vtksz",
             type="bool",
-            default=False,
+            default=None,
             help="Include tests for interactive images with the .vtksz file format.",
         )
 
