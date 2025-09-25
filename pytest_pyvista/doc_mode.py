@@ -263,7 +263,7 @@ def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
         if not static_image_path.is_file():
             static_image_path = path.with_suffix(".gif")
 
-        # Try looking for the image in the root dir instead
+        # Try looking for the image in the root dir instead (needed to sphinx gallery images)
         if not static_image_path.is_file() and getattr(_DocVerifyImageCache, "doc_images_dir", None):
             new_path = _DocVerifyImageCache.doc_images_dir / path.stem
             static_image_path = new_path.with_suffix(".png")
