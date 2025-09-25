@@ -525,8 +525,12 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size)
     name_generated = stem + "_vtksz.png"
     cache = "cache"
     images = "images"
+
+    # Make a vtksz file along with a corresponding static image (emulates the plot directive)
+    make_cached_images(pytester.path, path=images, name=f"{stem}.png", color="blue")
     make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue")
-    # Need cached image to match the generated image size
+
+    # Make a cached image to match the generated image size
     cached_window_size = (max_image_size, int(max_image_size * 3 / 4)) if max_image_size else None
     make_cached_images(pytester.path, path=cache, name=name_generated, color="red", window_size=cached_window_size)
 
@@ -553,7 +557,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size)
     preprocessing = "Preprocessing"
     expected_logs = [f"Converting {name_vtksz}", f"Rendering {stem}.html"]
     if not include_vtksz:
-        result.assert_outcomes(failed=1)
+        result.assert_outcomes(failed=2)
         result.stdout.fnmatch_lines("E           Failed: Test setup failed for test image:")
         result.stdout.fnmatch_lines(f"E           	{Path(name_generated).stem}")
         result.stdout.fnmatch_lines("E           The image exists in the cache directory:")
@@ -563,7 +567,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size)
         assert captured_logs == []
         return
 
-    result.assert_outcomes(failed=1)
+    result.assert_outcomes(failed=2)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
     preprocessing_msg = f"[pyvista] {preprocessing} 1 vtksz files. This may take several minutes..."
     result.stdout.fnmatch_lines(preprocessing_msg)
@@ -572,6 +576,9 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size)
     assert Path(generated).is_dir()
     expected_file = Path(generated) / name_generated
     assert expected_file.is_file()
+    expected_max_size = max_image_size if max_image_size else 1024
+    actual_max_size = max(pv.read(expected_file).dimensions)
+    assert actual_max_size == expected_max_size
 
     assert Path(failed).is_dir()
     expected_file = Path(failed) / "errors" / "from_build" / name_generated

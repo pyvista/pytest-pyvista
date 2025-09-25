@@ -254,6 +254,7 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
 
 
 def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
+    """Get window sizes for rendering vtksz files based on corresponding static image size."""
     window_sizes = []
     for path in vtksz_paths:
         # Assume every vtksz file has a corresponding PNG or GIF static image
