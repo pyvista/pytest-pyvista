@@ -170,7 +170,7 @@ jobs:
 
   downstream:
     name: Downstream tests
-    runs-on: ubuntu-22.04 # matching pyvista
+    runs-on: ubuntu-22.04-self-hosted # matching pyvista
     steps:
       - uses: actions/checkout@v5
 
@@ -178,17 +178,17 @@ jobs:
         with:
           python-version: "3.13"
 
-      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch /tmp/pyvista
+      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch ci/parallel --single-branch /tmp/pyvista
 
       - name: upgrade pip
-        run: pip install --upgrade pip
+        run: pip install --upgrade pip uv
 
       - name: Install pyvista with testing requirements
-        run: pip install -ve . --group test
+        run: uv pip install --system -ve . --group test
         working-directory: /tmp/pyvista
 
       - name: Install pytest-pyvista
-        run: pip install -ve .  --upgrade
+        run: uv pip install --system -ve . --upgrade
 
       - name: Software Report
         run: |
@@ -197,7 +197,7 @@ jobs:
           pip list
 
       - name: Unit Testing
-        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache -n2
+        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache -n8
         working-directory: /tmp/pyvista
 
       - name: Upload generated image artifact
