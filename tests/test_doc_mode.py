@@ -333,7 +333,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
 
 @pytest.mark.parametrize("use_doc_prefix", [True, False])
-@pytest.mark.parametrize("cli", [False])
+@pytest.mark.parametrize("cli", [True, False])
 @pytest.mark.parametrize(("generate_subdirs", "include_vtksz"), [(True, True), (False, False)])
 def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, include_vtksz: bool, use_doc_prefix: bool) -> None:  # noqa: PLR0915
     """Test regular usage of the --doc_mode."""
