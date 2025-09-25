@@ -277,6 +277,7 @@ def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
 
 
 def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path]:
+    """Convert vtksz files to html files."""
     from trame_vtk.tools.vtksz2html import embed_data_to_viewer_file  # noqa: PLC0415
 
     output_paths: list[Path] = []
@@ -299,6 +300,7 @@ def _html_screenshots(
     window_sizes: list[tuple[int, int]] | None = None,
     verbose: bool = False,  # noqa: FBT001, FBT002
 ) -> list[Path]:
+    """Generate screenshots of html files using the specified window sizes."""
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
     output_paths: list[Path] = []
@@ -314,8 +316,9 @@ def _html_screenshots(
             if verbose:
                 msg = f"Rendering {html_file.name}"
                 logger.info(msg)
-            page.set_viewport_size({"width": window_size[0], "height": window_size[1]})
+
             output_path = output_dir / f"{html_file.stem}.png"
+            page.set_viewport_size({"width": window_size[0], "height": window_size[1]})
             page.goto(f"file://{html_file}")
             page.screenshot(path=output_path)
             output_paths.append(output_path)
