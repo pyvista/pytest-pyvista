@@ -9,10 +9,8 @@ from pathlib import Path
 import pytest
 import pyvista as pv
 
-from pytest_pyvista.doc_mode import DEFAULT_IMAGE_HEIGHT
-from pytest_pyvista.doc_mode import DEFAULT_IMAGE_WIDTH
+from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
-from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
 from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
 from pytest_pyvista.pytest_pyvista import _EnvInfo
@@ -32,7 +30,6 @@ def test_doc_mode(pytester: pytest.Pytester, *, generated_image_dir: bool, gener
     name = f"imcache.{image_format}"
     make_cached_images(pytester.path, cache, name=name)
     make_cached_images(pytester.path, images, name=name)
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     generated = "generated"
@@ -97,7 +94,6 @@ def test_both_images_exist(  # noqa: PLR0913
     cache_path = pytester.path / "cache"
     if missing == "build":
         make_cached_images(cache_path.parent, cache_path.name, name=name)
-        _preprocess_build_images(cache_path, cache_path, image_format=image_format)
         expected_lines = [
             "*The image exists in the cache directory:",
             f"*{cache_path.name}/imcache.{image_format}",
@@ -153,8 +149,8 @@ def test_compare_images_with_different_sizes(pytester: pytest.Pytester) -> None:
     """Test error is raised when there is a mismatch in image size."""
     cache = "cache"
     images = "images"
-    make_cached_images(pytester.path, cache)
-    make_cached_images(pytester.path, images)
+    make_cached_images(pytester.path, cache, window_size=(400, 300))
+    make_cached_images(pytester.path, images, window_size=(401, 300))
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -167,7 +163,6 @@ def test_compare_images_error(pytester: pytest.Pytester) -> None:
     images = "images"
     make_cached_images(pytester.path, cache, color="red")
     make_cached_images(pytester.path, images, color="blue")
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     result = pytester.runpytest("--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -183,8 +178,7 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
     images = "images"
     name = f"im.{image_format}"
     make_cached_images(pytester.path, cache, name=name, color=[255, 0, 0])
-    make_cached_images(pytester.path, images, name=name, color=[240, 0, 0])
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache, image_format=image_format)
+    make_cached_images(pytester.path, images, name=name, color=[251, 0, 0])
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
@@ -235,7 +229,6 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     red_filename = make_cached_images(cache_parent, subdir, name=f"im1.{image_format}", color="red")
     blue_filename = make_cached_images(cache_parent, subdir, name=f"im2.{image_format}", color="blue")
     build_filename = make_cached_images(pytester.path, images, name=name, color=build_color)
-    _preprocess_build_images(cache_parent / subdir, cache_parent / subdir, image_format=image_format)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--image_format", image_format]
     failed = "failed"
@@ -311,8 +304,6 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
     name_build = "imcache{index}.vtksz" if include_vtksz else "imcache{index}.png"
     image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images, name=name_build)
 
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
-
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
         args.append("--include_vtksz")
@@ -343,8 +334,8 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
 @pytest.mark.parametrize("use_doc_prefix", [True, False])
 @pytest.mark.parametrize("cli", [True, False])
-@pytest.mark.parametrize("generate_subdirs", [True, False])
-def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, use_doc_prefix: bool) -> None:  # noqa: PLR0915
+@pytest.mark.parametrize(("generate_subdirs", "include_vtksz"), [(True, True), (False, False)])
+def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, include_vtksz: bool, use_doc_prefix: bool) -> None:  # noqa: PLR0915
     """Test regular usage of the --doc_mode."""
     cache = "cache"
     cache_ini = cache + "ini"
@@ -356,6 +347,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
 
     image_format_ini = "jpg"
     image_format_cli = "png"
+
+    max_image_size_ini = 200
+    max_image_size_cli = 101
 
     name = "imcache"
     name_ini = f"{name}.{image_format_ini}"
@@ -375,20 +369,22 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
     failed_ini = failed + "ini"
     failed_cli = failed + "cli"
 
-    max_size_cli = 10
-    max_size_ini = 20
+    max_vtksz_file_size_cli = 10
+    max_vtksz_file_size_ini = 20
 
     prefix = "doc_" if use_doc_prefix else ""
     pytester.makeini(
         f"""
         [pytest]
         {prefix}image_format = {image_format_ini}
+        {prefix}max_image_size = {max_image_size_ini}
         {prefix}failed_image_dir = {failed_ini}
         {prefix}generated_image_dir = {generated_ini}
         {prefix}image_cache_dir = {cache_ini}
         doc_images_dir = {images_ini}
         {prefix}generate_subdirs = {generate_subdirs}
-        max_vtksz_file_size = {max_size_ini}
+        max_vtksz_file_size = {max_vtksz_file_size_ini}
+        include_vtksz = {include_vtksz}
         """
     )
 
@@ -406,12 +402,16 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
                 generated_cli,
                 "--image_format",
                 image_format_cli,
+                "--max_image_size",
+                max_image_size_cli,
                 "--max_vtksz_file_size",
-                max_size_cli,
+                max_vtksz_file_size_cli,
             ]
         )
         if generate_subdirs:
             args.append("--generate_subdirs")
+        if include_vtksz:
+            args.append("--include_vtksz")
 
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.TESTS_FAILED
@@ -428,6 +428,15 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
 
     generated_image_path = Path(generated_cli if cli else generated_ini) / name
     assert generated_image_path.is_dir() is generate_subdirs
+    file = (
+        next(generated_image_path.iterdir())
+        if generated_image_path.is_dir()
+        else generated_image_path.with_suffix(f".{image_format_cli if cli else image_format_ini}")
+    )
+    assert file.is_file()
+
+    expected_max_image_size = max_image_size_cli if cli else max_image_size_ini
+    assert max(pv.read(file).dimensions) == expected_max_image_size
 
     paths_cli = _get_file_paths(pytester.path, ext=image_format_cli)
     paths_ini = _get_file_paths(pytester.path, ext=image_format_ini)
@@ -437,7 +446,9 @@ def test_ini(*, pytester: pytest.Pytester, cli: bool, generate_subdirs: bool, us
     assert len(paths_cli) == (num_files if cli else 0)
     assert len(paths_ini) == (0 if cli else num_files)
 
-    expected_max_size = max_size_cli if cli else max_size_ini
+    assert _DocVerifyImageCache.include_vtksz == include_vtksz
+
+    expected_max_size = max_vtksz_file_size_cli if cli else max_vtksz_file_size_ini
     assert _VtkszFileSizeTestCase._max_vtksz_file_size == expected_max_size  # noqa: SLF001
 
 
@@ -448,7 +459,6 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     name = "imcache.png"
     make_cached_images(pytester.path, cache, name=name, color="blue")
     make_cached_images(pytester.path, images, name=name, color="red")
-    _preprocess_build_images(pytester.path / cache, pytester.path / cache)
 
     custom_string = "custom_string"
     pytester.makeconftest(
@@ -494,14 +504,15 @@ def test_vtksz_screenshot(tmp_path) -> None:
     png_file = png_files[0]
     assert png_file.suffix == ".png"
 
-    expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=(DEFAULT_IMAGE_WIDTH, DEFAULT_IMAGE_HEIGHT))
-    small_error = 30
+    expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=pv.global_theme.window_size)
+    small_error = 70
     actual_error = pv.compare_images(str(expected_screenshot), str(png_file))
     assert actual_error < small_error
 
 
+@pytest.mark.parametrize("max_image_size", [400, None])
 @pytest.mark.parametrize("include_vtksz", [True, False])
-def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
+def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size) -> None:
     """Test that test images are generated from interactive plot files."""
     # Capture logs for testing since logger output is not captured by pytester
     captured_logs = []
@@ -520,9 +531,14 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     name_generated = stem + "_vtksz.png"
     cache = "cache"
     images = "images"
+
+    # Make a vtksz file along with a corresponding static image (emulates the plot directive)
+    make_cached_images(pytester.path, path=images, name=f"{stem}.png", color="blue")
     make_cached_images(pytester.path, path=images, name=name_vtksz, color="blue")
-    make_cached_images(pytester.path, path=cache, name=name_generated, color="red")
-    _preprocess_build_images(Path(cache), Path(cache))
+
+    # Make a cached image to match the generated image size
+    cached_window_size = (max_image_size, int(max_image_size * 3 / 4)) if max_image_size else None
+    make_cached_images(pytester.path, path=cache, name=name_generated, color="red", window_size=cached_window_size)
 
     generated = "generated"
     failed = "failed"
@@ -540,12 +556,14 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     ]
     if include_vtksz:
         args.append("--include_vtksz")
+    if max_image_size:
+        args.extend(["--max_image_size", max_image_size])
     result = pytester.runpytest(*args)
 
     preprocessing = "Preprocessing"
     expected_logs = [f"Converting {name_vtksz}", f"Rendering {stem}.html"]
     if not include_vtksz:
-        result.assert_outcomes(failed=1)
+        result.assert_outcomes(failed=2)
         result.stdout.fnmatch_lines("E           Failed: Test setup failed for test image:")
         result.stdout.fnmatch_lines(f"E           	{Path(name_generated).stem}")
         result.stdout.fnmatch_lines("E           The image exists in the cache directory:")
@@ -555,7 +573,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
         assert captured_logs == []
         return
 
-    result.assert_outcomes(failed=1)
+    result.assert_outcomes(failed=2)
     result.stdout.fnmatch_lines(f"E           Failed: {stem}_vtksz Exceeded image regression error*")
     preprocessing_msg = f"[pyvista] {preprocessing} 1 vtksz files. This may take several minutes..."
     result.stdout.fnmatch_lines(preprocessing_msg)
@@ -564,6 +582,9 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz) -> None:
     assert Path(generated).is_dir()
     expected_file = Path(generated) / name_generated
     assert expected_file.is_file()
+    expected_max_size = max_image_size if max_image_size else 1024
+    actual_max_size = max(pv.read(expected_file).dimensions)
+    assert actual_max_size == expected_max_size
 
     assert Path(failed).is_dir()
     expected_file = Path(failed) / "errors" / "from_build" / name_generated

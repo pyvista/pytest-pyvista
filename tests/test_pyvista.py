@@ -23,6 +23,7 @@ from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
 from pytest_pyvista.pytest_pyvista import _UNIT_TEST_CLI_ARGS
 from pytest_pyvista.pytest_pyvista import PARSER_GROUP_NAME
 from pytest_pyvista.pytest_pyvista import _EnvInfo
+from pytest_pyvista.pytest_pyvista import _get_thumbnail_size
 from pytest_pyvista.pytest_pyvista import _SystemProperties
 from pytest_pyvista.pytest_pyvista import pytest_addoption
 
@@ -1293,3 +1294,44 @@ def test_doc_mode_args_invalid_in_unit_test_mode(pytester, arg) -> None:
 
     result.stderr.fnmatch_lines([f"ERROR: argument {arg} can only be used with --doc_mode enabled"])
     assert result.ret == pytest.ExitCode.USAGE_ERROR
+
+
+@pytest.mark.parametrize("original_size", [(402, 300), (303, 400)])
+@pytest.mark.parametrize("max_image_size", [200, 300, 400, 500])
+@pytest.mark.parametrize("doc_mode", [True, False])
+def test_max_image_size(pytester: pytest.Pytester, doc_mode, original_size, max_image_size) -> None:
+    """Test generated image dimensions may be customized."""
+    test_name = "test"
+    generated = "generated"
+    failed = "failed"
+    args = ["--max_image_size", max_image_size, "--generated_image_dir", generated, "--failed_image_dir", failed]
+
+    images_dir = "images"
+    if doc_mode:
+        make_cached_images(pytester.path, images_dir, f"{test_name}.png", window_size=original_size)
+        args.extend(["--doc_mode", "--doc_images_dir", images_dir])
+    else:
+        pytester.makepyfile(
+            f"""
+            import pytest
+            import pyvista as pv
+            pv.global_theme.window_size = {original_size}
+            pv.OFF_SCREEN = True
+            def test_{test_name}(verify_image_cache):
+                sphere = pv.Sphere()
+                plotter = pv.Plotter()
+                plotter.add_mesh(sphere, color="red")
+                plotter.show()
+            """
+        )
+
+    result = pytester.runpytest(*args)
+
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    gen_file = pytester.path / generated / f"{test_name}.png"
+    assert gen_file.is_file()
+
+    generated_image = pv.read(gen_file)
+    expected_size = _get_thumbnail_size(original_size, max_image_size)
+    assert generated_image.dimensions == (*expected_size, 1)

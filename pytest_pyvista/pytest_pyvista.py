@@ -235,6 +235,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         _add_common_cli_option(f"--{option}", action="store", choices=get_args(_AllowedImageFormats), default=None, help=help_)
         _add_common_ini_option(option, default=None, help=help_)  # Default is set when getting from config or ini
 
+        option = "max_image_size"
+        help_ = "Saved images are resized so that dimensions will not exceed this value."
+        _add_common_cli_option(f"--{option}", default=None, help=help_)
+        _add_common_ini_option(option, default=None, help=help_)
+
     def _add_unit_test_cli_and_ini_options() -> None:
         """Add options specific to regular unit tests."""
         _add_unit_test_cli_option(
@@ -301,12 +306,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         _add_doc_cli_option(
             "--include_vtksz",
             action="store_true",
+            default=None,
             help="Include tests for interactive images with the .vtksz file format.",
         )
         parser.addini(
             "include_vtksz",
             type="bool",
-            default=False,
+            default=None,
             help="Include tests for interactive images with the .vtksz file format.",
         )
 
@@ -393,6 +399,7 @@ class VerifyImageCache:
     reset_only_failed = False
     generate_subdirs: bool = False
     image_format: _AllowedImageFormats
+    max_image_size: int | None
 
     def __init__(  # noqa: PLR0913
         self,
@@ -501,7 +508,7 @@ class VerifyImageCache:
             raise RegressionFileNotFoundError(msg)
 
         if (self.add_missing_images and not current_cached_image.is_file()) or (self.reset_image_cache and not self.reset_only_failed):
-            plotter.screenshot(current_cached_image)
+            _screenshot(plotter, current_cached_image, max_image_size=VerifyImageCache.max_image_size)
 
         if self.generated_image_dir is not None:
             self._save_generated_image(plotter, image_name=image_name)
@@ -544,7 +551,7 @@ class VerifyImageCache:
                     f"{fail_msg}\nThis image will be reset in the cache.",
                     stacklevel=2,
                 )
-                plotter.screenshot(current_cached_image)
+                _screenshot(plotter, current_cached_image, max_image_size=VerifyImageCache.max_image_size)
             else:
                 remove_plotter_close_callback()
                 raise RegressionError(fail_msg)
@@ -560,7 +567,7 @@ class VerifyImageCache:
         generated_image_path = _get_generated_image_path(
             parent=parent, image_name=image_name, generate_subdirs=self.generate_subdirs, env_info=self.env_info
         )
-        plotter.screenshot(generated_image_path)
+        _screenshot(plotter, generated_image_path, max_image_size=VerifyImageCache.max_image_size)
 
     def _save_failed_test_images(
         self,
@@ -641,7 +648,7 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
 
         # Get screenshot as a PIL image
         pl = cast("pyvista.Plotter", test_image)
-        arr = pl.screenshot(return_img=True)
+        arr = _screenshot(pl, return_img=True, max_image_size=VerifyImageCache.max_image_size)
         img = Image.fromarray(arr)
 
         # Save as JPEG in memory
@@ -655,6 +662,26 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
     # Cast Path to str
     test_img = test_image if isinstance(test_image, pyvista.Plotter) else str(test_image)
     return pyvista.compare_images(test_img, str(cached_image))
+
+
+def _get_thumbnail_size(current_size: tuple[int, int], max_image_size: int) -> tuple[int, int]:
+    ref_image = Image.fromarray(np.zeros(current_size).T)
+    ref_image.thumbnail(size=(max_image_size, max_image_size))
+    return ref_image.size
+
+
+def _screenshot(plotter: Plotter, *args, max_image_size: int | None, **kwargs) -> pyvista.pyvista_ndarray | None:  # noqa: ANN002, ANN003
+    old_window_size = cast("tuple[int, int]", tuple(plotter.window_size))
+    do_resize = max_image_size is not None and any(size > max_image_size for size in old_window_size)
+    if do_resize:
+        plotter.window_size = _get_thumbnail_size(old_window_size, max_image_size=cast("int", max_image_size))
+
+    output = plotter.screenshot(*args, **kwargs)
+
+    if do_resize:
+        plotter.window_size = old_window_size
+
+    return output
 
 
 def _test_compare_images(
@@ -738,19 +765,22 @@ def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
 
 
 @overload
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[False] = False) -> str | bool | None: ...
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[False] = False) -> str | int | bool | None: ...
 @overload
 def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: Literal[True] = True) -> Path | None: ...
 @overload
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | bool | None: ...
-def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | bool | None:  # noqa: C901
-    def _resolve(value: str | bool) -> Path | str | bool:  # noqa: FBT001
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool) -> Path | str | int | bool | None: ...
+def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, is_dir: bool = False) -> Path | str | int | bool | None:  # noqa: C901
+    def _resolve(value: str | int | bool) -> Path | str | int | bool:  # noqa: FBT001
         if is_dir:
             return pytestconfig.rootpath / value
         if str(value).lower() == "true":
             return True
         if str(value).lower() == "false":
             return False
+        with contextlib.suppress(ValueError):
+            value = int(value)
+
         return value
 
     # CLI always wins, and only plain name without additional doc prefix
@@ -971,6 +1001,7 @@ def verify_image_cache(
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
     VerifyImageCache.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
+    VerifyImageCache.max_image_size = cast("int | None", _get_option_from_config_or_ini(pytestconfig, "max_image_size"))
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)

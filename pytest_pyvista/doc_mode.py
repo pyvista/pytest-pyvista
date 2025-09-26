@@ -35,9 +35,6 @@ from .pytest_pyvista import _paths_from_strings
 from .pytest_pyvista import _test_compare_images
 from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
-DEFAULT_IMAGE_WIDTH = 400  # pixels
-DEFAULT_IMAGE_HEIGHT = 300  # pixels
-MAX_IMAGE_DIM = max(DEFAULT_IMAGE_HEIGHT, DEFAULT_IMAGE_WIDTH)  # pixels
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
 
@@ -68,6 +65,7 @@ class _DocVerifyImageCache:
     failed_image_dir: Path
     generate_subdirs: bool
     image_format: _AllowedImageFormats
+    max_image_size: int | None = None
     include_vtksz: bool
     _verbose: bool = False
     _terminalreporter: pytest.TerminalReporter = None
@@ -101,6 +99,7 @@ class _DocVerifyImageCache:
         cls.failed_image_dir = optional_dir_else_cache("failed_image_dir", dirname=PYVISTA_FAILED_IMAGE_CACHE_DIRNAME)
 
         cls.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(config, "image_format"))
+        cls.max_image_size = cast("int | None", _get_option_from_config_or_ini(config, "max_image_size"))
         cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
@@ -227,7 +226,8 @@ def _preprocess_build_images(  # noqa: PLR0913
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
             html_paths = _vtksz_to_html_files(vtksz_paths, tmppath)
-            _render_all_html(html_paths, tmppath, num_workers=num_workers)
+            window_sizes = _vtksz_window_sizes(vtksz_paths)
+            _render_all_html(html_paths, tmppath, window_sizes=window_sizes, num_workers=num_workers)
             input_paths = _get_file_paths(tmppath, ext="png")
             output_paths = _preprocess_input_paths(input_paths, relative_to=tmppath)
         return _get_output(vtksz_paths, output_paths)
@@ -240,16 +240,51 @@ def _preprocess_build_images(  # noqa: PLR0913
     return _get_output(input_paths, output_paths)
 
 
+def _get_max_image_size() -> int:
+    return _DocVerifyImageCache.max_image_size if _DocVerifyImageCache.max_image_size is not None else max(*pv.global_theme.window_size)
+
+
 def _preprocess_image(input_path: Path, output_path: Path) -> None:
-    # Ensure image size is max 400x400 and save to output
+    # Resize image and save to output
     with Image.open(input_path) as im:
         im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
-        if not (im.size[0] <= MAX_IMAGE_DIM and im.size[1] <= MAX_IMAGE_DIM):
-            im.thumbnail(size=(MAX_IMAGE_DIM, MAX_IMAGE_DIM))
+        max_image_size = _get_max_image_size()
+        im.thumbnail(size=(max_image_size, max_image_size))
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
+def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
+    """Get window sizes for rendering vtksz files based on corresponding static image size."""
+    window_sizes = []
+    for path in vtksz_paths:
+        # Assume every vtksz file has a corresponding PNG or GIF static image
+        # (this assumption is based on current plot_directive code)
+        static_image_path = path.with_suffix(".png")
+        if not static_image_path.is_file():
+            static_image_path = path.with_suffix(".gif")
+
+        # Try looking for the image in the root dir instead (needed for sphinx gallery images)
+        if not static_image_path.is_file() and getattr(_DocVerifyImageCache, "doc_images_dir", None):
+            new_path = _DocVerifyImageCache.doc_images_dir / path.stem
+            static_image_path = new_path.with_suffix(".png")
+            if not static_image_path.is_file():
+                static_image_path = path.with_suffix(".gif")
+
+        if static_image_path.is_file():
+            with Image.open(static_image_path) as im:
+                size = im.size
+        else:
+            msg = f"Interactive plot found without a corresponding static image:\n  {path}"
+            warnings.warn(msg, stacklevel=2)
+            size = cast("tuple[int, int]", tuple(pv.global_theme.window_size))
+
+        window_sizes.append(size)
+
+    return window_sizes
+
+
 def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path]:
+    """Convert vtksz files to html files."""
     from trame_vtk.tools.vtksz2html import embed_data_to_viewer_file  # noqa: PLC0415
 
     output_paths: list[Path] = []
@@ -266,21 +301,31 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
     return output_paths
 
 
-def _html_screenshots(html_files: list[Path], output_dir: Path, verbose: bool = False) -> list[Path]:  # noqa: FBT001, FBT002
+def _html_screenshots(
+    html_files: list[Path],
+    output_dir: Path,
+    window_sizes: list[tuple[int, int]] | None = None,
+    verbose: bool = False,  # noqa: FBT001, FBT002
+) -> list[Path]:
+    """Generate screenshots of html files using the specified window sizes."""
     from playwright.sync_api import sync_playwright  # noqa: PLC0415
 
     output_paths: list[Path] = []
+    if window_sizes is None:
+        window_sizes = [cast("tuple[int, int]", tuple(pv.global_theme.window_size))] * len(html_files)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": DEFAULT_IMAGE_WIDTH, "height": DEFAULT_IMAGE_HEIGHT})
+        context = browser.new_context()
         page = context.new_page()
 
-        for html_file in html_files:
+        for html_file, window_size in zip(html_files, window_sizes):
             if verbose:
                 msg = f"Rendering {html_file.name}"
                 logger.info(msg)
 
             output_path = output_dir / f"{html_file.stem}.png"
+            page.set_viewport_size({"width": window_size[0], "height": window_size[1]})
             page.goto(f"file://{html_file}")
             page.screenshot(path=output_path)
             output_paths.append(output_path)
@@ -293,12 +338,13 @@ def _render_all_html(
     html_files: list[Path],
     output_dir: Path,
     *,
+    window_sizes: list[tuple[int, int]] | None = None,
     num_workers: int = 1,
 ) -> list[Path]:
     """Dispatch rendering across multiple processes."""
     verbose = _DocVerifyImageCache._verbose  # noqa: SLF001
     if num_workers == 1:
-        return _html_screenshots(html_files, output_dir, verbose)
+        return _html_screenshots(html_files, output_dir, window_sizes, verbose)
 
     def _split_batches(files: list[Path], n: int) -> list[list[Path]]:
         """Split a list of files into n roughly equal contiguous batches."""
@@ -309,7 +355,7 @@ def _render_all_html(
     with multiprocessing.Pool(processes=num_workers) as pool:
         results_nested = pool.starmap(
             _html_screenshots,
-            [(batch, output_dir, verbose) for batch in batches],
+            [(batch, output_dir, window_sizes, verbose) for batch in batches],
         )
 
     # Flatten list of lists
