@@ -25,8 +25,11 @@
    
       ~VerifyImageCache.add_missing_images
       ~VerifyImageCache.allow_unused_generated
+      ~VerifyImageCache.generate_subdirs
       ~VerifyImageCache.ignore_image_cache
       ~VerifyImageCache.reset_image_cache
       ~VerifyImageCache.reset_only_failed
+      ~VerifyImageCache.image_format
+      ~VerifyImageCache.max_image_size
    
    
