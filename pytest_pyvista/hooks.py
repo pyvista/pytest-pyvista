@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
+    import xdist
+
     from .doc_mode import _DocVerifyImageCache
     from .doc_mode import _VtkszFileSizeTestCase
 
@@ -27,3 +30,10 @@ def pytest_pyvista_max_vtksz_file_size_hook(test_case: _VtkszFileSizeTestCase, r
 
     Users can mutate ``test_case`` in-place.
     """  # noqa: D401
+
+
+if importlib.util.find_spec("xdist"):  # type: ignore[attr-defined]
+
+    @pytest.hookspec(firstresult=True)
+    def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
+        """Register a placeholder hook for pytest_configure_node in case xdist is not installed."""
