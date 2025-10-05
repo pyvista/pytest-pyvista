@@ -32,7 +32,7 @@ def pytest_pyvista_max_vtksz_file_size_hook(test_case: _VtkszFileSizeTestCase, r
     """  # noqa: D401
 
 
-if importlib.util.find_spec("xdist"):  # type: ignore[attr-defined]
+if not importlib.util.find_spec("xdist"):  # type: ignore[attr-defined]
 
     @pytest.hookspec(firstresult=True)
     def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
