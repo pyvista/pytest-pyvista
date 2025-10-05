@@ -170,6 +170,16 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
     """Add hooks."""
     pluginmanager.add_hookspecs(hooks)
 
+    # Register a placeholder hook for pytest_configure_node in case xdist is not installed
+    if importlib.util.find_spec("xdist") is not None:  # type: ignore[attr-defined]
+
+        class _LocalHooks:
+            @pytest.hookspec(firstresult=True)
+            def pytest_configure_node(node) -> None:  # noqa: N805
+                pass
+
+        pluginmanager.add_hookspecs(_LocalHooks)
+
 
 def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     """Add new flag options to the pyvista plugin."""
