@@ -979,10 +979,13 @@ def pytest_configure(config: pytest.Config) -> None:
             }
 
 
-def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
-    """Modify each xdist worker."""
-    if paths := getattr(node.config, "paths", None):
-        node.workerinput["paths"] = paths
+with contextlib.suppress(ImportError):
+    import xdist  # noqa: TC002
+
+    def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
+        """Modify each xdist worker."""
+        if paths := getattr(node.config, "paths", None):
+            node.workerinput["paths"] = paths
 
 
 @pytest.fixture

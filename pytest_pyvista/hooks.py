@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    import xdist
-
     from .doc_mode import _DocVerifyImageCache
     from .doc_mode import _VtkszFileSizeTestCase
 
@@ -29,12 +27,3 @@ def pytest_pyvista_max_vtksz_file_size_hook(test_case: _VtkszFileSizeTestCase, r
 
     Users can mutate ``test_case`` in-place.
     """  # noqa: D401
-
-
-try:
-    import xdist  # noqa: TC002
-except ImportError:
-
-    @pytest.hookspec
-    def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
-        """Register a placeholder hook in case xdist is not installed."""
