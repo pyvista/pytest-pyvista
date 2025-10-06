@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 from typing import TYPE_CHECKING
 
 import pytest
@@ -32,7 +31,9 @@ def pytest_pyvista_max_vtksz_file_size_hook(test_case: _VtkszFileSizeTestCase, r
     """  # noqa: D401
 
 
-if not importlib.util.find_spec("xdist"):  # type: ignore[attr-defined]
+try:
+    import xdist  # noqa: TC002
+except ImportError:
 
     def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
         """Register a placeholder hook in case xdist is not installed."""
