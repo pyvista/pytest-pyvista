@@ -979,8 +979,7 @@ def pytest_configure(config: pytest.Config) -> None:
             }
 
 
-with contextlib.suppress(ImportError):
-    import xdist  # noqa: TC002
+if importlib.util.find_spec("xdist.plugin") is not None:  # type: ignore[attr-defined]
 
     def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
         """Modify each xdist worker."""
