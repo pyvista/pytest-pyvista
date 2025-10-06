@@ -979,7 +979,11 @@ def pytest_configure(config: pytest.Config) -> None:
             }
 
 
-if importlib.util.find_spec("xdist.plugin") is not None:  # type: ignore[attr-defined]
+try:
+    import xdist.plugin  # noqa: TC002
+except ImportError:
+    pass
+else:
 
     def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
         """Modify each xdist worker."""
