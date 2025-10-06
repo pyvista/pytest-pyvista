@@ -35,5 +35,6 @@ try:
     import xdist  # noqa: TC002
 except ImportError:
 
+    @pytest.hookspec
     def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
         """Register a placeholder hook in case xdist is not installed."""
