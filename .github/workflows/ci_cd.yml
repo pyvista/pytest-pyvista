@@ -108,10 +108,16 @@ jobs:
       # run unit testing with both parallel and without parallel flags but
       # using `--parallel-mode` flag to ensure coverage files are unique, see
       # https://coverage.readthedocs.io/en/latest/cmd.html
+      #
+      # For coverage, we run the non-parallel tests without pytest-xdist
       - name: Unit Testing
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+        run: |
+          pip uninstall -y pytest-xdist && \
+          xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
       - name: Unit Testing with parallel flag
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2
+        run:
+          pip install .[tests]
+          xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2
 
       - name: Combine coverage
         run: coverage combine || true
