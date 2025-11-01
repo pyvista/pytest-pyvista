@@ -188,7 +188,7 @@ jobs:
 
       - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch /tmp/pyvista
 
-      - name: upgrade pip
+      - name: upgrade pip and install uv
         run: pip install --upgrade pip uv
 
       - name: Install pyvista with testing requirements
