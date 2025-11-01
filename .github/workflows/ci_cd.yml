@@ -186,7 +186,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch ci/parallel --single-branch /tmp/pyvista
+      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch /tmp/pyvista
 
       - name: upgrade pip
         run: pip install --upgrade pip uv
