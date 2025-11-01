@@ -45,7 +45,7 @@ tests = [
   "pytest_mock<3.16",
   "pyvista[jupyter]>=0.37",
 ]
-vtksz = ["playwright<1.56", "trame-vtk<2.11", "trame-vtk>=2.6"]
+vtksz = ["playwright", "trame-vtk>=2.6"]
 
 [project.entry-points."pytest11"]
 # Location of the plugin module, in this case ./pytest_pyvista/pytest_pyvista.py
