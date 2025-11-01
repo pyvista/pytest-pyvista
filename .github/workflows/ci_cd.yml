@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -34,7 +34,7 @@ jobs:
       - name: Install pytest-pyvista with test dependencies
         run: pip install .[docs] 'pyvista>=0.37'
 
-      - uses: awalsh128/cache-apt-pkgs-action@v1.5.3
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
           packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
           version: 3.0
@@ -54,13 +54,13 @@ jobs:
   Linux:
     name: Linux Unit Testing
     runs-on: ubuntu-latest
+    env:
+      PYTEST_CMD: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
     strategy:
       fail-fast: false
 
       matrix:
         include:
-          - python-version: "3.9"
-            vtk-version: "9.1"
           - python-version: "3.10"
             vtk-version: "9.2.2"
           - python-version: "3.11"
@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
@@ -87,17 +87,16 @@ jobs:
 
       - name: Install pytest-pyvista with test dependencies
         run: |
-          pip install .[tests] 'pyvista>=0.37'
+          pip install .[tests]
+
+      - name: Install playwright
+        run: playwright install chromium
 
       - name: Set up vtk
         if: ${{ matrix.vtk-version != 'latest' }}
         run: pip install vtk==${{ matrix.vtk-version }}
 
-      - name: Limit NumPy for VTK 9.0.3
-        if: ${{ matrix.vtk-version == '9.0.3' }}
-        run: pip install 'numpy<1.24'
-
-      - uses: awalsh128/cache-apt-pkgs-action@v1.5.3
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
           packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
           version: 3.0
@@ -112,22 +111,28 @@ jobs:
       # using `--parallel-mode` flag to ensure coverage files are unique, see
       # https://coverage.readthedocs.io/en/latest/cmd.html
       - name: Unit Testing
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+        run: $PYTEST_CMD
       - name: Unit Testing with parallel flag
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2
+        run: $PYTEST_CMD -n2
+
+      # Run a single test to ensure plugin works without pytest-xdist
+      - name: Unit Testing no pytest-xdist
+        run: |
+          pip uninstall -y pytest-xdist && \
+          $PYTEST_CMD -k test_arguments
 
       - name: Combine coverage
         run: coverage combine || true
 
       - uses: codecov/codecov-action@v5
-        if: matrix.python-version == '3.9'
+        if: matrix.python-version == '3.10'
         name: "Upload coverage to CodeCov"
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload distribution artifacts
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dist-artifacts
           path: dist/
@@ -145,13 +150,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download distribution artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: dist-artifacts
           path: dist/
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -177,7 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
@@ -205,7 +210,7 @@ jobs:
 
       - name: Upload generated image artifact
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: generated_images
           path: /tmp/pyvista/gen_dir

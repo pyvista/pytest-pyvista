@@ -17,9 +17,15 @@ import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 
+from pytest_pyvista.doc_mode import _preprocess_build_images
+from pytest_pyvista.pytest_pyvista import _DOC_MODE_CLI_ARGS
 from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
+from pytest_pyvista.pytest_pyvista import _UNIT_TEST_CLI_ARGS
+from pytest_pyvista.pytest_pyvista import PARSER_GROUP_NAME
 from pytest_pyvista.pytest_pyvista import _EnvInfo
+from pytest_pyvista.pytest_pyvista import _get_thumbnail_size
 from pytest_pyvista.pytest_pyvista import _SystemProperties
+from pytest_pyvista.pytest_pyvista import pytest_addoption
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -43,15 +49,22 @@ def test_arguments(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-def make_cached_images(test_path, path="image_cache_dir", name="imcache.png", color="red") -> Path:
+def make_cached_images(  # noqa: PLR0913
+    test_path, path="image_cache_dir", name="imcache.png", color="red", window_size=None, mesh: pv.DataSet | None = None
+) -> Path:
     """Make image cache in `test_path/path`."""
     d = Path(test_path, path)
     d.mkdir(exist_ok=True, parents=True)
-    sphere = pv.Sphere()
-    plotter = pv.Plotter()
-    plotter.add_mesh(sphere, color=color)
+    if mesh is None:
+        mesh = pv.Sphere()
+    kwargs = {"window_size": window_size} if window_size else {}
+    plotter = pv.Plotter(**kwargs)
+    plotter.add_mesh(mesh, color=color)
     filename = d / name
-    plotter.screenshot(filename)
+    if filename.suffix == ".vtksz":
+        plotter.export_vtksz(filename)
+    else:
+        plotter.screenshot(filename)
     return filename
 
 
@@ -76,7 +89,10 @@ def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int
         else:
             plotter = pv.Plotter(off_screen=True)
             plotter.add_mesh(mesh, color=color)
-            plotter.screenshot(filename)
+            if filename.suffix == ".vtksz":
+                plotter.export_vtksz(filename)
+            else:
+                plotter.screenshot(filename)
             color_to_file[color] = filename
 
         filenames.append(filename)
@@ -964,9 +980,6 @@ def test_multiple_cache_images(  # noqa: PLR0913
     pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format
 ) -> None:
     """Test when cache is a subdir with multiple images."""
-    if image_format == "jpg" and (nested_subdir or pv.vtk_version_info < (9, 3)):
-        pytest.skip("Seg faults in CI with unknown cause")
-
     cache = "cache"
     name = f"imcache.{image_format}"
     subdir = Path(name).stem
@@ -1177,3 +1190,148 @@ def test_os_darwin_windows(
 
     result = _SystemProperties._get_os()  # noqa: SLF001
     assert result == expected
+
+
+@pytest.mark.parametrize("doc_mode", [True, False])
+@pytest.mark.parametrize(("valid_format", "invalid_format"), [("png", "jpg"), ("jpg", "png")])
+def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format, invalid_format, doc_mode) -> None:
+    """Test cache validation."""
+    test_name = "imcache"
+    name = f"{test_name}.{invalid_format}"
+    cache = "image_cache_dir"
+    make_cached_images(pytester.path, path=cache, name=name)
+    make_cached_images(pytester.path / cache, path=test_name, name=name)
+
+    args = ["--image_format", valid_format]
+    if doc_mode:
+        images = "images"
+        _preprocess_build_images(Path(cache), Path(images), image_format=valid_format)
+        args.extend(["--doc_mode", "--image_cache_dir", cache, "--doc_images_dir", images])
+    else:
+        pytester.makepyfile(
+            f"""def test_{test_name}(verify_image_cache):
+                    ...
+            """
+        )
+
+    result = pytester.runpytest(*args)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format required by")
+    result.stdout.fnmatch_lines(f"E           the image cache directory is {valid_format!r}, but {invalid_format!r} images exist in the cache.")
+    result.stdout.fnmatch_lines("E           Cache directory: *")
+    result.stdout.fnmatch_lines(f"E           Invalid images: ['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']")
+
+
+@pytest.mark.parametrize("doc_mode", [True, False])
+def test_validate_cache_unique_names(*, pytester: pytest.Pytester, doc_mode: bool) -> None:
+    """Test cache validation."""
+    test_name = "imcache"
+    name = f"{test_name}.png"
+    cache = "image_cache_dir"
+    make_cached_images(pytester.path, path=cache, name=name)
+    make_cached_images(pytester.path / cache, path=test_name, name=name)
+
+    if doc_mode:
+        images = "images"
+        _preprocess_build_images(Path(cache), Path(images))
+        args = ["--doc_mode", "--image_cache_dir", cache, "--doc_images_dir", images]
+    else:
+        args = []
+        pytester.makepyfile(
+            f"""def test_{test_name}(verify_image_cache):
+                    ...
+            """
+        )
+
+    result = pytester.runpytest(*args)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
+    result.stdout.fnmatch_lines("E           An image's name must not share the same name as a subdirectory. Either the image")
+    result.stdout.fnmatch_lines("E           or the subdirectory should be removed for the following test cases:")
+    result.stdout.fnmatch_lines(f"E           {{{test_name!r}}}")
+
+
+def test_cli_args_classified() -> None:
+    """Ensure that all CLI options are added to either unit testing or doc mode options sets."""
+    # Add all options to a parser just like pytest would
+    parser = pytest.Parser()
+    pytest_addoption(parser)
+
+    # Get group options
+    group = parser.getgroup(PARSER_GROUP_NAME)
+    assert group is not None
+
+    defined = {name for opt in group.options for name in opt.names()}
+    classified = _UNIT_TEST_CLI_ARGS | _DOC_MODE_CLI_ARGS
+
+    missing = defined - classified
+    extra = classified - defined
+
+    set_names = "classification sets _UNIT_TEST_CLI_ARGS, _DOC_MODE_CLI_ARGS"
+    assert not missing, f"Parser options are not included in {set_names}:\n{missing}"
+    assert not extra, f"{set_names} contain unknown options:\n{extra}"
+
+
+@pytest.mark.parametrize("arg", sorted(_UNIT_TEST_CLI_ARGS - _DOC_MODE_CLI_ARGS))
+def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
+    """Run pytest with --doc_mode and forbidden args."""
+    result = pytester.runpytest("--doc_mode", arg)
+    result.stderr.fnmatch_lines([f"ERROR: argument {arg} cannot be used with --doc_mode enabled"])
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+
+
+@pytest.mark.parametrize("arg", sorted(_DOC_MODE_CLI_ARGS - _UNIT_TEST_CLI_ARGS - {"--doc_mode"}))
+def test_doc_mode_args_invalid_in_unit_test_mode(pytester, arg) -> None:
+    """Run pytest unit tests with forbidden args."""
+    args = [arg]
+    if arg == "--max_vtksz_file_size":
+        args.append("0")
+    elif arg == "--doc_images_dir":
+        args.append("foo")
+    result = pytester.runpytest(*args)
+
+    result.stderr.fnmatch_lines([f"ERROR: argument {arg} can only be used with --doc_mode enabled"])
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+
+
+@pytest.mark.parametrize("original_size", [(402, 300), (303, 400)])
+@pytest.mark.parametrize("max_image_size", [200, 300, 400, 500])
+@pytest.mark.parametrize("doc_mode", [True, False])
+def test_max_image_size(pytester: pytest.Pytester, doc_mode, original_size, max_image_size) -> None:
+    """Test generated image dimensions may be customized."""
+    test_name = "test"
+    generated = "generated"
+    failed = "failed"
+    args = ["--max_image_size", max_image_size, "--generated_image_dir", generated, "--failed_image_dir", failed]
+
+    images_dir = "images"
+    if doc_mode:
+        make_cached_images(pytester.path, images_dir, f"{test_name}.png", window_size=original_size)
+        args.extend(["--doc_mode", "--doc_images_dir", images_dir])
+    else:
+        pytester.makepyfile(
+            f"""
+            import pytest
+            import pyvista as pv
+            pv.global_theme.window_size = {original_size}
+            pv.OFF_SCREEN = True
+            def test_{test_name}(verify_image_cache):
+                sphere = pv.Sphere()
+                plotter = pv.Plotter()
+                plotter.add_mesh(sphere, color="red")
+                plotter.show()
+            """
+        )
+
+    result = pytester.runpytest(*args)
+
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+    gen_file = pytester.path / generated / f"{test_name}.png"
+    assert gen_file.is_file()
+
+    generated_image = pv.read(gen_file)
+    expected_size = _get_thumbnail_size(original_size, max_image_size)
+    assert generated_image.dimensions == (*expected_size, 1)
