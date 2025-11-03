@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import contextlib
 from dataclasses import dataclass
 from functools import cached_property
@@ -15,7 +16,6 @@ import re
 import shutil
 import sys
 from typing import TYPE_CHECKING
-from typing import Callable
 from typing import Literal
 from typing import Union
 from typing import cast
