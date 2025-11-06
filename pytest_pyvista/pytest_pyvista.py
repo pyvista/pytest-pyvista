@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import contextlib
 from dataclasses import dataclass
 from functools import cached_property
@@ -17,7 +16,6 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 from typing import Literal
-from typing import Union
 from typing import cast
 from typing import get_args
 from typing import overload
@@ -34,6 +32,7 @@ import vtkmodules
 from pytest_pyvista import hooks
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Callable
     from collections.abc import Generator
 
     import xdist.workermanage
@@ -51,7 +50,7 @@ _DOC_MODE_CLI_ARGS: set[str] = set()
 _UNIT_TEST_CLI_ARGS: set[str] = set()
 
 _AllowedImageFormats = Literal["png", "jpg"]
-_OriginalImageFormats = Union[_AllowedImageFormats, Literal["gif", "vtksz"]]
+_OriginalImageFormats = _AllowedImageFormats | Literal["gif", "vtksz"]
 
 
 @dataclass

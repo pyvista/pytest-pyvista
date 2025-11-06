@@ -319,7 +319,7 @@ def _html_screenshots(
         context = browser.new_context()
         page = context.new_page()
 
-        for html_file, window_size in zip(html_files, window_sizes):
+        for html_file, window_size in zip(html_files, window_sizes, strict=True):
             if verbose:
                 msg = f"Rendering {html_file.name}"
                 logger.info(msg)
@@ -389,7 +389,7 @@ def _generate_test_cases(input_paths: list[Path], test_image_paths: list[Path], 
         if input_path:
             test_cases_dict[test_name]["input_path"] = input_path
 
-    for input_path, test_path in zip(input_paths, test_image_paths):
+    for input_path, test_path in zip(input_paths, test_image_paths, strict=True):
         add_to_dict(test_path.parent if _DocVerifyImageCache.generate_subdirs else test_path, "docs", input_path=input_path)  # type: ignore[func-returns-value]
 
     # process cached images
