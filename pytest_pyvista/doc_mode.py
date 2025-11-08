@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 from typing import Literal
+from typing import TypeVar
 from typing import cast
 from typing import overload
 import warnings
@@ -301,6 +302,10 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
     return output_paths
 
 
+def _default_window_sizes(n_files: int) -> list[tuple[int, int]]:
+    return [cast("tuple[int, int]", tuple(pv.global_theme.window_size))] * n_files
+
+
 def _html_screenshots(
     html_files: list[Path],
     output_dir: Path,
@@ -312,7 +317,7 @@ def _html_screenshots(
 
     output_paths: list[Path] = []
     if window_sizes is None:
-        window_sizes = [cast("tuple[int, int]", tuple(pv.global_theme.window_size))] * len(html_files)
+        window_sizes = _default_window_sizes(len(html_files))
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -341,21 +346,23 @@ def _render_all_html(
     window_sizes: list[tuple[int, int]] | None = None,
     num_workers: int = 1,
 ) -> list[Path]:
-    """Dispatch rendering across multiple processes."""
     verbose = _DocVerifyImageCache._verbose  # noqa: SLF001
     if num_workers == 1:
         return _html_screenshots(html_files, output_dir, window_sizes, verbose)
+    T = TypeVar("T")
 
-    def _split_batches(files: list[Path], n: int) -> list[list[Path]]:
+    def _split_batches(files: list[T], n: int) -> list[list[T]]:
         """Split a list of files into n roughly equal contiguous batches."""
         k, m = divmod(len(files), n)
         return [files[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n)]
 
-    batches = _split_batches(html_files, num_workers)
+    html_batches = _split_batches(html_files, num_workers)
+    sizes = _default_window_sizes(len(html_files)) if window_sizes is None else window_sizes
+    window_batches = _split_batches(sizes, num_workers)
     with multiprocessing.Pool(processes=num_workers) as pool:
         results_nested = pool.starmap(
             _html_screenshots,
-            [(batch, output_dir, window_sizes, verbose) for batch in batches],
+            [(files, output_dir, sizes, verbose) for files, sizes in zip(html_batches, window_batches, strict=True)],
         )
 
     # Flatten list of lists
