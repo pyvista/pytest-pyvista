@@ -816,7 +816,7 @@ def test_disallow_unused_cache(pytester: pytest.Pytester, marker, skip_verify, c
 
 
 @pytest.mark.parametrize("skip", [True, False])
-@pytest.mark.parametrize("args", ["--disallow_unused_cache", []])
+@pytest.mark.parametrize("args", [["--disallow_unused_cache"], []])
 def test_disallow_unused_cache_skip_multiple_images(pytester: pytest.Pytester, skip, args) -> None:
     """Test skips when there are multiple calls to show() in a test."""
     make_cached_images(pytester.path, name="imcache.png")
@@ -841,7 +841,7 @@ def test_disallow_unused_cache_skip_multiple_images(pytester: pytest.Pytester, s
         """
     )
 
-    result = pytester.runpytest(args)
+    result = pytester.runpytest(*args)
     expected = "*skipped*" if skip else "*[Pp]assed*"
     result.stdout.fnmatch_lines(expected)
     assert result.ret == pytest.ExitCode.OK
@@ -865,8 +865,8 @@ def test_disallow_unused_cache_name_mismatch(pytester: pytest.Pytester, disallow
             plotter.show()
         """
     )
-    args = "--disallow_unused_cache" if disallow_unused_cache else []
-    result = pytester.runpytest(args)
+    args = ["--disallow_unused_cache"] if disallow_unused_cache else []
+    result = pytester.runpytest(*args)
     if disallow_unused_cache:
         result.stdout.fnmatch_lines([*_unused_cache_lines(image_name)])
         assert result.ret == pytest.ExitCode.TESTS_FAILED
