@@ -31,12 +31,12 @@ Home = "https://github.com/pyvista/pytest-pyvista"
 docs = [
   "pydata-sphinx-theme==0.16.1",
   "sphinx-notfound-page==1.1.0",
-  "sphinx==8.2.3",
+  "sphinx==9.0.0",
   "sphinx_copybutton==0.5.2",
 ]
 tests = [
   "codecov<2.2.0",
-  "coverage==7.11.0",
+  "coverage==7.12.0",
   "numpy<2.4",
   "pytest-cov==7.0.0",
   "pytest-pyvista[vtksz]",
