@@ -15,9 +15,7 @@ import re
 import shutil
 import sys
 from typing import TYPE_CHECKING
-from typing import Callable
 from typing import Literal
-from typing import Union
 from typing import cast
 from typing import get_args
 from typing import overload
@@ -34,6 +32,7 @@ import vtkmodules
 from pytest_pyvista import hooks
 
 if TYPE_CHECKING:  # pragma: no cover
+    from collections.abc import Callable
     from collections.abc import Generator
 
     import xdist.workermanage
@@ -51,7 +50,7 @@ _DOC_MODE_CLI_ARGS: set[str] = set()
 _UNIT_TEST_CLI_ARGS: set[str] = set()
 
 _AllowedImageFormats = Literal["png", "jpg"]
-_OriginalImageFormats = Union[_AllowedImageFormats, Literal["gif", "vtksz"]]
+_OriginalImageFormats = _AllowedImageFormats | Literal["gif", "vtksz"]
 
 
 @dataclass
@@ -979,10 +978,16 @@ def pytest_configure(config: pytest.Config) -> None:
             }
 
 
-def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
-    """Modify each xdist worker."""
-    if paths := getattr(node.config, "paths", None):
-        node.workerinput["paths"] = paths
+try:
+    import xdist.plugin  # noqa: TC002
+except ImportError:
+    pass
+else:
+
+    def pytest_configure_node(node: xdist.workermanage.WorkerController) -> None:
+        """Modify each xdist worker."""
+        if paths := getattr(node.config, "paths", None):
+            node.workerinput["paths"] = paths
 
 
 @pytest.fixture

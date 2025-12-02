@@ -34,7 +34,7 @@ jobs:
       - name: Install pytest-pyvista with test dependencies
         run: pip install .[docs] 'pyvista>=0.37'
 
-      - uses: awalsh128/cache-apt-pkgs-action@v1.5.3
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
           packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
           version: 3.0
@@ -54,6 +54,8 @@ jobs:
   Linux:
     name: Linux Unit Testing
     runs-on: ubuntu-latest
+    env:
+      PYTEST_CMD: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
     strategy:
       fail-fast: false
 
@@ -94,7 +96,7 @@ jobs:
         if: ${{ matrix.vtk-version != 'latest' }}
         run: pip install vtk==${{ matrix.vtk-version }}
 
-      - uses: awalsh128/cache-apt-pkgs-action@v1.5.3
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
           packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
           version: 3.0
@@ -109,9 +111,15 @@ jobs:
       # using `--parallel-mode` flag to ensure coverage files are unique, see
       # https://coverage.readthedocs.io/en/latest/cmd.html
       - name: Unit Testing
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+        run: $PYTEST_CMD
       - name: Unit Testing with parallel flag
-        run: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose -n2
+        run: $PYTEST_CMD -n2
+
+      # Run a single test to ensure plugin works without pytest-xdist
+      - name: Unit Testing no pytest-xdist
+        run: |
+          pip uninstall -y pytest-xdist && \
+          $PYTEST_CMD -k test_arguments
 
       - name: Combine coverage
         run: coverage combine || true
@@ -124,7 +132,7 @@ jobs:
 
       - name: Upload distribution artifacts
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dist-artifacts
           path: dist/
@@ -142,7 +150,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download distribution artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: dist-artifacts
           path: dist/
@@ -170,7 +178,7 @@ jobs:
 
   downstream:
     name: Downstream tests
-    runs-on: ubuntu-22.04 # matching pyvista
+    runs-on: ubuntu-22.04-self-hosted # matching pyvista
     steps:
       - uses: actions/checkout@v5
 
@@ -180,15 +188,15 @@ jobs:
 
       - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch /tmp/pyvista
 
-      - name: upgrade pip
-        run: pip install --upgrade pip
+      - name: upgrade pip and install uv
+        run: pip install --upgrade pip uv
 
       - name: Install pyvista with testing requirements
-        run: pip install -ve . --group test
+        run: uv pip install --system -ve . --group test
         working-directory: /tmp/pyvista
 
       - name: Install pytest-pyvista
-        run: pip install -ve .  --upgrade
+        run: uv pip install --system -ve . --upgrade
 
       - name: Software Report
         run: |
@@ -197,12 +205,12 @@ jobs:
           pip list
 
       - name: Unit Testing
-        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache -n2
+        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache -n8
         working-directory: /tmp/pyvista
 
       - name: Upload generated image artifact
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: generated_images
           path: /tmp/pyvista/gen_dir

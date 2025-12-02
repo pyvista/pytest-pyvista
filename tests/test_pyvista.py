@@ -1067,10 +1067,7 @@ def test_env_info() -> None:
     assert " " not in info
     assert info.startswith(f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}")
     if platform.system() == "Linux":
-        if sys.version_info >= (3, 10):
-            assert info.startswith("ubuntu")
-        else:
-            assert info.startswith("Linux")
+        assert info.startswith("ubuntu")
 
     # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
     pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
