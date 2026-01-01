@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload distribution artifacts
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: dist-artifacts
           path: dist/
@@ -172,7 +172,7 @@ jobs:
 
       - name: Upload generated image artifact
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: generated_images
           path: /tmp/pyvista/gen_dir
