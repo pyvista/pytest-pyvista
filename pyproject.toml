@@ -20,8 +20,8 @@ dynamic = ["description", "version"]
 license = "MIT"
 license-files = ["LICENSE"]
 name = "pytest_pyvista"
-python_requires = ">=3.10"
 readme = "README.rst"
+requires-python = ">=3.10"
 
 [project.urls]
 Home = "https://github.com/pyvista/pytest-pyvista"
