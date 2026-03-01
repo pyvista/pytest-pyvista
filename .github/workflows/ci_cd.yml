@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload distribution artifacts
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dist-artifacts
           path: dist/
@@ -172,7 +172,7 @@ jobs:
 
       - name: Upload generated image artifact
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: generated_images
           path: /tmp/pyvista/gen_dir
@@ -194,7 +194,7 @@ jobs:
       id-token: write # this permission is mandatory for trusted publishing
       contents: write # required to create a release
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
