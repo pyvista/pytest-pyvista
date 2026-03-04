@@ -582,7 +582,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size)
     assert Path(generated).is_dir()
     expected_file = Path(generated) / name_generated
     assert expected_file.is_file()
-    expected_max_size = max_image_size if max_image_size else 1024
+    expected_max_size = max_image_size or 1024
     actual_max_size = max(pv.read(expected_file).dimensions)
     assert actual_max_size == expected_max_size
 
