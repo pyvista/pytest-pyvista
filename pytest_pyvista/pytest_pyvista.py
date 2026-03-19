@@ -850,15 +850,15 @@ def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
     A session scope fixture is used since we only need to evaluate this once, and we want
     the error raised during test setup.
     """
-    if pytestconfig.getoption("ignore_image_cache"):
-        return
-
     if pytestconfig.getoption("doc_mode"):
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
         image_cache_dir = _DocVerifyImageCache.image_cache_dir
         image_format = _DocVerifyImageCache.image_format
     else:
+        if pytestconfig.getoption("ignore_image_cache"):
+            return
+
         image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
         image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
     __validate_image_cache_dir(image_cache_dir, image_format)
