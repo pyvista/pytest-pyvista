@@ -247,6 +247,7 @@ These flags are specific to the unit tests. They cannot be used with
 
 * You can use ``--ignore_image_cache`` if you want to
   temporarily ignore regression testing, e.g. on a particular CI action.
+  This also disables cache validation (see ``_validate_image_cache_dir``).
 
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 

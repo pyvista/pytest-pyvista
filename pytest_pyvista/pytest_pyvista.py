@@ -474,14 +474,6 @@ class VerifyImageCache:
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
         image_name = _image_name_from_test_name(test_name, image_format=self.image_format)
-        image_filename = Path(self.cache_dir, image_name)
-        image_dirname = Path(self.cache_dir, Path(image_name).stem)
-
-        cached_image_paths = _get_file_paths(image_dirname, ext=self.image_format) if image_dirname.is_dir() else [image_filename]
-        if not cached_image_paths:
-            # Path is an empty dir, append default expected image path
-            cached_image_paths.append(image_dirname / f"{self.env_info}.{self.image_format}")
-        current_cached_image = cached_image_paths[0]
 
         if VerifyImageCache._is_skipped(
             skip=self.skip,
@@ -491,7 +483,17 @@ class VerifyImageCache:
         ):
             SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
             return
+
         VISITED_CACHED_IMAGE_NAMES.add(image_name)
+
+        image_filename = Path(self.cache_dir, image_name)
+        image_dirname = Path(self.cache_dir, Path(image_name).stem)
+
+        cached_image_paths = _get_file_paths(image_dirname, ext=self.image_format) if image_dirname.is_dir() else [image_filename]
+        if not cached_image_paths:
+            # Path is an empty dir, append default expected image path
+            cached_image_paths.append(image_dirname / f"{self.env_info}.{self.image_format}")
+        current_cached_image = cached_image_paths[0]
 
         if not current_cached_image.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
@@ -854,6 +856,9 @@ def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
         image_cache_dir = _DocVerifyImageCache.image_cache_dir
         image_format = _DocVerifyImageCache.image_format
     else:
+        if pytestconfig.getoption("ignore_image_cache"):
+            return
+
         image_cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
         image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
     __validate_image_cache_dir(image_cache_dir, image_format)
