@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 import pyvista as pv
@@ -18,6 +20,34 @@ from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images
 from tests.test_pyvista import make_multiple_cached_images
+
+
+@pytest.fixture(autouse=True, scope="module")
+def check_playwright_config() -> None:
+    """
+    Set env var so pytester can find the existing browser(s) installed with `playwright install`.
+    See https://playwright.dev/python/docs/browsers#managing-browser-binaries.
+
+    Also check that playwright browsers have been installed.
+    """  # noqa: D205
+    home = Path.home()
+
+    if sys.platform == "darwin":
+        browsers_path = home / "Library" / "Caches" / "ms-playwright"
+    elif sys.platform.startswith("linux"):
+        browsers_path = home / ".cache" / "ms-playwright"
+    elif sys.platform.startswith("win"):
+        browsers_path = Path(os.environ["LOCALAPPDATA"]) / "ms-playwright"
+    else:
+        msg = RuntimeError(f"Unsupported platform: {sys.platform}")
+        raise msg
+
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
+
+    # Check non-empty browsers list
+    out = subprocess.run(["playwright", "install", "--list"], check=True, capture_output=True)  # noqa: S607
+    if len(out.stdout.splitlines()) == 0:
+        pytest.fail("`playwright` browsers have not been installed. Run `playwright install` before executing the test suite.")
 
 
 @pytest.mark.parametrize("generate_subdirs", [True, False])
