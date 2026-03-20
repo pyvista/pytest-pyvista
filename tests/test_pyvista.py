@@ -1043,7 +1043,7 @@ def test_multiple_cache_images(  # noqa: PLR0913
             [
                 rf".*RegressionError: {partial_match}",
                 r".*This test has multiple cached images. It initially failed \(as above\) and failed again for all images in:",
-                ".*cache/imcache",
+                f".*{re.escape(str(Path('cache/imcache')))}",
             ]
         )
 
@@ -1077,7 +1077,7 @@ def test_env_info() -> None:
     assert any(m.startswith("_pyvista-") for m in matches)
     assert any(m.startswith("_vtk-") for m in matches)
 
-    assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI"])
+    assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI", "Intel", "MicrosoftCorporation"]), info
 
     if os.environ.get("CI", None):
         assert "no-CI" not in info
@@ -1217,7 +1217,9 @@ def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format,
     result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format required by")
     result.stdout.fnmatch_lines(f"E           the image cache directory is {valid_format!r}, but {invalid_format!r} images exist in the cache.")
     result.stdout.fnmatch_lines("E           Cache directory: *")
-    result.stdout.fnmatch_lines(f"E           Invalid images: ['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']")
+    result.stdout.fnmatch_lines(
+        f"E           Invalid images: ['{re.escape(str(Path('imcache/imcache')))}.{invalid_format}', 'imcache.{invalid_format}']"
+    )
 
 
 @pytest.mark.parametrize("ignore_image_cache", [True, False])

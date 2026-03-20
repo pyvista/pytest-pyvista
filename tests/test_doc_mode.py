@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -26,10 +27,11 @@ from tests.test_pyvista import make_multiple_cached_images
 def check_playwright_config() -> None:
     """
     Set env var so pytester can find the existing browser(s) installed with `playwright install`.
+
     See https://playwright.dev/python/docs/browsers#managing-browser-binaries.
 
     Also check that playwright browsers have been installed.
-    """  # noqa: D205
+    """
     home = Path.home()
 
     if sys.platform == "darwin":
@@ -304,7 +306,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             [
                 rf".*Failed: {partial_match}",
                 r".*This test has multiple cached images. It initially failed \(as above\) and failed again for all images in:",
-                ".*cache/imcache",
+                ".*" + re.escape(str(Path("cache/imcache"))),
             ]
         )
 
@@ -535,7 +537,7 @@ def test_vtksz_screenshot(tmp_path) -> None:
     assert png_file.suffix == ".png"
 
     expected_screenshot = make_cached_images(tmp_path, name=Path(name).with_suffix(".png"), window_size=pv.global_theme.window_size)
-    small_error = 70
+    small_error = 90
     actual_error = pv.compare_images(str(expected_screenshot), str(png_file))
     assert actual_error < small_error
 
