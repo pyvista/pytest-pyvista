@@ -1220,6 +1220,31 @@ def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format,
     result.stdout.fnmatch_lines(f"E           Invalid images: ['imcache/imcache.{invalid_format}', 'imcache.{invalid_format}']")
 
 
+@pytest.mark.parametrize("ignore_image_cache", [True, False])
+def test_validate_cache_unique_names_ignore_image_cache(*, pytester: pytest.Pytester, ignore_image_cache: bool) -> None:
+    """Test that --ignore_image_cache disables cache validation for unit tests."""
+    test_name = "imcache"
+    name = f"{test_name}.png"
+    cache = "image_cache_dir"
+    make_cached_images(pytester.path, path=cache, name=name)
+    make_cached_images(pytester.path / cache, path=test_name, name=name)
+
+    pytester.makepyfile(
+        f"""def test_{test_name}(verify_image_cache):
+                ...
+        """
+    )
+
+    args = ["--ignore_image_cache"] if ignore_image_cache else []
+    result = pytester.runpytest(*args)
+
+    if ignore_image_cache:
+        result.assert_outcomes(passed=1)
+    else:
+        assert result.ret == pytest.ExitCode.TESTS_FAILED
+        result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
+
+
 @pytest.mark.parametrize("doc_mode", [True, False])
 def test_validate_cache_unique_names(*, pytester: pytest.Pytester, doc_mode: bool) -> None:
     """Test cache validation."""
