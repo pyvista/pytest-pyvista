@@ -138,6 +138,71 @@ jobs:
           path: dist/
           retention-days: 7
 
+  Windows:
+    name: Windows Unit Testing
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTEST_CMD: pytest --verbose
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - python-version: "3.10"
+            vtk-version: "9.2.2"
+          - python-version: "3.11"
+            vtk-version: "latest"
+          - python-version: "3.12"
+            vtk-version: "latest"
+          - python-version: "3.13"
+            vtk-version: "latest"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install pytest-pyvista with test dependencies
+        run: |
+          pip install .[tests]
+
+      - name: Install playwright
+        run: playwright install chromium
+
+      - name: Set up vtk
+        if: ${{ matrix.vtk-version != 'latest' }}
+        run: pip install vtk==${{ matrix.vtk-version }}
+
+      - name: Set up headless display
+        uses: pyvista/setup-headless-display-action@7d84ae825e6d9297a8e99bdbbae20d1b919a0b19
+
+      - name: Software Report
+        run: |
+          python -c "import pytest_pyvista; pytest_pyvista"
+          which python
+          pip list
+
+      # run unit testing with both parallel and without parallel flags but
+      # using `--parallel-mode` flag to ensure coverage files are unique, see
+      # https://coverage.readthedocs.io/en/latest/cmd.html
+      - name: Unit Testing
+        run: $PYTEST_CMD
+      - name: Unit Testing with parallel flag
+        run: $PYTEST_CMD -n2
+
+      # Run a single test to ensure plugin works without pytest-xdist
+      - name: Unit Testing no pytest-xdist
+        run: |
+          pip uninstall -y pytest-xdist && \
+          $PYTEST_CMD -k test_arguments
+
   downstream:
     name: Downstream tests
     runs-on: ubuntu-22.04-self-hosted # matching pyvista
@@ -185,6 +250,7 @@ jobs:
     needs:
       - doc
       - Linux
+      - Windows
       - downstream
     runs-on: ubuntu-24.04
     environment:
