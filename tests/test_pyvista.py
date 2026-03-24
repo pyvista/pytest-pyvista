@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from enum import Enum
 import filecmp
-import os
 from pathlib import Path
 import platform
 import re
@@ -16,6 +15,7 @@ from unittest import mock
 import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
+import vtkmodules
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.pytest_pyvista import _DOC_MODE_CLI_ARGS
@@ -1061,29 +1061,40 @@ def test_multiple_cache_images(  # noqa: PLR0913
             assert file_has_changed(str(from_test), str(from_cache))
 
 
-def test_env_info() -> None:
+@pytest.mark.parametrize("on_ci", [True, False], ids=["on_ci", "not_on_ci"])
+def test_env_info(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, on_ci: bool) -> None:  # noqa: FBT001
     """Test env info dataclass."""
-    info = str(_EnvInfo())
-    assert " " not in info
-    assert info.startswith(f"{_SYSTEM_PROPERTIES.os_name}-{_SYSTEM_PROPERTIES.os_version}")
-    if platform.system() == "Linux":
-        assert info.startswith("ubuntu")
+    # Arrange
+    monkeypatch.setattr(_SYSTEM_PROPERTIES, "os_name", os_name := "os_name")
+    monkeypatch.setattr(_SYSTEM_PROPERTIES, "os_version", os_version := "os_version")
+    monkeypatch.setattr(_SYSTEM_PROPERTIES, "gpu_vendor", gpu_vendor := "vendor")
+    monkeypatch.setattr(pv, "__version__", pv_version := "pv_version")
+    monkeypatch.setattr(vtkmodules, "__version__", vtk_version := "vtk_version")
 
-    # Generic regex for "_package-#.#.#" with optional suffix (like .dev0, .post1, etc.)
-    pattern = r"_[a-zA-Z]+-\d+\.\d+\.\d+(?:[a-zA-Z0-9\.]*)?"
-    matches = re.findall(pattern, info)
-
-    assert any(m.startswith("_py-") for m in matches)
-    assert any(m.startswith("_pyvista-") for m in matches)
-    assert any(m.startswith("_vtk-") for m in matches)
-
-    assert any(f"gpu-{vendor.lower()}" in info.lower() for vendor in ["Apple", "NVIDIA", "Mesa", "AMD", "ATI", "Intel", "MicrosoftCorporation"]), info
-
-    if os.environ.get("CI", None):
-        assert "no-CI" not in info
-        assert "CI" in info
+    if not on_ci:
+        monkeypatch.delenv("CI", raising=False)
     else:
-        assert "no-CI" in info
+        monkeypatch.setenv("CI", "1")
+
+    m = mocker.patch.object(platform, "machine")
+    m.return_value = (machine := "machine")
+
+    # Act
+    info = str(_EnvInfo())
+
+    # Assert
+    assert " " not in info
+
+    values = [
+        f"{os_name}-{os_version}",
+        machine,
+        f"gpu-{gpu_vendor}",
+        f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        f"pyvista-{pv_version}",
+        f"vtk-{vtk_version}",
+        f"{'CI' if on_ci else 'no-CI'}",
+    ]
+    assert "_".join(val for val in values if val) == info
 
 
 @pytest.mark.parametrize(
