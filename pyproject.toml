@@ -74,7 +74,7 @@ required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.lint.per-file-ignores]
 "doc/**" = ["ERA001", "INP001"]
-"tests/**" = ["ANN001", "INP001", "S101"]
+"tests/**" = ["ANN001", "D104", "INP001", "S101"]
 
 [tool.ruff.lint.pyupgrade]
 # Preserve types, even if a file imports `from __future__ import annotations`.

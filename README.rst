@@ -290,13 +290,15 @@ tests.
 
   .. note::
 
-      This option requires installing additional packages, as well as installing the
-      chromium browser with ``playwright``:
+      This option requires installing additional packages, as well as installing
+      browser with ``playwright``:
 
       .. code-block:: bash
 
           pip install pytest-pyvista[vtksz]
-          playwright install chromium
+          playwright install
+      
+      Note that among available playwright browsers, ``firefox`` is tried first, then it defaults to ``chromium``.
 
   .. note::
 
