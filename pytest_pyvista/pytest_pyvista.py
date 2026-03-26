@@ -1092,16 +1092,14 @@ def _pyvista_close_plotters(pytestconfig: pytest.Config) -> Generator[None, None
 
 _APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
 
+if _APPLE_SILICON:
+    from Foundation import NSAutoreleasePool
+
 
 @pytest.fixture(autouse=True)
 def _pyvista_macos_autorelease() -> Generator[None, None, None]:
     """Drain the Cocoa autorelease pool between tests on macOS Apple Silicon."""
     if not _APPLE_SILICON:
-        yield
-        return
-    try:
-        from Foundation import NSAutoreleasePool  # noqa: PLC0415
-    except ImportError:
         yield
         return
     pool = NSAutoreleasePool.alloc().init()
