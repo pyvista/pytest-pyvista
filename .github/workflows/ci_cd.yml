@@ -203,6 +203,43 @@ jobs:
           pip uninstall -y pytest-xdist && \
           $PYTEST_CMD -k test_arguments
 
+  macOS:
+    name: macOS Unit Testing
+    runs-on: macos-latest
+    env:
+      PYTEST_CMD: coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.12"
+          - python-version: "3.13"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install pytest-pyvista with test dependencies
+        run: pip install .[tests]
+
+      - name: Software Report
+        run: |
+          python -c "import pytest_pyvista; pytest_pyvista"
+          python -c "import platform; print(f'arch: {platform.machine()}')"
+          python -c "from Foundation import NSAutoreleasePool; print('NSAutoreleasePool: OK')"
+          pip list
+
+      - name: Unit Testing
+        run: $PYTEST_CMD
+
+      - name: Combine coverage
+        run: coverage combine || true
+
   downstream:
     name: Downstream tests
     runs-on: ubuntu-22.04-self-hosted # matching pyvista
@@ -251,6 +288,7 @@ jobs:
       - doc
       - Linux
       - Windows
+      - macOS
       - downstream
     runs-on: ubuntu-24.04
     environment:
