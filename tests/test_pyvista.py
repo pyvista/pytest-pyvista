@@ -1424,3 +1424,41 @@ def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
     )
     result = pytester.runpytest("-v")
     result.assert_outcomes(passed=2)
+
+
+def test_macos_autorelease_fixture_registered(pytester: pytest.Pytester) -> None:
+    """The _pyvista_macos_autorelease fixture should be available and not crash."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_creates_and_closes():
+            # This test just verifies the fixture doesn't interfere.
+            # On macOS ARM64 with pyobjc, it drains the autorelease pool.
+            # Everywhere else, it's a no-op.
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=1)
+
+
+@pytest.mark.skipif(
+    not (sys.platform == "darwin" and platform.machine() == "arm64"),
+    reason="NSAutoreleasePool only available on macOS ARM64",
+)
+def test_macos_autorelease_pool_drains() -> None:
+    """On macOS ARM64, verify NSAutoreleasePool is importable and the fixture pattern works."""
+    from Foundation import NSAutoreleasePool  # noqa: PLC0415
+
+    pool = NSAutoreleasePool.alloc().init()
+    # Create a plotter to generate Cocoa objects
+    pl = pv.Plotter(off_screen=True)
+    pl.add_mesh(pv.Sphere())
+    pl.render()
+    pl.close()
+    # Draining the pool should not crash
+    del pool

@@ -1090,6 +1090,25 @@ def _pyvista_close_plotters(pytestconfig: pytest.Config) -> Generator[None, None
         gc.collect()
 
 
+_APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+@pytest.fixture(autouse=True)
+def _pyvista_macos_autorelease() -> Generator[None, None, None]:
+    """Drain the Cocoa autorelease pool between tests on macOS Apple Silicon."""
+    if not _APPLE_SILICON:
+        yield
+        return
+    try:
+        from Foundation import NSAutoreleasePool  # noqa: PLC0415
+    except ImportError:
+        yield
+        return
+    pool = NSAutoreleasePool.alloc().init()
+    yield
+    del pool
+
+
 def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
     # Read all JSON files from a directory and combine into single set
     combined_data: set[str] = set()
