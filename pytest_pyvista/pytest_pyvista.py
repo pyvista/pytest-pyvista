@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass
 from functools import cached_property
+import gc
 import importlib
 import io
 import json
@@ -332,6 +333,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()
     _add_doc_cli_and_ini_options()
+
+    # VTK resource cleanup options
+    parser.addini(
+        "pyvista_close_all",
+        type="bool",
+        default=True,
+        help="Automatically close all plotters and run gc.collect() after each test (default: True).",
+    )
 
 
 class VerifyImageCache:
@@ -1070,6 +1079,15 @@ def verify_image_cache(
                 "Fixture `verify_image_cache` is used but no images were generated.\n"
                 "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
             )
+
+
+@pytest.fixture(autouse=True)
+def _pyvista_close_plotters(pytestconfig: pytest.Config) -> Generator[None, None, None]:
+    """Close all plotters and force garbage collection after each test."""
+    yield
+    if pytestconfig.getini("pyvista_close_all"):
+        pyvista.close_all()
+        gc.collect()
 
 
 def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:

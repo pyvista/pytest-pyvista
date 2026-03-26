@@ -1370,3 +1370,57 @@ def test_max_image_size(pytester: pytest.Pytester, doc_mode, original_size, max_
     generated_image = pv.read(gen_file)
     expected_size = _get_thumbnail_size(original_size, max_image_size)
     assert generated_image.dimensions == (*expected_size, 1)
+
+
+def test_close_all_runs_by_default(pytester: pytest.Pytester) -> None:
+    """The _pyvista_close_plotters fixture should close plotters after each test."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_was_cleaned_up():
+            # After the previous test, _pyvista_close_plotters should have
+            # called pv.close_all(), so no plotters should remain.
+            assert len(_ALL_PLOTTERS) == 0
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)
+
+
+def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
+    """Setting pyvista_close_all = false should skip cleanup."""
+    pytester.makeini(
+        """
+        [pytest]
+        pyvista_close_all = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_still_open():
+            # With cleanup disabled, the plotter from the previous test
+            # should still be in the registry.
+            assert len(_ALL_PLOTTERS) > 0
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)

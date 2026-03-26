@@ -11,11 +11,8 @@ if TYPE_CHECKING:
 pytest_plugins = "pytester"
 
 
-@pytest.fixture(autouse=True)
-def close_all_plotters() -> Generator[None]:
-    """Close all."""
-    yield
-    pv.close_all()
+# NOTE: close_all_plotters is no longer needed here because the plugin
+# provides the _pyvista_close_plotters autouse fixture (pv.close_all + gc.collect).
 
 
 @pytest.fixture(autouse=True)
