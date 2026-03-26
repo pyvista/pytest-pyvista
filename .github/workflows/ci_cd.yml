@@ -227,6 +227,9 @@ jobs:
       - name: Install pytest-pyvista with test dependencies
         run: pip install .[tests]
 
+      - name: Install playwright
+        run: playwright install chromium
+
       - name: Software Report
         run: |
           python -c "import pytest_pyvista; pytest_pyvista"
