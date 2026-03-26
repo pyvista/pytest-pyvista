@@ -1436,7 +1436,7 @@ def test_macos_autorelease_fixture_registered(pytester: pytest.Pytester) -> None
 
         def test_plotter_creates_and_closes():
             # This test just verifies the fixture doesn't interfere.
-            # On macOS ARM64 with pyobjc, it drains the autorelease pool.
+            # On macOS ARM64 it drains the autorelease pool.
             # Everywhere else, it's a no-op.
             pl = pv.Plotter()
             pl.add_mesh(pv.Sphere())
