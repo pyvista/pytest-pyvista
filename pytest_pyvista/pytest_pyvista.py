@@ -1082,9 +1082,24 @@ def verify_image_cache(
 
 
 @pytest.fixture(autouse=True)
-def _pyvista_close_plotters(pytestconfig: pytest.Config) -> Generator[None, None, None]:
-    """Close all plotters and force garbage collection after each test."""
+def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generator[None, None, None]:
+    """
+    Cleanup fixture.
+
+    This teardown fixture serves mutltiple purposes:
+    - closing all plotters,
+    - clearing trame servers registry (to prevent test collision),
+    - forcing garbage collection.
+    """
     yield
+
+    try:
+        from trame.app.core import AVAILABLE_SERVERS  # noqa: PLC0415
+    except ImportError:
+        ...
+    else:
+        AVAILABLE_SERVERS.clear()
+
     if pytestconfig.getini("pyvista_close_all"):
         pyvista.close_all()
         gc.collect()

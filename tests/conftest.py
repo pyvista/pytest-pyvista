@@ -12,7 +12,7 @@ pytest_plugins = "pytester"
 
 
 # NOTE: close_all_plotters is no longer needed here because the plugin
-# provides the _pyvista_close_plotters autouse fixture (pv.close_all + gc.collect).
+# provides the _close_plotters_clear_trame_servers autouse fixture (pv.close_all + gc.collect).
 
 
 @pytest.fixture(autouse=True)
