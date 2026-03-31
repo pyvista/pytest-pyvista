@@ -1396,6 +1396,24 @@ def test_close_all_runs_by_default(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=2)
 
 
+def test_clear_trame_servers(pytester: pytest.Pytester) -> None:
+    """Test the trame servers registry is cleared after each test."""
+    pytester.makepyfile(
+        """
+        from trame.app.core import AVAILABLE_SERVERS, Server
+        from trame.app import get_server
+
+        def test_get_server():
+            assert isinstance(get_server("name"), Server)
+
+        def test_get_server_cleared():
+            assert len(AVAILABLE_SERVERS) == 0
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)
+
+
 def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
     """Setting pyvista_close_all = false should skip cleanup."""
     pytester.makeini(
