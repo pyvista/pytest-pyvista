@@ -16,6 +16,7 @@ concurrency:
 env:
   ALLOW_PLOTTING: true
   SHELLOPTS: "errexit:pipefail"
+  TOX_COLORED: "yes"
 
 jobs:
   doc:
@@ -55,7 +56,7 @@ jobs:
     name: Linux Unit Testing
     runs-on: ubuntu-latest
     env:
-      PYTEST_CMD: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+      TOX_FACTOR: py${{matrix.python-version}}-vtk_${{matrix.vtk-version}}
     strategy:
       fail-fast: false
 
@@ -72,6 +73,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
+          version: 3.0
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -85,48 +91,27 @@ jobs:
           python -m pip install --upgrade pip build twine
           python -m build && python -m twine check dist/*
 
-      - name: Install pytest-pyvista with test dependencies
-        run: |
-          pip install .[tests]
+      - name: Install tox
+        run: pip install tox-uv
 
-      - name: Install playwright
-        run: playwright install chromium
-
-      - name: Set up vtk
-        if: ${{ matrix.vtk-version != 'latest' }}
-        run: pip install vtk==${{ matrix.vtk-version }}
-
-      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
-        with:
-          packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
-          version: 3.0
-
-      - name: Software Report
-        run: |
-          xvfb-run python -c "import pytest_pyvista; pytest_pyvista"
-          which python
-          pip list
-
-      # run unit testing with both parallel and without parallel flags but
-      # using `--parallel-mode` flag to ensure coverage files are unique, see
-      # https://coverage.readthedocs.io/en/latest/cmd.html
       - name: Unit Testing
-        run: $PYTEST_CMD
+        run: xvfb-run tox run -e ${{env.TOX_FACTOR}}-cov
+
       - name: Unit Testing with parallel flag
-        run: $PYTEST_CMD -n2
+        run: xvfb-run tox run -e ${{env.TOX_FACTOR}}-cov -- -n2
 
-      # Run a single test to ensure plugin works without pytest-xdist
-      - name: Unit Testing no pytest-xdist
-        run: |
-          pip uninstall -y pytest-xdist && \
-          $PYTEST_CMD -k test_arguments
+      - name: Unit Testing without xdist
+        run: xvfb-run tox run -e ${{env.TOX_FACTOR}}-cov-no_xdist
 
-      - name: Combine coverage
-        run: coverage combine || true
+      - name: Combine coverage reports
+        if: matrix.python-version == '3.10'
+        run: tox run -e coverage
 
       - uses: codecov/codecov-action@v5
         if: matrix.python-version == '3.10'
         name: "Upload coverage to CodeCov"
+        with:
+          fail_ci_if_error: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -145,7 +130,7 @@ jobs:
       run:
         shell: bash
     env:
-      PYTEST_CMD: pytest --verbose
+      TOX_FACTOR: py${{matrix.python-version}}-vtk_${{matrix.vtk-version}}
     strategy:
       fail-fast: false
 
@@ -162,6 +147,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Set up headless display
+        uses: pyvista/setup-headless-display-action@7d84ae825e6d9297a8e99bdbbae20d1b919a0b19
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -169,39 +157,17 @@ jobs:
           cache: "pip"
           cache-dependency-path: pyproject.toml
 
-      - name: Install pytest-pyvista with test dependencies
-        run: |
-          pip install .[tests]
+      - name: Install tox
+        run: pip install tox-uv
 
-      - name: Install playwright
-        run: playwright install chromium
-
-      - name: Set up vtk
-        if: ${{ matrix.vtk-version != 'latest' }}
-        run: pip install vtk==${{ matrix.vtk-version }}
-
-      - name: Set up headless display
-        uses: pyvista/setup-headless-display-action@7d84ae825e6d9297a8e99bdbbae20d1b919a0b19
-
-      - name: Software Report
-        run: |
-          python -c "import pytest_pyvista; pytest_pyvista"
-          which python
-          pip list
-
-      # run unit testing with both parallel and without parallel flags but
-      # using `--parallel-mode` flag to ensure coverage files are unique, see
-      # https://coverage.readthedocs.io/en/latest/cmd.html
       - name: Unit Testing
-        run: $PYTEST_CMD
-      - name: Unit Testing with parallel flag
-        run: $PYTEST_CMD -n2
+        run: tox run -e ${{env.TOX_FACTOR}}
 
-      # Run a single test to ensure plugin works without pytest-xdist
-      - name: Unit Testing no pytest-xdist
-        run: |
-          pip uninstall -y pytest-xdist && \
-          $PYTEST_CMD -k test_arguments
+      - name: Unit Testing with parallel flag
+        run: tox run -e ${{env.TOX_FACTOR}} -- -n2
+
+      - name: Unit Testing without xdist
+        run: tox run -e ${{env.TOX_FACTOR}}-no_xdist
 
   macOS:
     name: macOS Unit Testing

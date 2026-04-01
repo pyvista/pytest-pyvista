@@ -37,6 +37,9 @@ docs = [
   "sphinx==9.1.0",
   "sphinx_copybutton==0.5.2",
 ]
+vtksz = ["playwright", "trame-vtk>=2.6"]
+
+[dependency-groups]
 tests = [
   "codecov<2.2.0",
   "coverage==7.13.2",
@@ -48,7 +51,6 @@ tests = [
   "pytest_mock<3.16",
   "pyvista[jupyter]>=0.37",
 ]
-vtksz = ["playwright", "trame-vtk>=2.6"]
 
 [project.entry-points."pytest11"]
 # Location of the plugin module, in this case ./pytest_pyvista/pytest_pyvista.py
