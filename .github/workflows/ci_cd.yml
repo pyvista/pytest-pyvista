@@ -173,7 +173,7 @@ jobs:
     name: macOS Unit Testing
     runs-on: macos-latest
     env:
-      PYTEST_CMD: coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+      TOX_FACTOR: py${{matrix.python-version}}
     strategy:
       fail-fast: false
       matrix:
@@ -190,24 +190,17 @@ jobs:
           cache: "pip"
           cache-dependency-path: pyproject.toml
 
-      - name: Install pytest-pyvista with test dependencies
-        run: pip install .[tests]
-
-      - name: Install playwright
-        run: playwright install chromium
-
-      - name: Software Report
-        run: |
-          python -c "import pytest_pyvista; pytest_pyvista"
-          python -c "import platform; print(f'arch: {platform.machine()}')"
-          python -c "from Foundation import NSAutoreleasePool; print('NSAutoreleasePool: OK')"
-          pip list
+      - name: Install tox
+        run: pip install tox-uv
 
       - name: Unit Testing
-        run: $PYTEST_CMD
+        run: tox run -e ${{env.TOX_FACTOR}}
 
-      - name: Combine coverage
-        run: coverage combine || true
+      - name: Unit Testing with parallel flag
+        run: tox run -e ${{env.TOX_FACTOR}} -- -n2
+
+      - name: Unit Testing without xdist
+        run: tox run -e ${{env.TOX_FACTOR}}-no_xdist
 
   downstream:
     name: Downstream tests
