@@ -494,7 +494,7 @@ def _save_failed_test_image(source_path: Path, category: Literal["warnings", "er
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
         rel = source_path.relative_to(_DocVerifyImageCache.generated_image_dir)
-        dest_relative_dir = Path("from_build") / rel.parent
+        dest_relative_dir = Path("from_test") / rel.parent
 
     dest_dir = _DocVerifyImageCache.failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
