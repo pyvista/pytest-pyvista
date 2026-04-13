@@ -16,18 +16,19 @@ concurrency:
 env:
   ALLOW_PLOTTING: true
   SHELLOPTS: "errexit:pipefail"
+  TOX_COLORED: "yes"
 
 jobs:
   doc:
     name: Build Documentation
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
           cache: "pip"
           cache-dependency-path: pyproject.toml
 
@@ -55,7 +56,7 @@ jobs:
     name: Linux Unit Testing
     runs-on: ubuntu-latest
     env:
-      PYTEST_CMD: xvfb-run coverage run --parallel-mode --branch --source=pytest_pyvista -m pytest --verbose
+      TOX_FACTOR: py${{matrix.python-version}}-vtk_${{matrix.vtk-version}}
     strategy:
       fail-fast: false
 
@@ -70,7 +71,12 @@ jobs:
           - python-version: "3.13"
             vtk-version: "latest"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
+        with:
+          packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
+          version: 3.0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
@@ -85,58 +91,106 @@ jobs:
           python -m pip install --upgrade pip build twine
           python -m build && python -m twine check dist/*
 
-      - name: Install pytest-pyvista with test dependencies
-        run: |
-          pip install .[tests]
+      - name: Install tox
+        run: pip install tox-uv
 
-      - name: Install playwright
-        run: playwright install chromium
-
-      - name: Set up vtk
-        if: ${{ matrix.vtk-version != 'latest' }}
-        run: pip install vtk==${{ matrix.vtk-version }}
-
-      - uses: awalsh128/cache-apt-pkgs-action@v1.6.0
-        with:
-          packages: libosmesa6-dev libgl1-mesa-dev python3-tk pandoc git-restore-mtime
-          version: 3.0
-
-      - name: Software Report
-        run: |
-          xvfb-run python -c "import pytest_pyvista; pytest_pyvista"
-          which python
-          pip list
-
-      # run unit testing with both parallel and without parallel flags but
-      # using `--parallel-mode` flag to ensure coverage files are unique, see
-      # https://coverage.readthedocs.io/en/latest/cmd.html
       - name: Unit Testing
-        run: $PYTEST_CMD
+        run: xvfb-run tox run -e ${{env.TOX_FACTOR}}-cov
+
       - name: Unit Testing with parallel flag
-        run: $PYTEST_CMD -n2
+        run: xvfb-run tox run -e ${{env.TOX_FACTOR}}-cov -- -n2
 
-      # Run a single test to ensure plugin works without pytest-xdist
-      - name: Unit Testing no pytest-xdist
-        run: |
-          pip uninstall -y pytest-xdist && \
-          $PYTEST_CMD -k test_arguments
+      - name: Unit Testing without xdist
+        run: xvfb-run tox run -e ${{env.TOX_FACTOR}}-cov-no_xdist
 
-      - name: Combine coverage
-        run: coverage combine || true
+      - name: Combine coverage reports
+        if: matrix.python-version == '3.10'
+        run: tox run -e coverage
 
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         if: matrix.python-version == '3.10'
         name: "Upload coverage to CodeCov"
+        with:
+          fail_ci_if_error: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload distribution artifacts
         if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dist-artifacts
           path: dist/
           retention-days: 7
+
+  Windows:
+    name: Windows Unit Testing
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      TOX_FACTOR: py${{matrix.python-version}}-vtk_${{matrix.vtk-version}}
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - python-version: "3.10"
+            vtk-version: "9.2.2"
+          - python-version: "3.11"
+            vtk-version: "latest"
+          - python-version: "3.12"
+            vtk-version: "latest"
+          - python-version: "3.13"
+            vtk-version: "latest"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up headless display
+        uses: pyvista/setup-headless-display-action@5bc8de3bc71fcda7a96439571287a554901541a0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install tox
+        run: pip install tox-uv
+
+      - name: Unit Testing
+        run: tox run -e ${{env.TOX_FACTOR}}
+
+      - name: Unit Testing with parallel flag
+        run: tox run -e ${{env.TOX_FACTOR}} -- -n2
+
+      - name: Unit Testing without xdist
+        run: tox run -e ${{env.TOX_FACTOR}}-no_xdist
+
+  downstream:
+    name: Downstream tests
+    runs-on: ubuntu-22.04-self-hosted # matching pyvista
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install tox
+        run: pip install tox-uv
+
+      - name: Unit testing (pyvista)
+        run: xvfb-run tox run -e downstream
+
+      - name: Upload generated image artifact
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: generated_images
+          path: .tox/.tmp/pyvista/gen_dir
 
   release:
     name: Release
@@ -146,71 +200,27 @@ jobs:
     needs:
       - doc
       - Linux
+      - Windows
       - downstream
     runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pytest-pyvista
+    permissions:
+      id-token: write # this permission is mandatory for trusted publishing
+      contents: write # required to create a release
     steps:
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
-          name: dist-artifacts
-          path: dist/
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          python -m pip install twine
-          python -m twine upload --skip-existing ./**/*.whl
-          python -m twine upload --skip-existing ./**/*.tar.gz
-
-      - name: Publish to GitHub
+          path: dist
+          merge-multiple: true
+      - run: ls -alR dist/
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          generate_release_notes: true
           files: |
             ./**/*.whl
             ./**/*.tar.gz
-
-  downstream:
-    name: Downstream tests
-    runs-on: ubuntu-22.04-self-hosted # matching pyvista
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-
-      - run: git clone --depth=1 https://github.com/pyvista/pyvista.git --branch main --single-branch /tmp/pyvista
-
-      - name: upgrade pip and install uv
-        run: pip install --upgrade pip uv
-
-      - name: Install pyvista with testing requirements
-        run: uv pip install --system -ve . --group test
-        working-directory: /tmp/pyvista
-
-      - name: Install pytest-pyvista
-        run: uv pip install --system -ve . --upgrade
-
-      - name: Software Report
-        run: |
-          xvfb-run python -c "import pyvista; print(pyvista.Report())"
-          which python
-          pip list
-
-      - name: Unit Testing
-        run: xvfb-run python -m pytest -v --allow_useless_fixture --generated_image_dir gen_dir tests/plotting --disallow_unused_cache -n8
-        working-directory: /tmp/pyvista
-
-      - name: Upload generated image artifact
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v5
-        with:
-          name: generated_images
-          path: /tmp/pyvista/gen_dir

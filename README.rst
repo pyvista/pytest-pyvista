@@ -205,16 +205,16 @@ Common flags
 These flags may be used with regular unit testing or documentation testing with
 ``--doc_mode`` enabled.
 
-* ``--image_cache_dir <DIR>`` sets the image cache directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+* ``--image_cache_dir <DIR>`` sets the image cache directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`_.
   This will override any configuration, see below.
 
 * ``--generated_image_dir <DIR>`` dumps all generated test images into the provided
-  directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  directory, relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`_.
   This will override any configuration, see below.
 
 * ``--failed_image_dir <DIR>`` dumps copies of cached and generated test images when
   there is a warning or error raised. This directory is useful for reviewing test
-  failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+  failures. It is relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`_.
   This will override any configuration, see below.
 
 * ``--generate_subdirs`` saves generated test images in separate sub-directories
@@ -247,6 +247,7 @@ These flags are specific to the unit tests. They cannot be used with
 
 * You can use ``--ignore_image_cache`` if you want to
   temporarily ignore regression testing, e.g. on a particular CI action.
+  This also disables cache validation (see ``_validate_image_cache_dir``).
 
 * ``--add_missing_images`` adds any missing images from the test run to the cache.
 
@@ -289,13 +290,15 @@ tests.
 
   .. note::
 
-      This option requires installing additional packages, as well as installing the
-      chromium browser with ``playwright``:
+      This option requires installing additional packages, as well as installing
+      browser with ``playwright``:
 
       .. code-block:: bash
 
           pip install pytest-pyvista[vtksz]
-          playwright install chromium
+          playwright install
+      
+      Note that among available playwright browsers, ``firefox`` is tried first, then it defaults to ``chromium``.
 
   .. note::
 
@@ -443,7 +446,7 @@ Configure directories for when ``--doc_mode`` is used:
     doc_image_cache_dir = "tests/doc/doc_image_cache"
     doc_images_dir = "doc/_build/html/_images"
 
-Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`.
+Note that these directories are relative to `pytest root path <https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath>`_.
 
 Include additional vtksz file tests.
 

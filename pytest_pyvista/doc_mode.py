@@ -313,14 +313,24 @@ def _html_screenshots(
     verbose: bool = False,  # noqa: FBT001, FBT002
 ) -> list[Path]:
     """Generate screenshots of html files using the specified window sizes."""
-    from playwright.sync_api import sync_playwright  # noqa: PLC0415
-
     output_paths: list[Path] = []
     if window_sizes is None:
         window_sizes = _default_window_sizes(len(html_files))
 
+    from playwright.sync_api import Browser, Error, Playwright, sync_playwright  # noqa: I001, PLC0415
+
+    def _get_browser(p: Playwright) -> Browser:
+        error = None
+        for t in ["firefox", "chromium"]:
+            try:
+                return getattr(p, t).launch(headless=True)
+            except Error as e:  # noqa: PERF203
+                error = e
+
+        raise error  # type: ignore[misc]
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = _get_browser(p)
         context = browser.new_context()
         page = context.new_page()
 
@@ -484,7 +494,7 @@ def _save_failed_test_image(source_path: Path, category: Literal["warnings", "er
         dest_relative_dir = Path("from_cache") / rel.parent
     else:
         rel = source_path.relative_to(_DocVerifyImageCache.generated_image_dir)
-        dest_relative_dir = Path("from_build") / rel.parent
+        dest_relative_dir = Path("from_test") / rel.parent
 
     dest_dir = _DocVerifyImageCache.failed_image_dir / category / dest_relative_dir
     dest_dir.mkdir(exist_ok=True, parents=True)
