@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>pytest-pyvista &#8212; pytest-pyvista 0.3.2 documentation</title>
+    <title>pytest-pyvista &#8212; pytest-pyvista 0.3.3 documentation</title>
   
   
   
@@ -39,9 +39,9 @@
   <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
 <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
-    <script src="_static/documentation_options.js?v=71d9d8e6"></script>
-    <script src="_static/doctools.js?v=9bcbadda"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/documentation_options.js?v=d5a15cff"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="_static/copybutton.js?v=f281be69"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
@@ -50,7 +50,7 @@
     <link rel="next" title="API Reference" href="api.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="0.3.2" />
+  <meta name="docsearch:version" content="0.3.3" />
   </head>
   
   
@@ -116,8 +116,8 @@
       
     
     
-    <img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-light" alt="pytest-pyvista 0.3.2 documentation - Home"/>
-    <img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-dark pst-js-only" alt="pytest-pyvista 0.3.2 documentation - Home"/>
+    <img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-light" alt="pytest-pyvista 0.3.3 documentation - Home"/>
+    <img src="https://docs.pyvista.org/_static/pyvista_logo_sm.png" class="logo__image only-dark pst-js-only" alt="pytest-pyvista 0.3.3 documentation - Home"/>
   
   
 </a></div>
@@ -552,14 +552,14 @@ failed tests.</p>
 <p>These flags may be used with regular unit testing or documentation testing with
 <code class="docutils literal notranslate"><span class="pre">--doc_mode</span></code> enabled.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">--image_cache_dir</span> <span class="pre">&lt;DIR&gt;</span></code> sets the image cache directory, relative to <cite>pytest root path &lt;https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath&gt;</cite>.
+<li><p><code class="docutils literal notranslate"><span class="pre">--image_cache_dir</span> <span class="pre">&lt;DIR&gt;</span></code> sets the image cache directory, relative to <a class="reference external" href="https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath">pytest root path</a>.
 This will override any configuration, see below.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--generated_image_dir</span> <span class="pre">&lt;DIR&gt;</span></code> dumps all generated test images into the provided
-directory, relative to <cite>pytest root path &lt;https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath&gt;</cite>.
+directory, relative to <a class="reference external" href="https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath">pytest root path</a>.
 This will override any configuration, see below.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--failed_image_dir</span> <span class="pre">&lt;DIR&gt;</span></code> dumps copies of cached and generated test images when
 there is a warning or error raised. This directory is useful for reviewing test
-failures. It is relative to <cite>pytest root path &lt;https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath&gt;</cite>.
+failures. It is relative to <a class="reference external" href="https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath">pytest root path</a>.
 This will override any configuration, see below.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--generate_subdirs</span></code> saves generated test images in separate sub-directories
 instead of saving them directly to the <code class="docutils literal notranslate"><span class="pre">generated_image_dir</span></code>. Without this option,
@@ -588,7 +588,8 @@ the aspect ratio. Images are only resized to be smaller, and are not enlarged.</
 <code class="docutils literal notranslate"><span class="pre">tests/plotting/test_plotting.py</span></code> and is not recommended except for
 testing or for potentially a major or minor release.</p></li>
 <li><p>You can use <code class="docutils literal notranslate"><span class="pre">--ignore_image_cache</span></code> if you want to
-temporarily ignore regression testing, e.g. on a particular CI action.</p></li>
+temporarily ignore regression testing, e.g. on a particular CI action.
+This also disables cache validation (see <code class="docutils literal notranslate"><span class="pre">_validate_image_cache_dir</span></code>).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--add_missing_images</span></code> adds any missing images from the test run to the cache.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--reset_only_failed</span></code> reset the image cache of the failed tests only.</p></li>
 <li><p>Use <code class="docutils literal notranslate"><span class="pre">--allow_unused_generated</span></code> to prevent an error from being raised when a
@@ -625,12 +626,13 @@ and rendered with the same window size as its corresponding static image.
 A screenshot is captured, then compared with the cached image like normal.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This option requires installing additional packages, as well as installing the
-chromium browser with <code class="docutils literal notranslate"><span class="pre">playwright</span></code>:</p>
+<p>This option requires installing additional packages, as well as installing
+browser with <code class="docutils literal notranslate"><span class="pre">playwright</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>pytest-pyvista<span class="o">[</span>vtksz<span class="o">]</span>
-playwright<span class="w"> </span>install<span class="w"> </span>chromium
+playwright<span class="w"> </span>install
 </pre></div>
 </div>
+<p>Note that among available playwright browsers, <code class="docutils literal notranslate"><span class="pre">firefox</span></code> is tried first, then it defaults to <code class="docutils literal notranslate"><span class="pre">chromium</span></code>.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -765,7 +767,7 @@ avoid passing command line arguments when calling <code class="docutils literal 
 <span class="n">doc_images_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;doc/_build/html/_images&quot;</span>
 </pre></div>
 </div>
-<p>Note that these directories are relative to <cite>pytest root path &lt;https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath&gt;</cite>.</p>
+<p>Note that these directories are relative to <a class="reference external" href="https://docs.pytest.org/en/latest/reference/reference.html#pytest.Config.rootpath">pytest root path</a>.</p>
 <p>Include additional vtksz file tests.</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[tool.pytest.ini_options]</span>
 <span class="n">include_vtksz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
@@ -915,7 +917,7 @@ description.</p>
 
   <p class="copyright">
     
-      © Copyright 2025, PyVista.
+      © Copyright 2026, PyVista.
       <br/>
     
   </p>
@@ -924,7 +926,7 @@ description.</p>
         <div class="footer-item">
 
   <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
     <br/>
   </p>
 </div>
