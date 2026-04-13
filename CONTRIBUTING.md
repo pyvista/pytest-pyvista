@@ -16,7 +16,7 @@ git merge main
 Now, update `__version__` within `pytest_pyvista/__init__.py` to the next patch. For example:
 
 ```py
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 ```
 
 becomes
