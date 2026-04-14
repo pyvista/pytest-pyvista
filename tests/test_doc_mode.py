@@ -166,7 +166,7 @@ def test_both_images_exist(  # noqa: PLR0913
     if (path := Path(failed)).is_dir():
         assert os.listdir(path) == ["errors"]  # noqa: PTH208
         errors_dir = path / "errors"
-        expected_from = "from_build" if missing == "cache" else "from_cache"
+        expected_from = "from_test" if missing == "cache" else "from_cache"
         assert os.listdir(errors_dir) == [expected_from]  # noqa: PTH208
         from_dir = errors_dir / expected_from
         expected_image = from_dir / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs and missing == "cache" else from_dir / name
@@ -230,10 +230,10 @@ def test_compare_images_warning(pytester: pytest.Pytester, *, failed_image_dir: 
         assert from_cache_file.is_file()
         assert not file_has_changed(str(from_cache_file), str(original))
 
-        from_build = Path(failed) / "warnings" / "from_build"
-        from_build_file = from_build / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs else from_build / name
-        assert from_build_file.is_file()
-        assert file_has_changed(str(from_build_file), str(from_cache_file))
+        from_test = Path(failed) / "warnings" / "from_test"
+        from_test_file = from_test / Path(name).stem / f"{_EnvInfo()}.{image_format}" if generate_subdirs else from_test / name
+        assert from_test_file.is_file()
+        assert file_has_changed(str(from_test_file), str(from_cache_file))
 
     result.stdout.re_match_lines(
         [rf".*UserWarning: {Path(name).stem} Exceeded image regression warning of 200\.0 with an image error of [0-9]+\.[0-9]+"]
@@ -295,10 +295,10 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         if failed_image_dir:
             assert not file_has_changed(str(from_cache), str(blue_filename))
 
-        from_build = Path(failed, "errors_as_warnings", "from_build", build_filename.name)
-        assert from_build.is_file() == failed_image_dir
+        from_test = Path(failed, "errors_as_warnings", "from_test", build_filename.name)
+        assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
-            assert file_has_changed(str(from_build), str(from_cache))
+            assert file_has_changed(str(from_test), str(from_cache))
 
     else:  # 'green'
         # Comparison with all cached images fails
@@ -318,10 +318,10 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
             if failed_image_dir:
                 assert not file_has_changed(str(from_cache), str(filename))
 
-        from_build = Path(failed, "errors", "from_build", build_filename.name)
-        assert from_build.is_file() == failed_image_dir
+        from_test = Path(failed, "errors", "from_test", build_filename.name)
+        assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
-            assert file_has_changed(str(from_build), str(from_cache))
+            assert file_has_changed(str(from_test), str(from_cache))
 
 
 @pytest.mark.parametrize("include_vtksz", [True, False])
@@ -523,7 +523,7 @@ def test_customizing_tests(pytester: pytest.Pytester) -> None:
     assert expected_file.is_file()
 
     assert Path(failed).is_dir()
-    expected_file = Path(failed) / "errors" / "from_build" / expected_relpath
+    expected_file = Path(failed) / "errors" / "from_test" / expected_relpath
     assert expected_file.is_file()
 
 
@@ -619,7 +619,7 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size)
     assert actual_max_size == expected_max_size
 
     assert Path(failed).is_dir()
-    expected_file = Path(failed) / "errors" / "from_build" / name_generated
+    expected_file = Path(failed) / "errors" / "from_test" / name_generated
     assert expected_file.is_file()
 
 
