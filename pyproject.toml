@@ -15,7 +15,10 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Testing",
 ]
-dependencies = ["pytest>=6.2.0"]
+dependencies = [
+  "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+  "pytest>=6.2.0",
+]
 dynamic = ["description", "version"]
 license = "MIT"
 license-files = ["LICENSE"]
