@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass
 from functools import cached_property
+import gc
 import importlib
 import io
 import json
@@ -332,6 +333,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()
     _add_doc_cli_and_ini_options()
+
+    # VTK resource cleanup options
+    parser.addini(
+        "pyvista_close_all",
+        type="bool",
+        default=True,
+        help="Automatically close all plotters and run gc.collect() after each test (default: True).",
+    )
 
 
 class VerifyImageCache:
@@ -1070,6 +1079,47 @@ def verify_image_cache(
                 "Fixture `verify_image_cache` is used but no images were generated.\n"
                 "Did you forget to call `show` or `plot`, or set `verify_image_cache.allow_useless_fixture=True`?."
             )
+
+
+@pytest.fixture(autouse=True)
+def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generator[None, None, None]:
+    """
+    Cleanup fixture.
+
+    This teardown fixture serves mutltiple purposes:
+    - closing all plotters,
+    - clearing trame servers registry (to prevent test collision),
+    - forcing garbage collection.
+    """
+    yield
+
+    try:
+        from trame.app.core import AVAILABLE_SERVERS  # noqa: PLC0415
+    except ImportError:
+        ...
+    else:
+        AVAILABLE_SERVERS.clear()
+
+    if pytestconfig.getini("pyvista_close_all"):
+        pyvista.close_all()
+        gc.collect()
+
+
+_APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
+
+if _APPLE_SILICON:
+    from Foundation import NSAutoreleasePool
+
+
+@pytest.fixture(autouse=True)
+def _pyvista_macos_autorelease() -> Generator[None, None, None]:
+    """Drain the Cocoa autorelease pool between tests on macOS Apple Silicon."""
+    if not _APPLE_SILICON:
+        yield
+        return
+    pool = NSAutoreleasePool.alloc().init()
+    yield
+    del pool
 
 
 def _combine_temp_jsons(json_dir: Path, prefix: str = "") -> set[str]:
