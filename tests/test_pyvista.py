@@ -1370,3 +1370,113 @@ def test_max_image_size(pytester: pytest.Pytester, doc_mode, original_size, max_
     generated_image = pv.read(gen_file)
     expected_size = _get_thumbnail_size(original_size, max_image_size)
     assert generated_image.dimensions == (*expected_size, 1)
+
+
+def test_close_all_runs_by_default(pytester: pytest.Pytester) -> None:
+    """The _pyvista_close_plotters fixture should close plotters after each test."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_was_cleaned_up():
+            # After the previous test, _pyvista_close_plotters should have
+            # called pv.close_all(), so no plotters should remain.
+            assert len(_ALL_PLOTTERS) == 0
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)
+
+
+def test_clear_trame_servers(pytester: pytest.Pytester) -> None:
+    """Test the trame servers registry is cleared after each test."""
+    pytester.makepyfile(
+        """
+        from trame.app.core import AVAILABLE_SERVERS, Server
+        from trame.app import get_server
+
+        def test_get_server():
+            assert isinstance(get_server("name"), Server)
+
+        def test_get_server_cleared():
+            assert len(AVAILABLE_SERVERS) == 0
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)
+
+
+def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
+    """Setting pyvista_close_all = false should skip cleanup."""
+    pytester.makeini(
+        """
+        [pytest]
+        pyvista_close_all = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_still_open():
+            # With cleanup disabled, the plotter from the previous test
+            # should still be in the registry.
+            assert len(_ALL_PLOTTERS) > 0
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)
+
+
+def test_macos_autorelease_fixture_registered(pytester: pytest.Pytester) -> None:
+    """The _pyvista_macos_autorelease fixture should be available and not crash."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_creates_and_closes():
+            # This test just verifies the fixture doesn't interfere.
+            # On macOS ARM64 it drains the autorelease pool.
+            # Everywhere else, it's a no-op.
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=1)
+
+
+@pytest.mark.skipif(
+    not (sys.platform == "darwin" and platform.machine() == "arm64"),
+    reason="NSAutoreleasePool only available on macOS ARM64",
+)
+def test_macos_autorelease_pool_drains() -> None:
+    """On macOS ARM64, verify NSAutoreleasePool is importable and the fixture pattern works."""
+    from Foundation import NSAutoreleasePool  # noqa: PLC0415
+
+    pool = NSAutoreleasePool.alloc().init()
+    # Create a plotter to generate Cocoa objects
+    pl = pv.Plotter(off_screen=True)
+    pl.add_mesh(pv.Sphere())
+    pl.render()
+    pl.close()
+    # Draining the pool should not crash
+    del pool

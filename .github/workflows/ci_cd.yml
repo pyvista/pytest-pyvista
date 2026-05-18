@@ -169,6 +169,39 @@ jobs:
       - name: Unit Testing without xdist
         run: tox run -e ${{env.TOX_FACTOR}}-no_xdist
 
+  macOS:
+    name: macOS Unit Testing
+    runs-on: macos-latest
+    env:
+      TOX_FACTOR: py${{matrix.python-version}}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.12"
+          - python-version: "3.13"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install tox
+        run: pip install tox-uv
+
+      - name: Unit Testing
+        run: tox run -e ${{env.TOX_FACTOR}}
+
+      - name: Unit Testing with parallel flag
+        run: tox run -e ${{env.TOX_FACTOR}} -- -n2
+
+      - name: Unit Testing without xdist
+        run: tox run -e ${{env.TOX_FACTOR}}-no_xdist
+
   downstream:
     name: Downstream tests
     runs-on: ubuntu-22.04-self-hosted # matching pyvista
@@ -201,6 +234,7 @@ jobs:
       - doc
       - Linux
       - Windows
+      - macOS
       - downstream
     runs-on: ubuntu-24.04
     environment:
