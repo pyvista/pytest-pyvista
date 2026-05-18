@@ -342,6 +342,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         help="Automatically close all plotters and run gc.collect() after each test (default: True).",
     )
 
+    parser.addini(
+        "pyvista_disable_smp",
+        type="bool",
+        default=True,
+        help=("Disable PyVista SMP (shared-memory parallel) tools during the test session for deterministic, reproducible runs (default: True)."),
+    )
+
 
 class VerifyImageCache:
     """
@@ -1103,6 +1110,24 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
     if pytestconfig.getini("pyvista_close_all"):
         pyvista.close_all()
         gc.collect()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _disable_smp_in_tests(pytestconfig: pytest.Config) -> None:
+    """
+    Disable PyVista SMP tools for deterministic, reproducible test runs.
+
+    Forces the sequential SMP backend with a single thread so that
+    filters relying on shared-memory parallelism behave deterministically
+    across runs. Gated by the ``pyvista_disable_smp`` ini option (default
+    ``True``) so downstream projects can opt out. This is a graceful no-op
+    on versions of pyvista that predate the ``enable_smp_tools`` API.
+    """
+    if not pytestconfig.getini("pyvista_disable_smp"):
+        return
+
+    with contextlib.suppress(AttributeError):
+        pyvista.enable_smp_tools(backend="sequential", n_threads=1)
 
 
 _APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"

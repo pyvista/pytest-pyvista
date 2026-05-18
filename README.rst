@@ -490,6 +490,17 @@ Or, set them to different values:
     generate_subdirs = true
     doc_generate_subdirs = false
 
+By default, a session-scoped autouse fixture disables PyVista SMP
+(shared-memory parallel) tools during the test session by forcing the
+sequential SMP backend with a single thread. This makes filters that rely
+on shared-memory parallelism behave deterministically and reproducibly
+across runs. To opt out and leave the SMP backend untouched:
+
+.. code-block:: toml
+
+    [tool.pytest.ini_options]
+    pyvista_disable_smp = false
+
 Contributing
 ------------
 Contributions are always welcome. Tests can be run with `tox`_, please ensure

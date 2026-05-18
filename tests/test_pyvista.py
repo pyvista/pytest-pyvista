@@ -1480,3 +1480,87 @@ def test_macos_autorelease_pool_drains() -> None:
     pl.close()
     # Draining the pool should not crash
     del pool
+
+
+def test_disable_smp_in_tests_sequential_single_thread(pytester: pytest.Pytester) -> None:
+    """The autouse fixture forces a sequential, single-threaded SMP backend."""
+    pytester.makepyfile(
+        """
+        import pyvista
+        from pyvista import _vtk
+
+
+        def test_smp_backend_is_sequential():
+            assert _vtk.vtkSMPTools.GetBackend() == "Sequential"
+            assert _vtk.vtkSMPTools.GetEstimatedNumberOfThreads() == 1
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
+
+
+def test_disable_smp_opt_out_is_noop(pytester: pytest.Pytester) -> None:
+    """With ``pyvista_disable_smp = false`` the fixture does not call enable_smp_tools."""
+    pytester.makeini(
+        """
+        [pytest]
+        pyvista_disable_smp = false
+        """
+    )
+    # Install the spy at conftest import time, which is guaranteed to happen
+    # before any session-scoped fixture (including the plugin's) runs.
+    pytester.makeconftest(
+        """
+        import pyvista
+
+        _original = pyvista.enable_smp_tools
+
+
+        def _spy(*args, **kwargs):
+            with open("smp_calls.log", "a") as fh:
+                fh.write(repr((args, kwargs)) + "\\n")
+            return _original(*args, **kwargs)
+
+
+        pyvista.enable_smp_tools = _spy
+        """
+    )
+    pytester.makepyfile(
+        """
+        import os
+
+
+        def test_enable_smp_tools_not_called():
+            assert not os.path.exists("smp_calls.log")
+        """
+    )
+    # Run out-of-process so the conftest monkeypatch cannot leak into this
+    # worker's pyvista module.
+    result = pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=1)
+    assert not (pytester.path / "smp_calls.log").exists()
+
+
+def test_disable_smp_version_guard_old_pyvista(pytester: pytest.Pytester) -> None:
+    """Simulating old pyvista (no enable_smp_tools) is a graceful no-op, not an error."""
+    pytester.makeconftest(
+        """
+        import pyvista
+
+        # Simulate a pyvista release that predates the enable_smp_tools API.
+        del pyvista.enable_smp_tools
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista
+
+
+        def test_no_enable_smp_tools_attr():
+            assert not hasattr(pyvista, "enable_smp_tools")
+        """
+    )
+    # Run out-of-process so deleting the attribute cannot leak into this
+    # worker's pyvista module.
+    result = pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=1)
