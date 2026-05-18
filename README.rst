@@ -409,9 +409,32 @@ allowed file size to ``50`` for the ``foo.vtksz`` file:
             test_case.max_vtksz_file_size = 50
         return test_case
 
+Automatic state reset fixtures
+------------------------------
+Two ``autouse`` fixtures are applied automatically to every test so downstream
+PyVista test suites do not have to reimplement them.
+
+* ``_reset_pyvista_state`` resets PyVista global state to its defaults after each
+  test: ``pyvista.vtk_snake_case("error")``, ``pyvista.vtk_verbosity("info")``,
+  ``pyvista.allow_new_attributes(False)``, and ``pyvista.PICKLE_FORMAT = "vtk"``.
+  Each reset is individually guarded so the fixture degrades gracefully on older
+  pyvista where some of these APIs do not exist. This is enabled by the
+  ``pyvista_reset_global_state`` ini option (default: ``True``); set it to
+  ``false`` to make the fixture a no-op:
+
+  .. code-block:: toml
+
+      [tool.pytest.ini_options]
+      pyvista_reset_global_state = false
+
+* ``_set_default_theme`` resets the plotting theme to the PyVista testing theme
+  both before and after the test, but only for tests that request the
+  ``verify_image_cache`` fixture. Non-plotting tests are left untouched to keep
+  them fast.
+
 Configuration
 -------------
-If using ``pyproject.toml`` or any other 
+If using ``pyproject.toml`` or any other
 `pytest configuration <https://docs.pytest.org/en/latest/reference/customize.html>`_
 section, consider configuring your test directory location to
 avoid passing command line arguments when calling ``pytest``, for example in

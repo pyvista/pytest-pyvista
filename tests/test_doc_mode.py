@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 from pathlib import Path
@@ -19,8 +20,14 @@ from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
-from tests.test_pyvista import make_cached_images
-from tests.test_pyvista import make_multiple_cached_images
+from tests.test_pyvista import make_cached_images as _make_cached_images
+from tests.test_pyvista import make_multiple_cached_images as _make_multiple_cached_images
+
+# Doc-mode tests do not use the `verify_image_cache` fixture, so the plugin's
+# autouse `_set_default_theme` fixture never fires for them; their rendering
+# uses the default theme. Generate baselines with the default theme to match.
+make_cached_images = functools.partial(_make_cached_images, use_testing_theme=False)
+make_multiple_cached_images = functools.partial(_make_multiple_cached_images, use_testing_theme=False)
 
 
 @pytest.fixture(autouse=True, scope="module")

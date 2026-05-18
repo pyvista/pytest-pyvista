@@ -15,6 +15,7 @@ from unittest import mock
 import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
+from pyvista.plotting.themes import _TestingTheme
 import vtkmodules
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
@@ -50,14 +51,30 @@ def test_arguments(pytester: pytest.Pytester) -> None:
 
 
 def make_cached_images(  # noqa: PLR0913
-    test_path, path="image_cache_dir", name="imcache.png", color="red", window_size=None, mesh: pv.DataSet | None = None
+    test_path,
+    path="image_cache_dir",
+    name="imcache.png",
+    color="red",
+    window_size=None,
+    mesh: pv.DataSet | None = None,
+    *,
+    use_testing_theme: bool = True,
 ) -> Path:
-    """Make image cache in `test_path/path`."""
+    """
+    Make image cache in `test_path/path`.
+
+    By default the baseline is rendered with PyVista's ``_TestingTheme`` so it
+    matches what the plugin's autouse ``_set_default_theme`` fixture imposes on
+    inner ``verify_image_cache`` tests. Pass ``use_testing_theme=False`` for
+    tests (e.g. ``--doc_mode``) that render under the default theme instead.
+    """
     d = Path(test_path, path)
     d.mkdir(exist_ok=True, parents=True)
     if mesh is None:
         mesh = pv.Sphere()
     kwargs = {"window_size": window_size} if window_size else {}
+    if use_testing_theme:
+        kwargs["theme"] = _TestingTheme()
     plotter = pv.Plotter(**kwargs)
     plotter.add_mesh(mesh, color=color)
     filename = d / name
@@ -68,8 +85,14 @@ def make_cached_images(  # noqa: PLR0913
     return filename
 
 
-def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int = 10, name: str = "imcache{index}.png") -> list[Path]:
-    """Make image cache in `test_path/path` consisting of several images."""
+def make_multiple_cached_images(
+    test_path, path="image_cache_dir", n_images: int = 10, name: str = "imcache{index}.png", *, use_testing_theme: bool = True
+) -> list[Path]:
+    """
+    Make image cache in `test_path/path` consisting of several images.
+
+    See :func:`make_cached_images` for the meaning of ``use_testing_theme``.
+    """
     colors = list(plt.rcParams["axes.prop_cycle"].by_key()["color"])
 
     d = Path(test_path, path)
@@ -87,7 +110,8 @@ def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int
             # don't regenerate images when that color already exists
             shutil.copy(color_to_file[color], filename)
         else:
-            plotter = pv.Plotter(off_screen=True)
+            kwargs = {"theme": _TestingTheme()} if use_testing_theme else {}
+            plotter = pv.Plotter(off_screen=True, **kwargs)
             plotter.add_mesh(mesh, color=color)
             if filename.suffix == ".vtksz":
                 plotter.export_vtksz(filename)
@@ -300,8 +324,12 @@ def test_image_cache_dir_ini(pytester: pytest.Pytester) -> None:
 
 def test_high_variance_test(pytester: pytest.Pytester) -> None:
     """Test `skip` flag of `verify_image_cache`."""
-    make_cached_images(pytester.path)
-    make_cached_images(pytester.path, name="imcache_var.png")
+    # Pin a window size on both the baseline and the inner render so the
+    # regression-error magnitude stays above the threshold. The testing theme
+    # imposed by the `_set_default_theme` fixture defaults to a small 400x400
+    # window where the near-red color delta no longer trips the error.
+    make_cached_images(pytester.path, window_size=(1024, 768))
+    make_cached_images(pytester.path, name="imcache_var.png", window_size=(1024, 768))
 
     # First make sure test fails with image regression error
     pytester.makepyfile(
@@ -312,7 +340,7 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
 
         def test_imcache(verify_image_cache):
             sphere = pv.Sphere()
-            plotter = pv.Plotter()
+            plotter = pv.Plotter(window_size=(1024, 768))
             plotter.add_mesh(sphere, color=[255, 5, 5])
             plotter.show()
         """
@@ -327,7 +355,7 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
         def test_imcache_var(verify_image_cache):
             verify_image_cache.high_variance_test = True
             sphere = pv.Sphere()
-            plotter = pv.Plotter()
+            plotter = pv.Plotter(window_size=(1024, 768))
             plotter.add_mesh(sphere, color=[255, 5, 5])
             plotter.show()
         """
@@ -624,7 +652,9 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache, image_
     """Test usage of the `failed_image_dir` option."""
     cached_image_name = f"imcache.{image_format}"
     if make_cache:
-        make_cached_images(pytester.path, name=cached_image_name)
+        # Pin a window size so the near-red color delta stays above the
+        # warning threshold despite the testing theme's small 400x400 window.
+        make_cached_images(pytester.path, name=cached_image_name, window_size=(1024, 768))
 
     red = [255, 0, 0]
     almost_red = [250, 0, 0]
@@ -636,7 +666,7 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache, image_
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
             sphere = pv.Sphere()
-            plotter = pv.Plotter()
+            plotter = pv.Plotter(window_size=(1024, 768))
             plotter.add_mesh(sphere, color={color})
             plotter.show()
         """
@@ -1350,11 +1380,13 @@ def test_max_image_size(pytester: pytest.Pytester, doc_mode, original_size, max_
             f"""
             import pytest
             import pyvista as pv
-            pv.global_theme.window_size = {original_size}
             pv.OFF_SCREEN = True
             def test_{test_name}(verify_image_cache):
                 sphere = pv.Sphere()
-                plotter = pv.Plotter()
+                # Set window size on the plotter directly so it is not
+                # overridden by the testing theme that the autouse
+                # `_set_default_theme` fixture loads for this test.
+                plotter = pv.Plotter(window_size={original_size})
                 plotter.add_mesh(sphere, color="red")
                 plotter.show()
             """
@@ -1480,3 +1512,179 @@ def test_macos_autorelease_pool_drains() -> None:
     pl.close()
     # Draining the pool should not crash
     del pool
+
+
+def test_reset_pyvista_state_restores_defaults(pytester: pytest.Pytester) -> None:
+    """The autouse state-reset fixture restores defaults between tests."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_mutates_state():
+            pv.vtk_verbosity("error")
+            assert pv.vtk_verbosity() == "error"
+
+        def test_b_sees_default():
+            assert pv.vtk_verbosity() == "info"
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=2)
+
+
+def test_reset_pyvista_state_disabled_is_noop(pytester: pytest.Pytester) -> None:
+    """With ``pyvista_reset_global_state = false`` the mutation persists."""
+    pytester.makeini(
+        """
+        [pytest]
+        pyvista_reset_global_state = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_mutates_state():
+            pv.vtk_verbosity("error")
+            assert pv.vtk_verbosity() == "error"
+
+        def test_b_state_persists():
+            assert pv.vtk_verbosity() == "error"
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=2)
+
+
+def test_reset_pyvista_state_survives_missing_attribute(pytester: pytest.Pytester) -> None:
+    """The fixture must not raise if a reset API is absent on older pyvista."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_delete_pickle_format():
+            # Permanently remove the attribute so the autouse fixture teardown
+            # must run with PICKLE_FORMAT absent and rely on its hasattr guard.
+            del pv.PICKLE_FORMAT
+            assert not hasattr(pv, "PICKLE_FORMAT")
+
+        def test_fixture_did_not_raise():
+            # If the previous teardown had raised, this test would error out.
+            assert not hasattr(pv, "PICKLE_FORMAT")
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=2)
+
+
+def test_reset_pyvista_state_suppresses_attribute_error(pytester: pytest.Pytester) -> None:
+    """
+    ``_restore_default_pyvista_state`` swallows ``AttributeError`` from missing APIs.
+
+    An inner conftest deletes ``pyvista.vtk_snake_case`` so the
+    ``contextlib.suppress(AttributeError)`` guard around it is the branch under
+    test (older pyvista lacks this API). This must run in a subprocess so the
+    attribute deletion cannot leak into the xdist worker running this suite.
+    """
+    pytester.makeconftest(
+        """
+        import pyvista
+
+        del pyvista.vtk_snake_case
+        assert not hasattr(pyvista, "vtk_snake_case")
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_triggers_teardown():
+            # The autouse teardown calls pyvista.vtk_snake_case(...), which is
+            # now absent; the suppress(AttributeError) guard must absorb it.
+            assert not hasattr(pv, "vtk_snake_case")
+
+        def test_b_teardown_did_not_raise():
+            assert not hasattr(pv, "vtk_snake_case")
+        """
+    )
+    result = pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=2)
+
+
+def test_set_default_theme_survives_testing_theme_import_error(pytester: pytest.Pytester) -> None:
+    """
+    ``_set_default_theme`` degrades gracefully when ``_TestingTheme`` import fails.
+
+    An inner conftest removes ``_TestingTheme`` from ``pyvista.plotting.themes``
+    so the fixture's ``except ImportError`` branch is exercised. Subprocess
+    isolation keeps the module surgery out of the xdist worker.
+    """
+    pytester.makeconftest(
+        """
+        import pyvista.plotting.themes as themes
+
+        del themes._TestingTheme
+        assert not hasattr(themes, "_TestingTheme")
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_theme_fixture_short_circuits(verify_image_cache):
+            # `_set_default_theme` cannot import `_TestingTheme`; it must yield
+            # without loading a theme and without raising.
+            verify_image_cache.allow_useless_fixture = True
+            pv.global_theme.background = "purple"
+
+        def test_theme_was_not_reset(verify_image_cache):
+            # Because the import failed, the fixture never reloaded the testing
+            # theme, so test_a's mutation is still visible here.
+            verify_image_cache.allow_useless_fixture = True
+            assert pv.global_theme.background == pv.Color("purple")
+        """
+    )
+    result = pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=2)
+
+
+def test_set_default_theme_resets_for_verify_image_cache(pytester: pytest.Pytester) -> None:
+    """Theme is restored between ``verify_image_cache`` tests, before and after."""
+    make_cached_images(pytester.path)
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_mutates_theme(verify_image_cache):
+            # The fixture resets to the testing theme before the test runs.
+            assert pv.global_theme.background != pv.Color("purple")
+            pv.global_theme.background = "purple"
+            verify_image_cache.allow_useless_fixture = True
+
+        def test_b_sees_default_theme(verify_image_cache):
+            # The fixture restored the theme after test_a's mutation.
+            assert pv.global_theme.background != pv.Color("purple")
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere(), color="red")
+            pl.show()
+        """
+    )
+    result = pytester.runpytest("--add_missing_images")
+    result.assert_outcomes(passed=2)
+
+
+def test_set_default_theme_short_circuits_without_verify_image_cache(pytester: pytest.Pytester) -> None:
+    """Without ``verify_image_cache`` the theme fixture must not reset the theme."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_mutates_theme():
+            pv.global_theme.background = "purple"
+
+        def test_b_theme_persists():
+            assert pv.global_theme.background == pv.Color("purple")
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=2)
