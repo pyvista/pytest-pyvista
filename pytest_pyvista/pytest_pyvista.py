@@ -498,7 +498,9 @@ class VerifyImageCache:
         image_filename = Path(self.cache_dir, image_name)
         image_dirname = Path(self.cache_dir, Path(image_name).stem)
 
-        cached_image_paths = _get_file_paths(image_dirname, ext=self.image_format) if image_dirname.is_dir() else [image_filename]
+        cached_image_paths = (
+            _get_file_paths(image_dirname, ext=self.image_format, env_info=self.env_info) if image_dirname.is_dir() else [image_filename]
+        )
         if not cached_image_paths:
             # Path is an empty dir, append default expected image path
             cached_image_paths.append(image_dirname / f"{self.env_info}.{self.image_format}")
@@ -647,9 +649,134 @@ def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_
     return generated_image_path.resolve()
 
 
-def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
-    """Get all paths of files with a specific extension inside a directory tree."""
-    return sorted(dir_.rglob(f"*.{ext}"))
+_IMAGE_CACHE_OS_ALIASES: dict[str, tuple[str, ...]] = {
+    "darwin": ("darwin", "macos"),
+    "linux": ("linux",),
+    "windows": ("windows",),
+}
+_KNOWN_IMAGE_CACHE_OS_TOKENS = frozenset(token for tokens in _IMAGE_CACHE_OS_ALIASES.values() for token in tokens)
+
+
+def _parse_cached_vtk_version(path: Path) -> tuple[int, int] | None:
+    """
+    Parse a ``vtk-<major>.<minor>`` version from a cached image filename.
+
+    Parameters
+    ----------
+    path : Path
+        Path to a cached image. Only the file stem is inspected.
+
+    Returns
+    -------
+    tuple[int, int] or None
+        The ``(major, minor)`` VTK version encoded in the filename, or
+        ``None`` when no recognizable version token is present.
+
+    """
+    # Anchor ``vtk`` at a field boundary (start of stem or after a ``-``,
+    # ``_`` or ``.`` separator) and require the version to end at a field
+    # boundary, so ``myvtk-1.2`` or ``vtk-9.x`` do not parse.
+    match = re.search(r"(?:^|[-._])vtk-(\d+)\.(\d+)(?:[-._]|$)", path.stem.lower())
+    if match is None:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _cached_image_sort_key(path: Path, env_info: _EnvInfo) -> tuple[int, int, int, int, str]:
+    """
+    Compute a sort key ranking a cached image by environment match.
+
+    Lower keys sort first, so the candidate that best matches the current
+    environment is compared before others. Ranking is, in order: exact full
+    environment-string match, environment-string substring match,
+    current-OS match (with ``darwin``/``macos`` aliasing), exact VTK
+    major.minor match then nearest VTK version by distance, and finally the
+    POSIX path for a stable fallback. Any unparsable filename never raises
+    and simply sorts toward the end.
+
+    Parameters
+    ----------
+    path : Path
+        Path to a cached image candidate.
+
+    env_info : _EnvInfo
+        Environment descriptor for the current run, used to build the
+        expected environment string.
+
+    Returns
+    -------
+    tuple[int, int, int, int, str]
+        The composite sort key ``(env_rank, os_rank, vtk_rank,
+        vtk_distance, posix_path)``.
+
+    """
+    stem = path.stem.lower()
+    env_str = str(env_info).lower()
+
+    if stem == env_str:
+        env_rank = 0
+    elif env_str and env_str in stem:
+        env_rank = 1
+    else:
+        env_rank = 2
+
+    # The OS field is the first token of the stem in the pyvista naming
+    # convention, optionally preceded by a configured ``prefix`` field.
+    # Restricting the match to that leading position is boundary-aware:
+    # ``linux-vtk-9.6`` matches but ``non-linux-foo`` does not.
+    fields = [token for token in re.split(r"[-._]", stem) if token]
+    prefix_token = env_info.prefix.lower()
+    if prefix_token and fields and fields[0] == prefix_token:
+        fields = fields[1:]
+    leading_os_token = fields[0] if fields else None
+
+    system = platform.system().lower()
+    current_os_tokens = _IMAGE_CACHE_OS_ALIASES.get(system, (system,))
+    has_known_os_token = leading_os_token in _KNOWN_IMAGE_CACHE_OS_TOKENS
+    matches_current_os = leading_os_token in current_os_tokens
+    os_rank = 0 if matches_current_os else 1 if not has_known_os_token else 2
+
+    current_vtk_version = tuple(pyvista.vtk_version_info[:2])
+    cached_vtk_version = _parse_cached_vtk_version(path)
+    if cached_vtk_version is None:
+        vtk_rank = 1
+        vtk_distance = 0
+    else:
+        vtk_rank = 0 if cached_vtk_version == current_vtk_version else 2
+        vtk_distance = abs(cached_vtk_version[0] - current_vtk_version[0]) * 100 + abs(cached_vtk_version[1] - current_vtk_version[1])
+
+    return env_rank, os_rank, vtk_rank, vtk_distance, path.as_posix()
+
+
+def _get_file_paths(dir_: Path, ext: str, *, env_info: str | _EnvInfo | None = None) -> list[Path]:
+    """
+    Get all paths of files with a specific extension inside a directory tree.
+
+    Parameters
+    ----------
+    dir_ : Path
+        Directory tree to search recursively.
+
+    ext : str
+        File extension to match, without the leading dot.
+
+    env_info : str or _EnvInfo, optional
+        When an :class:`_EnvInfo` is given, candidates are ordered so the
+        best environment match sorts first (see
+        :func:`_cached_image_sort_key`). When ``None`` or a plain string,
+        the legacy lexicographic ``sorted`` order is preserved for
+        backward compatibility.
+
+    Returns
+    -------
+    list[Path]
+        The matching paths, ordered as described above.
+
+    """
+    paths = sorted(dir_.rglob(f"*.{ext}"))
+    if not isinstance(env_info, _EnvInfo):
+        return paths
+    return sorted(paths, key=lambda path: _cached_image_sort_key(path, env_info))
 
 
 def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path | str) -> float:

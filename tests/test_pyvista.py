@@ -22,8 +22,11 @@ from pytest_pyvista.pytest_pyvista import _DOC_MODE_CLI_ARGS
 from pytest_pyvista.pytest_pyvista import _SYSTEM_PROPERTIES
 from pytest_pyvista.pytest_pyvista import _UNIT_TEST_CLI_ARGS
 from pytest_pyvista.pytest_pyvista import PARSER_GROUP_NAME
+from pytest_pyvista.pytest_pyvista import _cached_image_sort_key
 from pytest_pyvista.pytest_pyvista import _EnvInfo
+from pytest_pyvista.pytest_pyvista import _get_file_paths
 from pytest_pyvista.pytest_pyvista import _get_thumbnail_size
+from pytest_pyvista.pytest_pyvista import _parse_cached_vtk_version
 from pytest_pyvista.pytest_pyvista import _SystemProperties
 from pytest_pyvista.pytest_pyvista import pytest_addoption
 
@@ -1059,6 +1062,147 @@ def test_multiple_cache_images(  # noqa: PLR0913
         assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_test), str(from_cache))
+
+
+def test_multi_cache_best_match_no_warning(pytester: pytest.Pytester) -> None:
+    """
+    Regression test for #286.
+
+    A per-test subdir holds OS-specific and VTK-specific baselines. Only the
+    current-OS / current-VTK baseline matches the rendered image. With the
+    best-match ordering fix the correct baseline is compared first, so the
+    test passes silently. Before the fix a non-matching baseline was compared
+    first, failed, then the result was downgraded to a noisy warning.
+    """
+    cache = "cache"
+    subdir = "imcache"
+    cache_parent = pytester.path / cache / subdir
+    system = platform.system()
+    os_token = {"Darwin": "macOS", "Linux": "linux", "Windows": "windows"}.get(system, system.lower())
+    vtk_major, vtk_minor = pv.vtk_version_info[:2]
+
+    # Wrong-OS baseline (blue) sorts before the correct one lexicographically
+    # on macOS ("linux" < "macOS"); a deliberately wrong color guarantees it
+    # fails if compared first.
+    for other_os in ("linux", "macOS", "windows"):
+        if other_os == os_token:
+            continue
+        make_cached_images(cache_parent, subdir, name=f"{other_os}-vtk-{vtk_major}.{vtk_minor}.png", color="blue")
+    # Wrong-VTK baseline for the current OS, also blue.
+    make_cached_images(cache_parent, subdir, name=f"{os_token}-vtk-{vtk_major}.{vtk_minor - 1}.png", color="blue")
+    # The single correct baseline: current OS + current VTK, red.
+    correct = make_cached_images(cache_parent, subdir, name=f"{os_token}-vtk-{vtk_major}.{vtk_minor}.png", color="red")
+    assert correct.is_file()
+
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color="red")
+            plotter.show()
+        """
+    )
+
+    result = pytester.runpytest("--image_cache_dir", cache)
+    result.assert_outcomes(passed=1, warnings=0)
+    result.stdout.no_re_match_line(r".*This test has multiple cached images.*")
+
+
+def test_cached_image_sort_key_ranks_current_env_first() -> None:
+    """The current-OS + current-VTK baseline must sort before the rest."""
+    env_info = _EnvInfo()
+    system = platform.system()
+    os_token = {"Darwin": "macOS", "Linux": "linux", "Windows": "windows"}.get(system, system.lower())
+    vtk_major, vtk_minor = pv.vtk_version_info[:2]
+
+    correct = Path(f"{os_token}-vtk-{vtk_major}.{vtk_minor}.png")
+    wrong_os = Path(f"otheros-vtk-{vtk_major}.{vtk_minor}.png")
+    no_tokens = Path("totally-unrelated-name.png")
+    paths = [wrong_os, no_tokens, correct]
+
+    ordered = sorted(paths, key=lambda p: _cached_image_sort_key(p, env_info))
+    assert ordered[0] == correct
+    # An unparsable name must not raise and must sort last.
+    assert _cached_image_sort_key(no_tokens, env_info)  # does not raise
+    assert ordered[-1] == no_tokens
+
+
+def test_parse_cached_vtk_version_boundary() -> None:
+    """Version parsing is boundary-aware and never raises."""
+    assert _parse_cached_vtk_version(Path("linux-vtk-9.6.png")) == (9, 6)
+    assert _parse_cached_vtk_version(Path("vtk-9.5.png")) == (9, 5)
+    assert _parse_cached_vtk_version(Path("prefix_macOS-vtk-10.2-extra.png")) == (10, 2)
+    # Malformed or non-boundary tokens must not parse.
+    assert _parse_cached_vtk_version(Path("vtk-9.x.png")) is None
+    assert _parse_cached_vtk_version(Path("vtk-9.png")) is None
+    assert _parse_cached_vtk_version(Path("no-version-token.png")) is None
+    # ``myvtk-1.2`` must not be read as VTK 1.2 after the boundary fix.
+    assert _parse_cached_vtk_version(Path("myvtk-1.2.png")) is None
+
+
+def test_cached_image_sort_key_tie_stability() -> None:
+    """Two filenames with identical rank sort deterministically by posix path."""
+    env_info = _EnvInfo()
+    # Neither carries an OS or VTK token, so every rank component ties and
+    # only ``path.as_posix()`` breaks the tie.
+    a = Path("alpha-unrelated.png")
+    b = Path("beta-unrelated.png")
+    key_a = _cached_image_sort_key(a, env_info)
+    key_b = _cached_image_sort_key(b, env_info)
+    assert key_a[:-1] == key_b[:-1]
+    assert key_a[-1] == "alpha-unrelated.png"
+    assert sorted([b, a], key=lambda p: _cached_image_sort_key(p, env_info)) == [a, b]
+    assert sorted([a, b], key=lambda p: _cached_image_sort_key(p, env_info)) == [a, b]
+
+
+def test_cached_image_sort_key_non_linux_not_os_match() -> None:
+    """A ``non-linux`` filename must not be ranked as an OS match on Linux."""
+    env_info = _EnvInfo()
+    system = platform.system()
+    os_token = {"Darwin": "macOS", "Linux": "linux", "Windows": "windows"}.get(system, system.lower())
+    vtk_major, vtk_minor = pv.vtk_version_info[:2]
+
+    # ``non-<os>-foo`` contains the OS substring but the leading field is
+    # ``non``, so it must rank strictly worse than a real OS baseline.
+    decoy = Path(f"non-{os_token}-foo-vtk-{vtk_major}.{vtk_minor}.png")
+    real = Path(f"{os_token}-vtk-{vtk_major}.{vtk_minor}.png")
+    decoy_key = _cached_image_sort_key(decoy, env_info)
+    real_key = _cached_image_sort_key(real, env_info)
+    # os_rank is index 1 of the key. The decoy carries no leading OS token
+    # so it is "no known OS token" (rank 1), strictly worse than the real
+    # current-OS match (rank 0).
+    assert real_key[1] == 0
+    assert decoy_key[1] == 1
+    assert real_key < decoy_key
+
+
+def test_cached_image_sort_key_vtk_distance_tiebreak() -> None:
+    """The nearer VTK version wins when no OS token is present."""
+    env_info = _EnvInfo()
+    vtk_major, vtk_minor = pv.vtk_version_info[:2]
+    near = Path(f"vtk-{vtk_major}.{vtk_minor}.png")
+    far = Path(f"vtk-{vtk_major}.{vtk_minor - 1}.png")
+
+    ordered = sorted([far, near], key=lambda p: _cached_image_sort_key(p, env_info))
+    assert ordered == [near, far]
+
+
+def test_get_file_paths_backward_compat(tmp_path: Path) -> None:
+    """With ``env_info=None`` (or a str) ordering equals plain ``sorted``."""
+    subdir = tmp_path / "cache"
+    subdir.mkdir()
+    names = ["windows-vtk-9.6.png", "linux-vtk-9.6.png", "macOS-vtk-9.6.png"]
+    for name in names:
+        (subdir / name).write_bytes(b"")
+
+    expected = sorted(subdir.rglob("*.png"))
+    assert _get_file_paths(subdir, "png") == expected
+    assert _get_file_paths(subdir, "png", env_info=None) == expected
+    # A plain string env_info must also fall back to plain sorted order.
+    assert _get_file_paths(subdir, "png", env_info="some-env-string") == expected
 
 
 @pytest.mark.parametrize("on_ci", [True, False], ids=["on_ci", "not_on_ci"])
