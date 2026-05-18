@@ -1480,3 +1480,208 @@ def test_macos_autorelease_pool_drains() -> None:
     pl.close()
     # Draining the pool should not crash
     del pool
+
+
+def test_blank_image_check_fails_on_blank_plotter(pytester: pytest.Pytester) -> None:
+    """A blank plotter fails when the blank image check is enabled."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_blank(verify_image_cache):
+            pl = pv.Plotter()
+            pl.show()
+        """
+    )
+    pytester.makepyprojecttoml(
+        """
+        [tool.pytest.ini_options]
+        pyvista_check_blank_images = true
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines("*Rendered image is essentially blank*")
+
+
+def test_blank_image_check_passes_on_normal_plot(pytester: pytest.Pytester) -> None:
+    """A normal plot is not flagged as blank when the check is enabled."""
+    make_cached_images(pytester.path)
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_imcache(verify_image_cache):
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere(), color="red")
+            pl.show()
+        """
+    )
+    pytester.makepyprojecttoml(
+        """
+        [tool.pytest.ini_options]
+        pyvista_check_blank_images = true
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
+
+
+def test_blank_image_check_per_test_bypass(pytester: pytest.Pytester) -> None:
+    """
+    An actually blank plot passes when the per-test bypass is set.
+
+    This isolates the ``allow_blank_image`` guard: the rendered image is genuinely
+    blank, so the check would fail without the bypass. The test must fail if the
+    ``and not self.allow_blank_image`` guard is removed.
+    """
+    # Cache a blank reference so the normal image comparison passes; only the
+    # blank check (bypassed here) should be exercised.
+    d = Path(pytester.path, "image_cache_dir")
+    d.mkdir(exist_ok=True, parents=True)
+    pv.Plotter(off_screen=True).screenshot(d / "imcache.png")
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_imcache(verify_image_cache):
+            verify_image_cache.allow_blank_image = True
+            pl = pv.Plotter()
+            pl.show()
+        """
+    )
+    pytester.makepyprojecttoml(
+        """
+        [tool.pytest.ini_options]
+        pyvista_check_blank_images = true
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
+    assert "essentially blank" not in result.stdout.str()
+
+
+def test_blank_image_check_disabled_by_default(pytester: pytest.Pytester) -> None:
+    """A blank plot does not trigger the blank error when the option is absent."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_imcache(verify_image_cache):
+            verify_image_cache.skip = True
+            pl = pv.Plotter()
+            pl.show()
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
+    assert "essentially blank" not in result.stdout.str()
+
+
+@pytest.mark.parametrize(
+    ("atol", "should_fail"),
+    [
+        # A blank plotter compared against a blank reference yields error == 0.0,
+        # so the ``error <= atol`` boundary flips deterministically around 0.0.
+        # This pins the comparison direction: an off-by-one mutation (`<` vs `<=`,
+        # `>` vs `>=`) changes at least one of these outcomes.
+        (-1.0, False),  # atol below 0.0: 0.0 <= -1.0 is False -> pass
+        (0.0, True),  # atol at 0.0: 0.0 <= 0.0 is True -> blank failure
+        (25.0, True),  # atol above 0.0: blank failure
+    ],
+)
+def test_blank_image_atol_boundary(
+    pytester: pytest.Pytester,
+    atol: float,
+    should_fail: bool,  # noqa: FBT001
+) -> None:
+    """Pin the ``error <= atol`` boundary direction for an exactly-blank image."""
+    # Cache a blank reference so the non-blank (pass) case clears the normal
+    # image comparison and only the blank-check boundary is under test.
+    d = Path(pytester.path, "image_cache_dir")
+    d.mkdir(exist_ok=True, parents=True)
+    pv.Plotter(off_screen=True).screenshot(d / "imcache.png")
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_imcache(verify_image_cache):
+            pl = pv.Plotter()
+            pl.show()
+        """
+    )
+    pytester.makepyprojecttoml(
+        f"""
+        [tool.pytest.ini_options]
+        pyvista_check_blank_images = true
+        pyvista_blank_image_atol = {atol}
+        """
+    )
+    result = pytester.runpytest()
+    if should_fail:
+        result.assert_outcomes(failed=1)
+        result.stdout.fnmatch_lines("*Rendered image is essentially blank*")
+    else:
+        result.assert_outcomes(passed=1)
+        assert "essentially blank" not in result.stdout.str()
+
+
+def test_blank_image_atol_malformed_raises_usage_error(pytester: pytest.Pytester) -> None:
+    """A non-numeric ``pyvista_blank_image_atol`` is rejected at config time."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_blank(verify_image_cache):
+            pl = pv.Plotter()
+            pl.show()
+        """
+    )
+    pytester.makepyprojecttoml(
+        """
+        [tool.pytest.ini_options]
+        pyvista_check_blank_images = true
+        pyvista_blank_image_atol = "abc"
+        """
+    )
+    result = pytester.runpytest()
+    # A pytest.UsageError aborts before any test runs (no summary line).
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines("*Invalid value for `pyvista_blank_image_atol`*")
+
+
+def test_blank_image_check_does_not_recurse(pytester: pytest.Pytester) -> None:
+    """
+    The blank check must not re-enter ``show``.
+
+    ``_check_blank_image`` renders the blank reference via ``_screenshot`` rather
+    than ``blank.show()``. ``show`` is monkeypatched by ``verify_image_cache``, so
+    calling it here would recurse forever. This asserts a clean single failure
+    (not a RecursionError or a hang) for a blank-check-enabled test.
+    """
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_blank(verify_image_cache):
+            pl = pv.Plotter()
+            pl.show()
+        """
+    )
+    pytester.makepyprojecttoml(
+        """
+        [tool.pytest.ini_options]
+        pyvista_check_blank_images = true
+        """
+    )
+    result = pytester.runpytest_subprocess(timeout=120)
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines("*Rendered image is essentially blank*")
+    assert "RecursionError" not in result.stdout.str()
