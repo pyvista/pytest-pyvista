@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import subprocess
 import sys
 from typing import TYPE_CHECKING
 from unittest import mock
@@ -1480,3 +1481,72 @@ def test_macos_autorelease_pool_drains() -> None:
     pl.close()
     # Draining the pool should not crash
     del pool
+
+
+def test_off_screen_forced_by_default(pytester: pytest.Pytester) -> None:
+    """The plugin flips ``pyvista.OFF_SCREEN`` back to True by default."""
+    # Set OFF_SCREEN = False at import time, before the plugin's
+    # pytest_configure runs. The plugin must force it back to True.
+    pytester.makeconftest(
+        """
+        import pyvista
+
+        pyvista.OFF_SCREEN = False
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista
+
+
+        def test_off_screen_is_true():
+            assert pyvista.OFF_SCREEN is True
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
+
+
+def test_off_screen_not_forced_when_ini_false(pytester: pytest.Pytester) -> None:
+    """Setting ``pyvista_off_screen = false`` leaves ``OFF_SCREEN`` untouched."""
+    pytester.makeini(
+        """
+        [pytest]
+        pyvista_off_screen = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista
+
+        # Start from a known False state; the plugin must not flip it to True.
+        pyvista.OFF_SCREEN = False
+
+
+        def test_off_screen_unchanged():
+            assert pyvista.OFF_SCREEN is False
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
+
+
+def test_faulthandler_enabled_after_plugin_load() -> None:
+    """Importing the plugin module enables ``faulthandler``."""
+    # Run in a fresh subprocess so the result cannot be tainted by faulthandler
+    # being enabled elsewhere in this process. Disable it first, prove it is
+    # off, then assert importing the plugin module turns it back on.
+    script = (
+        "import faulthandler\n"
+        "faulthandler.disable()\n"
+        "assert faulthandler.is_enabled() is False\n"
+        "import pytest_pyvista.pytest_pyvista  # noqa: F401\n"
+        "assert faulthandler.is_enabled() is True\n"
+    )
+    result = subprocess.run(  # noqa: S603  # fixed literal command, no untrusted input
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

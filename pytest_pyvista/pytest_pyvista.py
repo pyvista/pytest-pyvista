@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
+import faulthandler
 from functools import cached_property
 import gc
 import importlib
@@ -37,6 +38,9 @@ if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
     import xdist.workermanage
+
+# Dump a Python traceback on fatal errors such as SIGSEGV or SIGBUS from VTK.
+faulthandler.enable()
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
@@ -340,6 +344,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         type="bool",
         default=True,
         help="Automatically close all plotters and run gc.collect() after each test (default: True).",
+    )
+    parser.addini(
+        "pyvista_off_screen",
+        type="bool",
+        default=True,
+        help="Force pyvista.OFF_SCREEN = True for headless rendering (default: True). Set False to leave OFF_SCREEN untouched.",
     )
 
 
@@ -939,6 +949,10 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
+    # Force off-screen rendering for headless environments unless opted out
+    if config.getini("pyvista_off_screen"):
+        pyvista.OFF_SCREEN = True
+
     # Validate CLI args
     doc_mode = config.getoption("doc_mode")
 

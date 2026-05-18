@@ -124,6 +124,17 @@ the ``verify_image_cache`` fixture should be used for each test for image compar
         pl.show()
 
 
+When the plugin is loaded it also enables ``faulthandler`` so a Python traceback
+is dumped if VTK triggers a fatal error such as a segmentation fault, and it sets
+``pyvista.OFF_SCREEN = True`` so headless test runs never pop up a window. To leave
+``OFF_SCREEN`` untouched, set the ``pyvista_off_screen`` ini option to ``false``:
+
+.. code-block:: ini
+
+    [pytest]
+    pyvista_off_screen = false
+
+
 If most tests utilize this functionality, possibly restricted to a module,
 a wrapped version could be used
 
