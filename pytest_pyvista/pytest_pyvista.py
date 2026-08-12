@@ -887,7 +887,9 @@ def _summary_html_enabled(pytestconfig: pytest.Config) -> bool:
     """Return True if the HTML summary report should be generated."""
     if _get_option_from_config_or_ini(pytestconfig, "summary_html"):
         return True
-    return _get_option_from_config_or_ini(pytestconfig, "summary_html_dir") is not None
+    # An empty string (e.g. `--summary_html_dir=` or a blank ini value) must not enable the
+    # report - only a genuinely set directory should.
+    return bool(_get_option_from_config_or_ini(pytestconfig, "summary_html_dir"))
 
 
 def _summary_html_statuses(pytestconfig: pytest.Config) -> tuple[str, ...]:
@@ -1037,7 +1039,9 @@ def pytest_configure(config: pytest.Config) -> None:
         # create a image names directory for individual or multiple workers to write to
         _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=True)
 
-    if _summary_html_enabled(config):
+    # Ini-configured summary options are simply inactive under --doc_mode (not an error); the
+    # explicit CLI combination `--summary_html --doc_mode` is already rejected by the loop above.
+    if not doc_mode and _summary_html_enabled(config):
         # Validate eagerly so a typo fails the run rather than the report.
         _summary_html_statuses(config)
         if is_master:
