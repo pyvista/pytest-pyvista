@@ -15,6 +15,18 @@
 - **Python floor:** `requires-python = ">=3.10"`. No `match`-only-3.11 syntax, no `Self`, no `tomllib`-3.11 assumptions.
 - **No new runtime dependencies.** PIL and NumPy arrive via `pyvista`; use them, add nothing to `[project].dependencies`.
 - **Ruff `select = ["ALL"]`, `line-length = 150`.** Every new module needs a module docstring, every public function a docstring. Imports: `from __future__ import annotations` is required first, `force-single-line = true`, `force-sort-within-sections = true` — one import per line, sorted by name ignoring `from`/`import`.
+- **Lint is part of done.** The code blocks in these tasks specify names, signatures and behaviour — they are not lint-clean as written. Every task must additionally satisfy ruff, which in practice means three things the blocks omit:
+  1. **A docstring on every test function** (`D103`). `tests/**` ignores only `ANN001`, `D104`, `INP001`, `S101` — not `D103`. Match the existing suite's style: one short line, e.g. `"""Round-trip a record through the JSONL transport."""`
+  2. **Annotate `**kwargs`** (`ANN003`), e.g. `def _record(**overrides: object) -> ImageRecord:`.
+  3. **Type-only imports go in a `TYPE_CHECKING` block** (`TC003`), e.g. `pathlib.Path` when used only in annotations.
+
+  Adding these is required and is not a deviation from the brief. Never silence a rule with `noqa` to pass; fix the code. Run both:
+  ```
+  ./.superpowers/sdd/2026-08-12-image-summary-report/pt <test paths>
+  ./.superpowers/sdd/2026-08-12-image-summary-report/lint <changed paths>
+  ```
+  Ruff is pinned to 0.15.12 to match `.pre-commit-config.yaml`. The pre-existing repo is lint-clean, so every reported violation is yours.
+- **`report.css` and `report.js` are formatted by prettier** in pre-commit (it runs on `css` and `javascript`). Use 2-space indent and double quotes so the committed files are already prettier-clean.
 - **Type annotations on everything**, including `-> None`. `mypy` runs with `ignore_missing_imports = true`.
 - **Flag naming is snake_case** to match every existing plugin flag: `--summary_html`, not `--summary-html`.
 - **Statuses are exactly these six lowercase strings:** `passed`, `warned`, `failed`, `skipped`, `new`, `reset`.
