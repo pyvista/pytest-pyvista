@@ -162,9 +162,15 @@ image_test_report/
 ```
 
 Images are written downscaled to `summary_html_max_image_size` (default 400px on the
-longest edge, reusing the existing `_get_thumbnail_size` helper). Full-resolution copies are
-retained only for non-`passed` records, and linked from the card. Every `<img>` carries
+longest edge, reusing the existing `_get_thumbnail_size` helper). Every `<img>` carries
 `loading="lazy"`.
+
+Full-resolution copies are retained according to `summary_html_full_size`, which takes
+`none`, `failing` (default — any non-`passed` record) or `all`. Cards with a retained
+full-resolution copy link to it; cards without show the downscaled image at full width
+instead. The default keeps a report of a large, mostly-green suite small while preserving
+detail exactly where someone is likely to zoom in, and `all` is available for reviewers
+scrutinising passing renders.
 
 With `--summary_html_embed`, the same markup is produced with images inlined as data URIs
 and no `images/` directory. Intended for small suites; the report warns on stdout if it
@@ -201,7 +207,7 @@ Computed by the report, not by the plugin, against the preserved prior baseline:
 
 Two notes on this taxonomy, both departures from the first draft:
 
-**Warned is a new status and is load-bearing.** The plugin has a middle tier —
+**The warning tier gets its own status, and it is load-bearing.** The plugin has a middle tier —
 `DEFAULT_WARNING_THRESHOLD = 200.0` against `DEFAULT_ERROR_THRESHOLD = 500.0` — that emits a
 warning and saves images to `failed_image_dir/warnings/`
 ([`pytest_pyvista.py:569-573`](../../../pytest_pyvista/pytest_pyvista.py#L569-L573)). These
@@ -250,7 +256,8 @@ Flags follow the plugin's existing snake_case convention, and resolve through
 | `--summary_html` | Opt in to report generation. |
 | `--summary_html_dir <DIR>` | Report output directory, relative to pytest rootpath. Default `image_test_report`. Setting it implies `--summary_html`. |
 | `--summary_html_include <list>` | Comma-separated statuses to include. Default: all. Filters what is *written*; the in-report filter narrows further at read time. |
-| `--summary_html_max_image_size <N>` | Longest-edge pixel limit for report images. Default 400. |
+| `--summary_html_max_image_size <N>` | Longest-edge pixel limit for the images shown inline on each card. Default 400. |
+| `--summary_html_full_size <MODE>` | Which records also retain a full-resolution copy: `none`, `failing` (default), or `all`. |
 | `--summary_html_embed` | Produce a single self-contained `index.html` with images as data URIs. |
 
 ### ini options
@@ -261,6 +268,7 @@ summary_html = true
 summary_html_dir = "reports/image_test_report"
 summary_html_include = "passed,warned,failed,skipped,new,reset"
 summary_html_max_image_size = 400
+summary_html_full_size = "failing"
 ```
 
 ### Interaction with existing options
@@ -300,7 +308,10 @@ Extending the report to doc mode is a follow-up, and would need two additional s
 - A checkbox per status, all checked by default; the header chips toggle the same state
 - Free-text search over test name
 - Sort: by error descending (default), or by test name
-- **Accept all new** — shown only when unapproved New records exist
+- **Accept all new** — shown only when unapproved New records exist. The bulk action stays
+  deliberately limited to New: those have no baseline to lose, whereas bulk-accepting Failed
+  or Warned images would overwrite baselines wholesale, which is the blanket behaviour this
+  feature exists to replace.
 
 ### Test card
 
@@ -308,7 +319,8 @@ Extending the report to doc mode is a follow-up, and would need two additional s
 images), and `env_info`.
 
 **Comparison panel** — three columns: `Baseline` | `Generated` | `Difference`, degrading per
-the table above. Clicking any panel opens the full-resolution image.
+the table above. Clicking a panel opens its full-resolution image where one was retained
+(see `summary_html_full_size`), and the downscaled image at full width otherwise.
 
 **Metadata panel**
 - Image regression error, and the threshold in force (noting `high_variance_test` when set)
@@ -319,8 +331,12 @@ the table above. Clicking any panel opens the full-resolution image.
 - Environment details
 
 **Approval control**
-- Records awaiting approval (New and Failed, not written to cache this run) get a live
-  checkbox: *Approve this image*. Toggling is free and reversible.
+- Records awaiting approval — **New, Failed and Warned**, where the cache was not written
+  this run — get a live checkbox: *Approve this image*. Toggling is free and reversible.
+- Warned records are approvable even though they pass. A drifting image that stays green is
+  the case most likely to go unexamined for months, and accepting the drift into the
+  baseline deliberately is the point of reviewing it. Nothing forces the update; the
+  checkbox simply exists.
 - Records already written to the cache this run get **no checkbox**. They get a static
   `✓ In cache` chip carrying the reason. A pre-checked, greyed, inert checkbox sitting in
   the same column as live ones invites exactly the misreading it was meant to prevent; a
@@ -349,7 +365,7 @@ the table above. Clicking any panel opens the full-resolution image.
 
 1. Open `image_test_report/index.html`.
 2. Filter and review.
-3. Tick *Approve this image* on New or Failed cards; untick freely.
+3. Tick *Approve this image* on New, Failed or Warned cards; untick freely.
 4. Optionally **Accept all new**.
 5. **Export approvals** → `approvals.json` downloads.
 
@@ -436,6 +452,8 @@ untrusted input:
 - `-n 2` under xdist produces exactly one report containing every worker's records
 - `--summary_html` with `--doc_mode` raises `UsageError`
 - `--summary_html_include` restricts what is written
+- `--summary_html_full_size` at `none` / `failing` / `all` writes the expected set of
+  full-resolution files and nothing more
 - Report renders with zero image tests without crashing
 
 **Manual**
@@ -453,18 +471,6 @@ untrusted input:
 
 ---
 
-## Open Questions
-
-1. **Is `Reset` worth a distinct status**, or should it fold into `New` with the reason field
-   carrying the distinction? Argued above for keeping it, but it adds a badge.
-2. **Should Warned images be approvable?** They pass, so nothing forces an update — but
-   accepting the drift into the baseline is a reasonable thing to want. Currently not
-   approvable.
-3. **Retention of full-resolution copies** for non-passed records could still be large on a
-   suite with many failures. A cap, with a note in the report, may be needed.
-
----
-
 ## Acceptance Criteria
 
 - [ ] `--summary_html` produces a report at the end of a normal run, whatever the exit status
@@ -478,8 +484,11 @@ untrusted input:
 - [ ] Multi-baseline tests show which candidate matched
 - [ ] Exactly one report is produced under `pytest-xdist`, containing all workers' records
 - [ ] Interactive filters, search and sort work against the rendered cards
-- [ ] Approval checkboxes appear only on records awaiting approval; already-cached records
-      show a static reason chip
+- [ ] Approval checkboxes appear on New, Failed and Warned records awaiting approval;
+      already-cached records show a static reason chip instead
+- [ ] `--summary_html_max_image_size` controls inline resolution, and
+      `--summary_html_full_size` controls full-resolution retention across `none` /
+      `failing` / `all`
 - [ ] Approval state is reversible and keyed by run id, discarding stale state
 - [ ] Export produces a manifest that locates both ends of every copy
 - [ ] `pytest-pyvista-approve` applies a manifest to staging or cache, enforcing every
