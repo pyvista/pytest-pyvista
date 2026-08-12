@@ -1607,8 +1607,8 @@ def test_report_embeds_the_run_id_for_approval_state() -> None:
 def test_report_escapes_test_names() -> None:
     html = render_report([_record(test_name="test_<script>")], run_id="run-1", metadata=_metadata())
 
-    assert "<script>" not in html.split("<script")[0] + ""
     assert "test_&lt;script&gt;" in html
+    assert "test_<script>" not in html
 
 
 def test_approvable_statuses_get_a_checkbox() -> None:

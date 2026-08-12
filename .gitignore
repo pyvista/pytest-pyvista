@@ -82,3 +82,6 @@ target/
 # virtual environment
 venv/
 .venv/
+
+# Subagent-driven development workspace (scratch)
+.superpowers/
