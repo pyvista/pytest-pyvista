@@ -458,6 +458,7 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
+    summary_session = None
     generate_subdirs: bool = False
     image_format: _AllowedImageFormats
     max_image_size: int | None
@@ -523,6 +524,8 @@ class VerifyImageCache:
             # This is typically needed if an error is raised by this function
             plotter._before_close_callback = None  # noqa: SLF001
 
+        pending_error: RegressionError | None = None
+
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
@@ -544,6 +547,29 @@ class VerifyImageCache:
             ignore_image_cache=self.ignore_image_cache,
         ):
             SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
+            if VerifyImageCache.summary_session is not None:
+                skipped_baseline = Path(self.cache_dir, image_name)
+                VerifyImageCache.summary_session.capture(
+                    test_name=test_name,
+                    image_name=image_name,
+                    call_index=self.n_calls - 1,
+                    baseline_source=skipped_baseline if skipped_baseline.is_file() else None,
+                    generated_source=None,
+                    cache_destination=skipped_baseline,
+                    skipped=True,
+                    skip_reason=self._skip_reason(),
+                    baseline_existed=skipped_baseline.is_file(),
+                    cache_write_reason=None,
+                    error=None,
+                    error_threshold=allowed_error,
+                    warning_threshold=allowed_warning,
+                    high_variance_test=self.high_variance_test,
+                    matched_alternate=False,
+                    matched_baseline=None,
+                    candidate_baselines=[],
+                    image_format=self.image_format,
+                    env_info=str(self.env_info),
+                )
             return
 
         VISITED_CACHED_IMAGE_NAMES.add(image_name)
@@ -556,6 +582,11 @@ class VerifyImageCache:
             # Path is an empty dir, append default expected image path
             cached_image_paths.append(image_dirname / f"{self.env_info}.{self.image_format}")
         current_cached_image = cached_image_paths[0]
+
+        summary = VerifyImageCache.summary_session
+        preserved_baseline = None
+        if summary is not None and current_cached_image.is_file():
+            preserved_baseline = summary.preserve_baseline(current_cached_image, test_name, self.n_calls - 1)
 
         if not current_cached_image.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
@@ -616,14 +647,70 @@ class VerifyImageCache:
                 )
                 _screenshot(plotter, current_cached_image, max_image_size=VerifyImageCache.max_image_size)
             else:
-                remove_plotter_close_callback()
-                raise RegressionError(fail_msg)
+                pending_error = RegressionError(fail_msg)
 
-        if warn_msg:
+        if warn_msg and pending_error is None:
+            # Skipped when a hard failure is pending (fail_msg set, not reset_only_failed): the
+            # original control flow raised before ever reaching this block in that case, and a
+            # deferred raise must not change what gets saved to `failed_image_dir`.
             parent_dir: Literal["errors_as_warning", "warning"] = "errors_as_warning" if image_dirname.is_dir() else "warning"
             if self.failed_image_dir is not None:
                 self._save_failed_test_images(parent_dir, plotter, image_name, cache_image_path=current_cached_image)
             warnings.warn(warn_msg, stacklevel=2)
+
+        if summary is not None:
+            summary.capture(
+                test_name=test_name,
+                image_name=image_name,
+                call_index=self.n_calls - 1,
+                baseline_source=preserved_baseline,
+                generated_source=_get_generated_image_path(
+                    parent=cast("Path", self.generated_image_dir),
+                    image_name=image_name,
+                    generate_subdirs=self.generate_subdirs,
+                    env_info=self.env_info,
+                ),
+                cache_destination=current_cached_image,
+                skipped=False,
+                skip_reason=None,
+                baseline_existed=preserved_baseline is not None,
+                cache_write_reason=self._cache_write_reason(baseline_existed=preserved_baseline is not None, failed=bool(fail_msg)),
+                error=None,
+                error_threshold=allowed_error,
+                warning_threshold=allowed_warning,
+                high_variance_test=self.high_variance_test,
+                matched_alternate=bool(warn_msg) and fail_msg is None and len(cached_image_paths) > 1,
+                matched_baseline=str(current_cached_image),
+                candidate_baselines=[str(path) for path in cached_image_paths],
+                image_format=self.image_format,
+                env_info=str(self.env_info),
+            )
+
+        if pending_error is not None:
+            remove_plotter_close_callback()
+            raise pending_error
+
+    def _skip_reason(self) -> str:
+        """Return the flag responsible for skipping this image comparison."""
+        if self.skip:
+            return "skip"
+        if self.ignore_image_cache:
+            return "ignore_image_cache"
+        if os.name == "nt" and self.windows_skip_image_cache:
+            return "windows_skip_image_cache"
+        if platform.system() == "Darwin" and self.macos_skip_image_cache:
+            return "macos_skip_image_cache"
+        return "skip"
+
+    def _cache_write_reason(self, *, baseline_existed: bool, failed: bool) -> str | None:
+        """Return which policy wrote this image to the cache during this run, if any."""
+        if self.add_missing_images and not baseline_existed:
+            return "add_missing_images"
+        if self.reset_image_cache and not self.reset_only_failed:
+            return "reset_image_cache"
+        if self.reset_only_failed and failed:
+            return "reset_only_failed"
+        return None
 
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
@@ -905,6 +992,36 @@ def _summary_html_statuses(pytestconfig: pytest.Config) -> tuple[str, ...]:
     return statuses
 
 
+def _make_summary_session(pytestconfig: pytest.Config) -> object | None:
+    """Build (once) the SummarySession for this run, or None when the report is off."""
+    if not _summary_html_enabled(pytestconfig):
+        return None
+
+    existing = getattr(pytestconfig, "_pyvista_summary_session", None)
+    if existing is not None:
+        return existing
+
+    from pytest_pyvista.summary.session import SummarySession  # noqa: PLC0415
+    from pytest_pyvista.summary.store import ReportImageStore  # noqa: PLC0415
+
+    report_dir = pytestconfig.rootpath / str(_get_option_from_config_or_ini(pytestconfig, "summary_html_dir") or DEFAULT_SUMMARY_HTML_DIR)
+    max_size = int(_get_option_from_config_or_ini(pytestconfig, "summary_html_max_image_size") or DEFAULT_SUMMARY_HTML_MAX_IMAGE_SIZE)
+    full_size = str(_get_option_from_config_or_ini(pytestconfig, "summary_html_full_size") or DEFAULT_SUMMARY_HTML_FULL_SIZE)
+
+    worker_input = getattr(pytestconfig, "workerinput", None)
+    records_dir = Path(worker_input["pyvista_records_dir"]) if worker_input else Path(getattr(pytestconfig, PYVISTA_SUMMARY_RECORDS_DIRNAME))
+    session = SummarySession(
+        run_id=worker_input["pyvista_run_id"] if worker_input else str(uuid.uuid4()),
+        records_dir=records_dir,
+        store=ReportImageStore(report_dir, max_image_size=max_size, full_size=full_size),  # type: ignore[arg-type]
+        worker_id=worker_input["workerid"] if worker_input else "master",
+        statuses=_summary_html_statuses(pytestconfig),
+        cache_dir=cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True)),
+    )
+    pytestconfig._pyvista_summary_session = session  # noqa: SLF001
+    return session
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for inspection."""
@@ -984,9 +1101,15 @@ def _make_config_cache_dir(config: pytest.Config, dirname: str, *, clean: bool =
     newdir = Path(config.cache.makedir(dirname))
     newdir.mkdir(exist_ok=True)
     if clean:
-        with contextlib.suppress(OSError):
-            for item in newdir.iterdir():
-                item.unlink()
+        for item in newdir.iterdir():
+            # Suppress per-item so one failure (e.g. a locked file) doesn't abort the rest of
+            # the cleanup - this dir can contain subdirectories (e.g. the summary report's
+            # preserved-baseline copies), which plain unlink() cannot remove.
+            with contextlib.suppress(OSError):
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
     setattr(config, dirname, newdir)
     return newdir
 
@@ -1046,6 +1169,7 @@ def pytest_configure(config: pytest.Config) -> None:
         _summary_html_statuses(config)
         if is_master:
             _make_config_cache_dir(config, PYVISTA_SUMMARY_RECORDS_DIRNAME, clean=True)
+            config.pyvista_run_id = str(uuid.uuid4())
 
     if doc_mode:
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
@@ -1090,6 +1214,9 @@ else:
         """Modify each xdist worker."""
         if paths := getattr(node.config, "paths", None):
             node.workerinput["paths"] = paths
+        if run_id := getattr(node.config, "pyvista_run_id", None):
+            node.workerinput["pyvista_run_id"] = run_id
+            node.workerinput["pyvista_records_dir"] = str(getattr(node.config, PYVISTA_SUMMARY_RECORDS_DIRNAME))
 
 
 @pytest.fixture
@@ -1109,9 +1236,13 @@ def verify_image_cache(
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
     VerifyImageCache.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
     VerifyImageCache.max_image_size = cast("int | None", _get_option_from_config_or_ini(pytestconfig, "max_image_size"))
+    VerifyImageCache.summary_session = _make_summary_session(pytestconfig)
 
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
+    if gen_dir is None and _summary_html_enabled(pytestconfig):
+        # The report needs a generated render to copy; nothing is persisted by default.
+        gen_dir = _make_config_cache_dir(pytestconfig, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir", is_dir=True)
 
     verify_image_cache = VerifyImageCache(
