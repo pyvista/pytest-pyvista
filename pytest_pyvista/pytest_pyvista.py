@@ -31,6 +31,7 @@ from pyvista import Plotter
 import vtkmodules
 
 from pytest_pyvista import hooks
+from pytest_pyvista.summary.record import ALL_STATUSES
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
@@ -43,6 +44,7 @@ SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
 PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME = "pyvista_generated_image_dir"
 PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
+PYVISTA_SUMMARY_RECORDS_DIRNAME = "pyvista_summary_records_dir"
 
 PARSER_GROUP_NAME = "pyvista"
 DEFAULT_ERROR_THRESHOLD: float = 500.0
@@ -283,6 +285,57 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             action="store_true",
             help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
         )
+
+        _add_unit_test_cli_option(
+            "--summary_html",
+            action="store_const",
+            const=True,
+            default=None,
+            help="Generate an HTML image summary report at the end of the run.",
+        )
+        parser.addini("summary_html", type="bool", default=None, help="Generate an HTML image summary report.")
+
+        _add_unit_test_cli_option(
+            "--summary_html_dir",
+            action="store",
+            default=None,
+            help="Directory for the HTML image summary report. Implies --summary_html.",
+        )
+        parser.addini("summary_html_dir", default=None, help="Directory for the HTML image summary report.")
+
+        _add_unit_test_cli_option(
+            "--summary_html_include",
+            action="store",
+            default=None,
+            help="Comma-separated statuses to include in the summary report.",
+        )
+        parser.addini("summary_html_include", default=None, help="Comma-separated statuses to include in the summary report.")
+
+        _add_unit_test_cli_option(
+            "--summary_html_max_image_size",
+            action="store",
+            default=None,
+            help="Longest-edge pixel limit for images shown inline in the summary report.",
+        )
+        parser.addini("summary_html_max_image_size", default=None, help="Longest-edge pixel limit for summary report images.")
+
+        _add_unit_test_cli_option(
+            "--summary_html_full_size",
+            action="store",
+            choices=["none", "failing", "all"],
+            default=None,
+            help="Which records retain a full-resolution copy in the summary report.",
+        )
+        parser.addini("summary_html_full_size", default=None, help="Which records retain a full-resolution image copy.")
+
+        _add_unit_test_cli_option(
+            "--summary_html_embed",
+            action="store_const",
+            const=True,
+            default=None,
+            help="Embed summary report images as data URIs in a single HTML file.",
+        )
+        parser.addini("summary_html_embed", type="bool", default=None, help="Embed summary report images as data URIs.")
 
     def _add_doc_cli_and_ini_options() -> None:
         """Add options specific to the documentation tests."""
@@ -825,6 +878,31 @@ def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, 
     return None
 
 
+DEFAULT_SUMMARY_HTML_DIR = "image_test_report"
+DEFAULT_SUMMARY_HTML_MAX_IMAGE_SIZE = 400
+DEFAULT_SUMMARY_HTML_FULL_SIZE = "failing"
+
+
+def _summary_html_enabled(pytestconfig: pytest.Config) -> bool:
+    """Return True if the HTML summary report should be generated."""
+    if _get_option_from_config_or_ini(pytestconfig, "summary_html"):
+        return True
+    return _get_option_from_config_or_ini(pytestconfig, "summary_html_dir") is not None
+
+
+def _summary_html_statuses(pytestconfig: pytest.Config) -> tuple[str, ...]:
+    """Return the statuses to write to the summary report."""
+    value = _get_option_from_config_or_ini(pytestconfig, "summary_html_include")
+    if not value:
+        return ALL_STATUSES
+    statuses = tuple(part.strip() for part in str(value).split(",") if part.strip())
+    unknown = [status for status in statuses if status not in ALL_STATUSES]
+    if unknown:
+        msg = f"--summary_html_include: unknown status {unknown[0]!r}. Choose from: {', '.join(ALL_STATUSES)}"
+        raise pytest.UsageError(msg)
+    return statuses
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for inspection."""
@@ -958,6 +1036,12 @@ def pytest_configure(config: pytest.Config) -> None:
     if is_master and disallow_unused_cache:
         # create a image names directory for individual or multiple workers to write to
         _make_config_cache_dir(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, clean=True)
+
+    if _summary_html_enabled(config):
+        # Validate eagerly so a typo fails the run rather than the report.
+        _summary_html_statuses(config)
+        if is_master:
+            _make_config_cache_dir(config, PYVISTA_SUMMARY_RECORDS_DIRNAME, clean=True)
 
     if doc_mode:
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
@@ -1151,7 +1235,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # n
 def pytest_unconfigure(config: pytest.Config) -> None:
     """Remove temporary files."""
     if _is_master(config):
-        for dirname in [PYVISTA_FAILED_IMAGE_CACHE_DIRNAME, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME]:
+        for dirname in [
+            PYVISTA_FAILED_IMAGE_CACHE_DIRNAME,
+            PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME,
+            PYVISTA_IMAGE_NAMES_CACHE_DIRNAME,
+            PYVISTA_SUMMARY_RECORDS_DIRNAME,
+        ]:
             _make_config_cache_dir(config, dirname, clean=True)
 
 
