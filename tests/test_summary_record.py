@@ -11,7 +11,7 @@ from pytest_pyvista.summary.record import read_records
 from pytest_pyvista.summary.record import write_record
 
 
-def _record(**overrides) -> ImageRecord:
+def _record(**overrides: object) -> ImageRecord:
     kwargs = {
         "run_id": "run-1",
         "test_name": "test_sphere",
@@ -24,14 +24,17 @@ def _record(**overrides) -> ImageRecord:
 
 
 def test_all_statuses_are_the_six_documented_values() -> None:
+    """Verify ALL_STATUSES contains exactly the six documented status values."""
     assert set(ALL_STATUSES) == {"passed", "warned", "failed", "skipped", "new", "reset"}
 
 
 def test_record_defaults_to_current_schema_version() -> None:
+    """Verify ImageRecord defaults schema_version to SCHEMA_VERSION."""
     assert _record().schema_version == SCHEMA_VERSION
 
 
 def test_write_then_read_round_trips_a_record(tmp_path: Path) -> None:
+    """Verify write_record and read_records round-trip a record faithfully."""
     record = _record(error=812.4, error_threshold=500.0, candidate_baselines=["a.png", "b.png"])
     write_record(tmp_path, "gw0", record)
 
@@ -39,6 +42,7 @@ def test_write_then_read_round_trips_a_record(tmp_path: Path) -> None:
 
 
 def test_read_combines_records_from_several_workers(tmp_path: Path) -> None:
+    """Verify read_records combines records from multiple worker files."""
     write_record(tmp_path, "gw0", _record(test_name="test_a", image_name="a.png"))
     write_record(tmp_path, "gw1", _record(test_name="test_b", image_name="b.png"))
 
@@ -48,6 +52,7 @@ def test_read_combines_records_from_several_workers(tmp_path: Path) -> None:
 
 
 def test_read_sorts_by_test_name_then_call_index(tmp_path: Path) -> None:
+    """Verify read_records sorts results by test_name then call_index."""
     write_record(tmp_path, "gw0", _record(test_name="test_b", image_name="b.png"))
     write_record(tmp_path, "gw0", _record(test_name="test_a", image_name="a_1.png", call_index=1))
     write_record(tmp_path, "gw0", _record(test_name="test_a", image_name="a.png", call_index=0))
@@ -58,6 +63,7 @@ def test_read_sorts_by_test_name_then_call_index(tmp_path: Path) -> None:
 
 
 def test_read_skips_a_truncated_trailing_line(tmp_path: Path) -> None:
+    """Verify read_records gracefully skips truncated/malformed JSON lines."""
     write_record(tmp_path, "gw0", _record())
     with Path(tmp_path, "records_gw0.jsonl").open("a") as file:
         file.write('{"run_id": "run-1", "test_na')
@@ -66,4 +72,5 @@ def test_read_skips_a_truncated_trailing_line(tmp_path: Path) -> None:
 
 
 def test_read_returns_empty_list_for_missing_directory(tmp_path: Path) -> None:
+    """Verify read_records returns empty list when directory does not exist."""
     assert read_records(tmp_path / "nope") == []

@@ -7,9 +7,12 @@ from dataclasses import dataclass
 from dataclasses import field
 from dataclasses import fields
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Literal
 from typing import get_args
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 SCHEMA_VERSION = 1
 
