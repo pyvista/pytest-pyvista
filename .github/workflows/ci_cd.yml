@@ -204,7 +204,7 @@ jobs:
 
   downstream:
     name: Downstream tests
-    runs-on: ubuntu-22.04-self-hosted # matching pyvista
+    runs-on: ubuntu-22.04 # matching pyvista
     steps:
       - uses: actions/checkout@v6
 
