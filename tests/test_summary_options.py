@@ -39,7 +39,8 @@ def test_summary_html_full_size_rejects_an_unknown_mode(pytester: pytest.Pyteste
 
     result = pytester.runpytest("--summary_html", "--summary_html_full_size", "bogus")
 
-    assert result.ret != 0
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*--summary_html_full_size*invalid choice*bogus*"])
 
 
 def test_summary_html_dir_implies_enablement(pytester: pytest.Pytester) -> None:

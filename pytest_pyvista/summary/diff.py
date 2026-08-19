@@ -31,8 +31,9 @@ def compute_diff_image(baseline_path: Path, generated_path: Path) -> tuple[Image
     pixel difference is undefined, so ``diff`` is ``None`` and ``size_mismatch`` is
     ``True``.
     """
-    baseline = Image.open(baseline_path).convert("RGB")
-    generated = Image.open(generated_path).convert("RGB")
+    with Image.open(baseline_path) as baseline_file, Image.open(generated_path) as generated_file:
+        baseline = baseline_file.convert("RGB")
+        generated = generated_file.convert("RGB")
 
     if baseline.size != generated.size:
         return None, True

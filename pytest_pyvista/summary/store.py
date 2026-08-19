@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import re
 from typing import Literal
@@ -12,11 +13,27 @@ FullSizeMode = Literal["none", "failing", "all"]
 
 _IMAGES_SUBDIR = "images"
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+# ``~`` is unsafe by the pattern above, so it can never appear in an unaltered name's
+# slug -- which makes a disambiguated slug structurally unable to collide with a plain one.
+_DIGEST_SEPARATOR = "~"
+_DIGEST_LENGTH = 12
 
 
 def slugify(name: str) -> str:
-    """Reduce a test or image name to something safe to use as a filename."""
-    return _UNSAFE.sub("_", name).strip("_")
+    """
+    Reduce a test or image name to something safe to use as a filename.
+
+    The substitution is lossy -- ``"a/b"`` and ``"a_b"`` both reduce to ``"a_b"`` -- so a
+    short digest of the original name is appended whenever the name had to be altered,
+    keeping two different names from claiming one filename. Names that are already safe
+    are returned unchanged so the common case stays readable. The digest depends only on
+    the name, so xdist workers sharing one image directory all agree on it.
+    """
+    slug = _UNSAFE.sub("_", name).strip("_")
+    if slug == name:
+        return slug
+    digest = hashlib.sha256(name.encode("utf-8")).hexdigest()[:_DIGEST_LENGTH]
+    return f"{slug}{_DIGEST_SEPARATOR}{digest}"
 
 
 class ReportImageStore:

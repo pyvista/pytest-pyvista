@@ -71,6 +71,25 @@ def test_read_skips_a_truncated_trailing_line(tmp_path: Path) -> None:
     assert len(read_records(tmp_path)) == 1
 
 
+def test_read_skips_a_line_missing_a_required_field(tmp_path: Path) -> None:
+    """Verify a valid-JSON line lacking required fields is skipped without losing the good records."""
+    write_record(tmp_path, "gw0", _record(test_name="test_a", image_name="a.png"))
+    with Path(tmp_path, "records_gw0.jsonl").open("a", encoding="utf-8") as file:
+        file.write('{"run_id": "run-1", "test_name": "test_b"}\n')
+    write_record(tmp_path, "gw0", _record(test_name="test_c", image_name="c.png"))
+
+    assert [record.test_name for record in read_records(tmp_path)] == ["test_a", "test_c"]
+
+
+def test_read_skips_a_line_that_is_not_a_json_object(tmp_path: Path) -> None:
+    """Verify a line holding valid JSON that is not an object is skipped."""
+    write_record(tmp_path, "gw0", _record())
+    with Path(tmp_path, "records_gw0.jsonl").open("a", encoding="utf-8") as file:
+        file.write("[1, 2, 3]\n")
+
+    assert len(read_records(tmp_path)) == 1
+
+
 def test_read_returns_empty_list_for_missing_directory(tmp_path: Path) -> None:
     """Verify read_records returns empty list when directory does not exist."""
     assert read_records(tmp_path / "nope") == []

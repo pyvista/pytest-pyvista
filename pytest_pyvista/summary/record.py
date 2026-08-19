@@ -75,7 +75,8 @@ def read_records(records_dir: Path) -> list[ImageRecord]:
     Combine every worker's records into one list, ordered by test name then call index.
 
     Malformed lines are skipped so that a worker killed mid-write still yields the
-    records it completed.
+    records it completed. A line counts as malformed when it is not valid JSON, when
+    it is not a JSON object, or when it lacks a field ``ImageRecord`` requires.
     """
     if not records_dir.is_dir():
         return []
@@ -89,8 +90,9 @@ def read_records(records_dir: Path) -> list[ImageRecord]:
                     continue
                 try:
                     data = json.loads(line)
-                except json.JSONDecodeError:
+                    record = ImageRecord(**{k: v for k, v in data.items() if k in known})
+                except (AttributeError, TypeError, json.JSONDecodeError):
                     continue
-                records.append(ImageRecord(**{k: v for k, v in data.items() if k in known}))
+                records.append(record)
 
     return sorted(records, key=lambda record: (record.test_name, record.call_index))
