@@ -1415,7 +1415,8 @@ def test_clear_trame_servers(pytester: pytest.Pytester) -> None:
 
 
 def test_running_trame_server_is_reused(pytester: pytest.Pytester) -> None:
-    """A second test must not start a second server, helper and vtkWebApplication.
+    """
+    A second test must not start a second server, helper and vtkWebApplication.
 
     Forgetting a running server does not stop it: trame starts another one on the next
     request while the first keeps its asyncio task and protocols alive, and trame_vtk's
