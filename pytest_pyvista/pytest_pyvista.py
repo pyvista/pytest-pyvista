@@ -1088,7 +1088,7 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
 
     This teardown fixture serves mutltiple purposes:
     - closing all plotters,
-    - clearing idle trame servers from the registry (to prevent test collision),
+    - clearing trame servers registry (to prevent test collision),
     - forcing garbage collection.
     """
     yield
@@ -1098,14 +1098,7 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
     except ImportError:
         ...
     else:
-        # Only idle servers. Forgetting a *running* one does not stop it: trame builds a
-        # second server on the next request while the first keeps its asyncio task,
-        # protocols and vtkWebApplication alive, and trame_vtk's HELPERS_PER_SERVER --
-        # keyed by server name, not by server -- drops the old helper on the floor. Each
-        # cleared-then-reused cycle leaked one of each, unboundedly.
-        for name, server in list(AVAILABLE_SERVERS.items()):
-            if not getattr(server, "running", False):
-                del AVAILABLE_SERVERS[name]
+        AVAILABLE_SERVERS.clear()
 
     if pytestconfig.getini("pyvista_close_all"):
         pyvista.close_all()

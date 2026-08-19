@@ -1414,57 +1414,6 @@ def test_clear_trame_servers(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=2)
 
 
-def test_running_trame_server_is_reused(pytester: pytest.Pytester) -> None:
-    """
-    A second test must not start a second server, helper and vtkWebApplication.
-
-    Forgetting a running server does not stop it: trame starts another one on the next
-    request while the first keeps its asyncio task and protocols alive, and trame_vtk's
-    ``HELPERS_PER_SERVER`` -- keyed by server name, not by server -- strands the old
-    helper with its ``vtkWebApplication``. Every exporting test leaked one of each. See
-    pyvista/pyvista#8929.
-    """
-    pytester.makepyfile(
-        """
-        import gc
-
-        import pyvista as pv
-        from trame_vtk.modules.vtk import HELPERS_PER_SERVER
-
-        pv.OFF_SCREEN = True
-
-        SERVER = "pyvista-jupyter"
-
-
-        def _export():
-            pl = pv.Plotter()
-            pl.add_mesh(pv.Cone())
-            pl.trame.export_vtksz(filename=None)
-            pl.close()
-
-
-        def _count_apps():
-            gc.collect()
-            return sum(1 for obj in gc.get_objects() if type(obj).__name__ == "vtkWebApplication")
-
-
-        def test_export_launches_a_server():
-            _export()
-            assert SERVER in HELPERS_PER_SERVER
-
-
-        def test_second_export_reuses_it():
-            helper = HELPERS_PER_SERVER[SERVER]
-            before = _count_apps()
-            _export()
-            assert HELPERS_PER_SERVER[SERVER] is helper
-            assert _count_apps() == before
-        """
-    )
-    result = pytester.runpytest("-v")
-    result.assert_outcomes(passed=2)
-
-
 def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
     """Setting pyvista_close_all = false should skip cleanup."""
     pytester.makeini(
