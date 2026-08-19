@@ -7,6 +7,7 @@ import contextlib
 import html
 from importlib import resources
 import json
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -48,6 +49,9 @@ def _asset(name: str) -> str:
 
 def _embed_json(payload: dict[str, object]) -> str:
     """Serialize ``payload`` as JSON that is safe to place inside an HTML ``<script>`` element."""
+    # ``ensure_ascii=True`` is the default and is load-bearing: it escapes U+2028 and
+    # U+2029, which a JavaScript parser treats as line terminators, into their ASCII escape
+    # form before the HTML escaping below runs. Never pass ``ensure_ascii=False`` here.
     text = json.dumps(payload)
     for character, escape in _JSON_HTML_ESCAPES:
         text = text.replace(character, escape)
@@ -63,13 +67,47 @@ def _data_uri(path: Path) -> str | None:
     return None
 
 
+def _finite(value: object) -> float | None:
+    """
+    Return ``value`` as a finite float, or ``None`` when it cannot be one.
+
+    Record fields come straight off disk and ``read_records`` filters unknown keys without
+    ever checking value types, so a hand-edited or corrupted line can carry a string, a
+    ``NaN`` or an infinity where a number belongs. Formatting one with ``:g`` raises and
+    would cost the whole report over a single bad record, and a non-finite sort key would
+    leave the client-side ordering undefined, so both degrade to "no value" instead.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:  # A JSON integer too large to be a float.
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _dimensions(width: object, height: object) -> str | None:
+    """Format one image's size as ``WxH``, or ``None`` when the record did not capture it."""
+    return f"{width}x{height}" if isinstance(width, int) and isinstance(height, int) else None
+
+
+def _size_mismatch_note(record: ImageRecord) -> str:
+    """Explain why there is no difference image, naming both sizes when the record has them."""
+    baseline = _dimensions(record.baseline_width, record.baseline_height)
+    generated = _dimensions(record.generated_width, record.generated_height)
+    if baseline is None or generated is None:
+        # A record written before the sizes were captured; say what is known, not "NonexNone".
+        return _SIZE_MISMATCH_NOTE
+    return f"Size mismatch {_EM_DASH} baseline {baseline} vs generated {generated}, so a pixel difference is undefined"
+
+
 def _panel(record: ImageRecord, role: str, label: str, embed_dir: Path | None) -> str:
     """Render one comparison panel, degrading to a placeholder when there is no image."""
     source: str | None = getattr(record, f"{role}_image")
     full: str | None = getattr(record, f"{role}_image_full")
 
     if source is None:
-        note = _SIZE_MISMATCH_NOTE if role == "diff" and record.size_mismatch else _PLACEHOLDER_NOTES[role]
+        note = _size_mismatch_note(record) if role == "diff" and record.size_mismatch else _PLACEHOLDER_NOTES[role]
         return f'<div class="panel"><h3>{label}</h3><p class="placeholder">{html.escape(note)}</p></div>'
 
     src = html.escape(source)
@@ -106,12 +144,14 @@ def _info(record: ImageRecord) -> str:
     """
     rows: list[tuple[str, str]] = []
 
+    error = _finite(record.error)
     if record.size_mismatch:
         rows.append(("Error", "not comparable (size mismatch)"))
-    elif record.error is not None:
-        threshold = f"{record.error_threshold:g}" if record.error_threshold is not None else "n/a"
+    elif error is not None:
+        error_threshold = _finite(record.error_threshold)
+        threshold = f"{error_threshold:g}" if error_threshold is not None else "n/a"
         variance = " (high variance)" if record.high_variance_test else ""
-        rows.append(("Image regression error", f"{record.error:g} / {threshold}{variance}"))
+        rows.append(("Image regression error", f"{error:g} / {threshold}{variance}"))
 
     rows.append(("Status", record.status))
     if record.skip_reason:
@@ -146,7 +186,9 @@ def _card(record: ImageRecord, embed_dir: Path | None) -> str:
     key = html.escape(f"{record.test_name}::{record.call_index}")
     name = html.escape(record.test_name if not record.call_index else f"{record.test_name} [{record.call_index}]")
     panels = "".join(_panel(record, role, label, embed_dir) for role, label in _PANELS)
-    error = f"{record.error:g}" if record.error is not None else "0"
+    # Always a finite number: the client-side sort comparator is undefined otherwise.
+    value = _finite(record.error)
+    error = f"{value:g}" if value is not None else "0"
     return (
         f'<article class="card" data-status="{status}" data-key="{key}" '
         f'data-name="{html.escape(record.test_name.lower())}" data-error="{error}">'
@@ -190,6 +232,9 @@ def render_report(records: list[ImageRecord], *, run_id: str, metadata: dict[str
     """
     counts = {status: sum(1 for record in records if record.status == status) for status in ALL_STATUSES}
 
+    # A tally, deliberately not a filter: it carries no ``status-filter`` control, so the
+    # client-side filter logic cannot mistake "total" for a seventh status.
+    total = f'<span class="tally" id="total">Total {len(records)}</span>'
     filters = "".join(
         f'<label><input type="checkbox" class="status-filter" value="{status}" checked> '
         f'<span class="badge {status}">{status}</span> {counts[status]}</label>'
@@ -212,6 +257,7 @@ def render_report(records: list[ImageRecord], *, run_id: str, metadata: dict[str
 <p class="legend"><span class="swatch"></span> Difference panels paint changed pixels in magenta over a faded copy of the baseline.</p>
 <div id="notice" class="notice" hidden></div>
 <div class="controls">
+  {total}
   {filters}
   <input type="search" id="search" placeholder="Filter by test name" aria-label="Filter by test name">
   <select id="sort" aria-label="Sort order">

@@ -73,9 +73,17 @@ class SummarySession:
 
         diff_image = None
         size_mismatch = False
+        baseline_width: int | None = None
+        baseline_height: int | None = None
+        generated_width: int | None = None
+        generated_height: int | None = None
         computed_error = error
         if baseline_source is not None and generated_source is not None:
-            diff_image, size_mismatch = compute_diff_image(baseline_source, generated_source)
+            diff = compute_diff_image(baseline_source, generated_source)
+            diff_image = diff.image
+            size_mismatch = diff.size_mismatch
+            baseline_width, baseline_height = diff.baseline_size
+            generated_width, generated_height = diff.generated_size
             computed_error = None if size_mismatch else self._error(baseline_source, generated_source)
 
         status = determine_status(
@@ -113,6 +121,10 @@ class SummarySession:
             warning_threshold=warning_threshold,
             high_variance_test=high_variance_test,
             size_mismatch=size_mismatch,
+            baseline_width=baseline_width,
+            baseline_height=baseline_height,
+            generated_width=generated_width,
+            generated_height=generated_height,
             baseline_image=baseline_rel,
             generated_image=generated_rel,
             diff_image=diff_rel,

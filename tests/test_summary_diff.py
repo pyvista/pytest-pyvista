@@ -64,10 +64,10 @@ def test_identical_images_produce_no_highlighted_pixels(tmp_path: Path) -> None:
     baseline = _write(tmp_path / "a.png", (10, 20, 30))
     generated = _write(tmp_path / "b.png", (10, 20, 30))
 
-    diff, size_mismatch = compute_diff_image(baseline, generated)
+    result = compute_diff_image(baseline, generated)
 
-    assert size_mismatch is False
-    assert not np.any(np.all(np.asarray(diff) == DIFF_COLOR, axis=2))
+    assert result.size_mismatch is False
+    assert not np.any(np.all(np.asarray(result.image) == DIFF_COLOR, axis=2))
 
 
 def test_fully_different_images_highlight_every_pixel(tmp_path: Path) -> None:
@@ -75,10 +75,10 @@ def test_fully_different_images_highlight_every_pixel(tmp_path: Path) -> None:
     baseline = _write(tmp_path / "a.png", (0, 0, 0))
     generated = _write(tmp_path / "b.png", (255, 255, 255))
 
-    diff, size_mismatch = compute_diff_image(baseline, generated)
+    result = compute_diff_image(baseline, generated)
 
-    assert size_mismatch is False
-    assert np.all(np.all(np.asarray(diff) == DIFF_COLOR, axis=2))
+    assert result.size_mismatch is False
+    assert np.all(np.all(np.asarray(result.image) == DIFF_COLOR, axis=2))
 
 
 def test_diff_keeps_the_baseline_dimensions(tmp_path: Path) -> None:
@@ -86,9 +86,9 @@ def test_diff_keeps_the_baseline_dimensions(tmp_path: Path) -> None:
     baseline = _write(tmp_path / "a.png", (0, 0, 0), size=(12, 5))
     generated = _write(tmp_path / "b.png", (0, 0, 255), size=(12, 5))
 
-    diff, _ = compute_diff_image(baseline, generated)
+    result = compute_diff_image(baseline, generated)
 
-    assert diff.size == (12, 5)
+    assert result.image.size == (12, 5)
 
 
 def test_mismatched_sizes_report_a_mismatch_and_no_image(tmp_path: Path) -> None:
@@ -96,10 +96,21 @@ def test_mismatched_sizes_report_a_mismatch_and_no_image(tmp_path: Path) -> None
     baseline = _write(tmp_path / "a.png", (0, 0, 0), size=(8, 8))
     generated = _write(tmp_path / "b.png", (0, 0, 0), size=(9, 8))
 
-    diff, size_mismatch = compute_diff_image(baseline, generated)
+    result = compute_diff_image(baseline, generated)
 
-    assert size_mismatch is True
-    assert diff is None
+    assert result.size_mismatch is True
+    assert result.image is None
+
+
+def test_the_result_reports_both_source_sizes(tmp_path: Path) -> None:
+    """Both dimensions are reported so a size mismatch can be described with numbers."""
+    baseline = _write(tmp_path / "a.png", (0, 0, 0), size=(8, 8))
+    generated = _write(tmp_path / "b.png", (0, 0, 0), size=(9, 6))
+
+    result = compute_diff_image(baseline, generated)
+
+    assert result.baseline_size == (8, 8)
+    assert result.generated_size == (9, 6)
 
 
 def test_source_images_are_closed_after_diffing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

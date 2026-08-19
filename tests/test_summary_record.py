@@ -41,6 +41,20 @@ def test_write_then_read_round_trips_a_record(tmp_path: Path) -> None:
     assert read_records(tmp_path) == [record]
 
 
+def test_read_loads_a_record_written_without_the_size_fields(tmp_path: Path) -> None:
+    """A line from before image dimensions were recorded still loads, with the sizes left unset."""
+    Path(tmp_path, "records_gw0.jsonl").write_text(
+        '{"run_id": "run-1", "test_name": "test_sphere", "image_name": "sphere.png", "call_index": 0, "status": "failed"}\n',
+        encoding="utf-8",
+    )
+
+    (record,) = read_records(tmp_path)
+
+    assert record.schema_version == SCHEMA_VERSION
+    assert (record.baseline_width, record.baseline_height) == (None, None)
+    assert (record.generated_width, record.generated_height) == (None, None)
+
+
 def test_read_combines_records_from_several_workers(tmp_path: Path) -> None:
     """Verify read_records combines records from multiple worker files."""
     write_record(tmp_path, "gw0", _record(test_name="test_a", image_name="a.png"))

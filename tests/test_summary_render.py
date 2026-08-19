@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from importlib import resources
 import json
+import re
 from typing import TYPE_CHECKING
 
 from PIL import Image
 
+from pytest_pyvista.summary.record import ALL_STATUSES
 from pytest_pyvista.summary.record import ImageRecord
 from pytest_pyvista.summary.render import render_report
 from pytest_pyvista.summary.render import write_report
@@ -15,6 +18,12 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _MANIFEST_OPEN_TAG = '<script id="manifest" type="application/json">'
+
+# WCAG 2.1 AA demands 4.5:1 for text below 18.66px; the badges are 0.75rem.
+_WCAG_AA_CONTRAST = 4.5
+
+# sRGB channel value below which the transfer function is linear rather than a power curve.
+_SRGB_LINEAR_LIMIT = 0.03928
 
 
 def _record(**overrides: object) -> ImageRecord:
@@ -36,6 +45,42 @@ def _record(**overrides: object) -> ImageRecord:
 
 def _metadata() -> dict[str, str]:
     return {"Generated": "2026-08-12T14:05:00Z", "Cache directory": "tests/image_cache"}
+
+
+def _css() -> str:
+    """Return the packaged report stylesheet as text."""
+    return resources.files("pytest_pyvista.summary.assets").joinpath("report.css").read_text(encoding="utf-8")
+
+
+def _palettes(css: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the custom-property palettes the stylesheet declares for the light and dark themes."""
+    declarations = r"--([a-z-]+): (#[0-9a-f]{6});"
+    dark_at = css.index("@media (prefers-color-scheme: dark)")
+    light = dict(re.findall(declarations, css[:dark_at]))
+    dark = dict(light)
+    dark.update(re.findall(declarations, css[dark_at:]))
+    return light, dark
+
+
+def _badge_foreground(css: str, palette: dict[str, str]) -> str:
+    """Resolve the color the ``.badge`` rule paints its text with, under ``palette``."""
+    rule = css[css.index(".badge {") :]
+    declared = re.findall(r"color: ([^;]+);", rule[: rule.index("}")])[0]
+    variable = re.fullmatch(r"var\(--([a-z-]+)\)", declared)
+    return palette[variable.group(1)] if variable is not None else declared
+
+
+def _relative_luminance(color: str) -> float:
+    """Return the WCAG relative luminance of a ``#rrggbb`` color."""
+    channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+    linear = [channel / 12.92 if channel <= _SRGB_LINEAR_LIMIT else ((channel + 0.055) / 1.055) ** 2.4 for channel in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _contrast(foreground: str, background: str) -> float:
+    """Return the WCAG 2.1 contrast ratio between two ``#rrggbb`` colors."""
+    lighter, darker = sorted((_relative_luminance(foreground), _relative_luminance(background)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
 
 
 def _manifest_payload(document: str) -> str:
@@ -98,6 +143,91 @@ def test_size_mismatch_replaces_the_diff_panel() -> None:
     document = render_report([_record(size_mismatch=True, diff_image=None, error=None)], run_id="run-1", metadata=_metadata())
 
     assert "size mismatch" in document.lower()
+
+
+def test_size_mismatch_notice_states_both_dimensions() -> None:
+    """The notice replacing the diff panel names the baseline and the generated dimensions."""
+    document = render_report(
+        [
+            _record(
+                size_mismatch=True,
+                diff_image=None,
+                error=None,
+                baseline_width=800,
+                baseline_height=600,
+                generated_width=801,
+                generated_height=600,
+            ),
+        ],
+        run_id="run-1",
+        metadata=_metadata(),
+    )
+
+    assert "baseline 800x600" in document
+    assert "generated 801x600" in document
+
+
+def test_size_mismatch_notice_degrades_when_the_dimensions_are_absent() -> None:
+    """A record carrying no dimensions still gets a readable notice rather than a rendered ``None``."""
+    document = render_report([_record(size_mismatch=True, diff_image=None, error=None)], run_id="run-1", metadata=_metadata())
+
+    assert "size mismatch" in document.lower()
+    assert "NonexNone" not in document
+
+
+def test_status_badges_meet_wcag_aa_contrast_in_both_themes() -> None:
+    """Every status badge clears 4.5:1 between its text and its background, light theme and dark."""
+    css = _css()
+    light, dark = _palettes(css)
+
+    for theme, palette in (("light", light), ("dark", dark)):
+        foreground = _badge_foreground(css, palette)
+        for status in ALL_STATUSES:
+            ratio = _contrast(foreground, palette[status])
+            assert ratio >= _WCAG_AA_CONTRAST, f"{theme} {status} badge: {ratio:.2f}:1"
+
+
+def test_header_reports_the_total_tally() -> None:
+    """The header counts every record, not only the per-status tallies."""
+    records = [_record(status="failed"), _record(status="passed"), _record(status="new")]
+
+    document = render_report(records, run_id="run-1", metadata=_metadata())
+
+    assert '<span class="tally" id="total">Total 3</span>' in document
+
+
+def test_the_total_tally_is_not_a_status_filter() -> None:
+    """The total is a count, so the client-side filter logic can never mistake it for a status."""
+    document = render_report([_record()], run_id="run-1", metadata=_metadata())
+
+    assert document.count('class="status-filter"') == len(ALL_STATUSES)
+    assert 'value="total"' not in document
+
+
+def test_a_non_numeric_error_renders_as_no_error_at_all() -> None:
+    """A record whose error is not a number degrades instead of destroying the whole report."""
+    document = render_report([_record(error="corrupt")], run_id="run-1", metadata=_metadata())
+
+    assert 'data-error="0"' in document
+    assert "corrupt" not in document
+    assert "Image regression error" not in document
+
+
+def test_non_finite_errors_render_a_sortable_number() -> None:
+    """NaN and infinite errors leave ``data-error`` finite so the client-side sort stays defined."""
+    for error in (float("nan"), float("inf"), float("-inf")):
+        document = render_report([_record(error=error)], run_id="run-1", metadata=_metadata())
+
+        assert 'data-error="0"' in document, error
+        assert "Image regression error" not in document, error
+
+
+def test_a_non_numeric_threshold_renders_as_an_unknown_threshold() -> None:
+    """An unusable threshold degrades to ``n/a`` rather than raising while formatting it."""
+    document = render_report([_record(error=812.4, error_threshold="corrupt")], run_id="run-1", metadata=_metadata())
+
+    assert "812.4 / n/a" in document
+    assert "corrupt" not in document
 
 
 def test_images_are_lazy_loaded() -> None:

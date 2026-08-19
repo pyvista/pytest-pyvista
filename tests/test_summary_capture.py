@@ -145,6 +145,20 @@ def test_size_mismatch_is_flagged_without_a_diff(tmp_path: Path) -> None:
     assert record.error is None
 
 
+def test_capture_records_the_dimensions_of_both_images(tmp_path: Path) -> None:
+    """Both image sizes are recorded so the report can name them in a size-mismatch notice."""
+    session = _session(tmp_path)
+    baseline = _write(tmp_path / "cache" / "sphere.png", (0, 0, 0))
+    generated = tmp_path / "gen" / "sphere.png"
+    generated.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (41, 30), (0, 0, 0)).save(generated)
+
+    record = _capture(session, baseline_source=baseline, generated_source=generated)
+
+    assert (record.baseline_width, record.baseline_height) == (40, 30)
+    assert (record.generated_width, record.generated_height) == (41, 30)
+
+
 def test_excluded_statuses_are_not_recorded(tmp_path: Path) -> None:
     """A status excluded via ``statuses`` is not written or returned."""
     session = _session(tmp_path, statuses=("failed",))

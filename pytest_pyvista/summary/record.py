@@ -38,6 +38,13 @@ class ImageRecord:
     high_variance_test: bool = False
     size_mismatch: bool = False
 
+    # Both image sizes, so that a size mismatch can be reported in numbers. Optional with
+    # defaults: a record written before these existed still loads, hence no schema bump.
+    baseline_width: int | None = None
+    baseline_height: int | None = None
+    generated_width: int | None = None
+    generated_height: int | None = None
+
     baseline_image: str | None = None
     generated_image: str | None = None
     diff_image: str | None = None

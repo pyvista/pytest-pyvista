@@ -4,6 +4,10 @@
   --muted: #5b6570;
   --line: #d8dee4;
   --card: #f6f8fa;
+  /* Badge text. Each theme picks the polarity that clears 4.5:1 against every
+     status color below: white on the light theme's deep colors, near-black on the
+     dark theme's brighter ones. */
+  --badge-fg: #ffffff;
   --passed: #1a7f37;
   --warned: #bc4c00;
   --failed: #cf222e;
@@ -19,6 +23,7 @@
     --muted: #9198a1;
     --line: #30363d;
     --card: #161b22;
+    --badge-fg: #0d1117;
     --passed: #3fb950;
     --warned: #d29922;
     --failed: #f85149;
@@ -122,9 +127,13 @@ h1 {
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--badge-fg);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.tally {
+  font-weight: 600;
 }
 
 .badge.passed {
