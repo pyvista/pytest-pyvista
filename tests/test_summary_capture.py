@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PIL import Image
+import pyvista as pv
 
 from pytest_pyvista.summary.record import ALL_STATUSES
 from pytest_pyvista.summary.record import ImageRecord
@@ -13,7 +15,9 @@ from pytest_pyvista.summary.session import SummarySession
 from pytest_pyvista.summary.store import ReportImageStore
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    import pytest
+
+pv.OFF_SCREEN = True
 
 
 def _write(path: Path, color: tuple[int, int, int]) -> Path:
@@ -151,3 +155,132 @@ def test_excluded_statuses_are_not_recorded(tmp_path: Path) -> None:
 
     assert record is None
     assert read_records(tmp_path / "records") == []
+
+
+# --- end-to-end capture through the plugin ------------------------------------------------
+
+SPHERE_TEST = """
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+
+    def test_imcache(verify_image_cache):
+        plotter = pv.Plotter()
+        plotter.add_mesh(pv.Sphere(), color={color})
+        plotter.show()
+"""
+
+
+def _render_sphere(path: Path, color: str | list[int]) -> Path:
+    """Render a sphere of ``color`` to ``path`` to serve as a cached baseline."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    plotter = pv.Plotter(off_screen=True)
+    plotter.add_mesh(pv.Sphere(), color=color)
+    plotter.screenshot(path)
+    return path
+
+
+RECORDS_COPY = "records_copy"
+
+# ``pytest_unconfigure`` wipes the records directory at the end of a run, so a run whose
+# records the outer test wants to inspect must copy them aside while the session is alive.
+SAVE_RECORDS_CONFTEST = f"""
+    from pathlib import Path
+    import shutil
+
+    from pytest_pyvista.pytest_pyvista import PYVISTA_SUMMARY_RECORDS_DIRNAME
+
+
+    def pytest_sessionfinish(session):
+        records_dir = getattr(session.config, PYVISTA_SUMMARY_RECORDS_DIRNAME, None)
+        if records_dir is not None:
+            shutil.copytree(records_dir, Path(session.config.rootpath) / "{RECORDS_COPY}", dirs_exist_ok=True)
+"""
+
+
+def _records_of(pytester: pytest.Pytester) -> list[ImageRecord]:
+    """Read the records saved aside by ``SAVE_RECORDS_CONFTEST`` during a run of ``pytester``."""
+    return read_records(pytester.path / RECORDS_COPY)
+
+
+def _explode(self: SummarySession, **kwargs: object) -> None:  # noqa: ARG001
+    """Stand in for ``SummarySession.capture`` when the report store is unusable."""
+    msg = "report store is unwritable"
+    raise OSError(msg)
+
+
+def test_an_alternate_baseline_match_is_recorded_against_the_baseline_that_matched(pytester: pytest.Pytester) -> None:
+    """A test that fails its primary baseline but matches another records the one that matched."""
+    cache = pytester.path / "image_cache_dir" / "imcache"
+    _render_sphere(cache / "im1.png", "red")
+    blue = _render_sphere(cache / "im2.png", "blue")
+    pytester.makeconftest(SAVE_RECORDS_CONFTEST)
+    pytester.makepyfile(SPHERE_TEST.format(color=[0, 0, 254]))
+
+    result = pytester.runpytest("--summary_html")
+
+    result.assert_outcomes(passed=1)
+    (record,) = _records_of(pytester)
+    assert record.status == "warned"
+    assert record.matched_baseline is not None
+    assert Path(record.matched_baseline).name == "im2.png"
+    assert [Path(candidate).name for candidate in record.candidate_baselines] == ["im1.png", "im2.png"]
+    # The error must be measured against the matched baseline, not against candidate 0.
+    assert record.error is not None
+    assert record.error_threshold is not None
+    assert record.error < record.error_threshold
+    # ...and the stored baseline image must be that same matched file.
+    assert record.baseline_image_full is not None
+    stored = pytester.path / "image_test_report" / record.baseline_image_full
+    assert pv.compare_images(str(stored), str(blue)) < record.error_threshold
+
+
+def test_a_reporting_failure_does_not_replace_the_regression_error(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An exception raised while recording must not hide the failure nor skip the cleanup."""
+    _render_sphere(pytester.path / "image_cache_dir" / "imcache.png", "red")
+    pytester.makepyfile(SPHERE_TEST.format(color="'green'"))
+    monkeypatch.setattr(SummarySession, "capture", _explode)
+
+    result = pytester.runpytest("--summary_html")
+
+    # errors=0 is the point: the close callback is still removed, so teardown does not
+    # re-enter the comparison and error against an image that was never rendered.
+    result.assert_outcomes(failed=1)
+    result.stdout.re_match_lines([r".*RegressionError: .*"])
+    result.stdout.no_re_match_line(r".*OSError: report store is unwritable.*")
+
+
+def test_a_reporting_failure_in_the_skip_branch_does_not_fail_the_test(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The skipped-comparison capture is guarded in the same way as the main one."""
+    _render_sphere(pytester.path / "image_cache_dir" / "imcache.png", "red")
+    pytester.makepyfile(SPHERE_TEST.format(color="'red'"))
+    monkeypatch.setattr(SummarySession, "capture", _explode)
+
+    result = pytester.runpytest("--summary_html", "--ignore_image_cache")
+
+    result.assert_outcomes(passed=1)
+
+
+def test_records_carry_the_run_id_stored_on_the_config(pytester: pytest.Pytester) -> None:
+    """Without xdist the master must not mint a second run id for its own records."""
+    _render_sphere(pytester.path / "image_cache_dir" / "imcache.png", "red")
+    pytester.makeconftest(SAVE_RECORDS_CONFTEST)
+    pytester.makepyfile(
+        """
+        from pathlib import Path
+
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+
+        def test_imcache(verify_image_cache, pytestconfig):
+            Path("run_id.txt").write_text(pytestconfig.pyvista_run_id)
+            plotter = pv.Plotter()
+            plotter.add_mesh(pv.Sphere(), color='red')
+            plotter.show()
+        """
+    )
+
+    result = pytester.runpytest("--summary_html")
+
+    result.assert_outcomes(passed=1)
+    (record,) = _records_of(pytester)
+    assert record.run_id == (pytester.path / "run_id.txt").read_text()

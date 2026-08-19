@@ -39,6 +39,9 @@ if TYPE_CHECKING:  # pragma: no cover
 
     import xdist.workermanage
 
+    from pytest_pyvista.summary.record import CacheWriteReason
+    from pytest_pyvista.summary.session import SummarySession
+
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
 SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
@@ -396,6 +399,22 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     )
 
 
+@contextlib.contextmanager
+def _summary_capture_failures_are_warnings() -> Generator[None, None, None]:
+    """
+    Downgrade any failure raised while recording a summary record to a warning.
+
+    The summary report only observes a test run, so it must never change what a test
+    reports nor skip the cleanup that follows a comparison. Anything the reporting code
+    can raise - an unwritable or full report directory, a truncated screenshot that PIL
+    refuses to decode - is caught here and surfaced as a warning instead.
+    """
+    try:
+        yield
+    except Exception as error:  # noqa: BLE001 - deliberately total: no reporting failure may reach the test
+        warnings.warn(f"pytest-pyvista could not record an image in the summary report: {error!r}", stacklevel=3)
+
+
 class VerifyImageCache:
     """
     Control image caching for testing.
@@ -458,7 +477,7 @@ class VerifyImageCache:
     allow_unused_generated = False
     add_missing_images = False
     reset_only_failed = False
-    summary_session = None
+    summary_session: SummarySession | None = None
     generate_subdirs: bool = False
     image_format: _AllowedImageFormats
     max_image_size: int | None
@@ -547,29 +566,33 @@ class VerifyImageCache:
             ignore_image_cache=self.ignore_image_cache,
         ):
             SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
-            if VerifyImageCache.summary_session is not None:
+            skip_summary = VerifyImageCache.summary_session
+            if skip_summary is not None:
                 skipped_baseline = Path(self.cache_dir, image_name)
-                VerifyImageCache.summary_session.capture(
-                    test_name=test_name,
-                    image_name=image_name,
-                    call_index=self.n_calls - 1,
-                    baseline_source=skipped_baseline if skipped_baseline.is_file() else None,
-                    generated_source=None,
-                    cache_destination=skipped_baseline,
-                    skipped=True,
-                    skip_reason=self._skip_reason(),
-                    baseline_existed=skipped_baseline.is_file(),
-                    cache_write_reason=None,
-                    error=None,
-                    error_threshold=allowed_error,
-                    warning_threshold=allowed_warning,
-                    high_variance_test=self.high_variance_test,
-                    matched_alternate=False,
-                    matched_baseline=None,
-                    candidate_baselines=[],
-                    image_format=self.image_format,
-                    env_info=str(self.env_info),
-                )
+                # Reporting must never change a test's outcome, so any failure here is
+                # downgraded to a warning (see the identical guard on the main capture).
+                with _summary_capture_failures_are_warnings():
+                    skip_summary.capture(
+                        test_name=test_name,
+                        image_name=image_name,
+                        call_index=self.n_calls - 1,
+                        baseline_source=skipped_baseline if skipped_baseline.is_file() else None,
+                        generated_source=None,
+                        cache_destination=skipped_baseline,
+                        skipped=True,
+                        skip_reason=self._skip_reason(),
+                        baseline_existed=skipped_baseline.is_file(),
+                        cache_write_reason=None,
+                        error=None,
+                        error_threshold=allowed_error,
+                        warning_threshold=allowed_warning,
+                        high_variance_test=self.high_variance_test,
+                        matched_alternate=False,
+                        matched_baseline=None,
+                        candidate_baselines=[],
+                        image_format=self.image_format,
+                        env_info=str(self.env_info),
+                    )
             return
 
         VISITED_CACHED_IMAGE_NAMES.add(image_name)
@@ -623,6 +646,7 @@ class VerifyImageCache:
         )
 
         # Try again and compare with other cached images
+        matched_alternate = False
         if fail_msg and len(cached_image_paths) > 1:
             # Compare test image to other known valid versions
             msg_start = "This test has multiple cached images. It initially failed (as above)"
@@ -633,9 +657,18 @@ class VerifyImageCache:
                     warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
                     fail_msg = None
                     current_cached_image = path
+                    matched_alternate = True
                     break
             else:  # Loop completed - test still fails
                 fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(self.cache_dir, test_name_no_prefix)!s}"
+
+        if matched_alternate and summary is not None:
+            # The record must describe the baseline that actually matched: its error, its diff
+            # and the report's baseline panel are all relative to `current_cached_image`, not to
+            # candidate 0. Preserving it this late is safe because the only cache write that
+            # could overwrite it below (`reset_only_failed`) is unreachable once `fail_msg` is
+            # None, which it always is here.
+            preserved_baseline = summary.preserve_baseline(current_cached_image, test_name, self.n_calls - 1)
 
         if fail_msg:
             if self.failed_image_dir is not None:
@@ -659,32 +692,35 @@ class VerifyImageCache:
             warnings.warn(warn_msg, stacklevel=2)
 
         if summary is not None:
-            summary.capture(
-                test_name=test_name,
-                image_name=image_name,
-                call_index=self.n_calls - 1,
-                baseline_source=preserved_baseline,
-                generated_source=_get_generated_image_path(
-                    parent=cast("Path", self.generated_image_dir),
+            # Reporting must never change a test's outcome nor skip the cleanup below, so any
+            # failure raised while recording is downgraded to a warning.
+            with _summary_capture_failures_are_warnings():
+                summary.capture(
+                    test_name=test_name,
                     image_name=image_name,
-                    generate_subdirs=self.generate_subdirs,
-                    env_info=self.env_info,
-                ),
-                cache_destination=current_cached_image,
-                skipped=False,
-                skip_reason=None,
-                baseline_existed=preserved_baseline is not None,
-                cache_write_reason=self._cache_write_reason(baseline_existed=preserved_baseline is not None, failed=bool(fail_msg)),
-                error=None,
-                error_threshold=allowed_error,
-                warning_threshold=allowed_warning,
-                high_variance_test=self.high_variance_test,
-                matched_alternate=bool(warn_msg) and fail_msg is None and len(cached_image_paths) > 1,
-                matched_baseline=str(current_cached_image),
-                candidate_baselines=[str(path) for path in cached_image_paths],
-                image_format=self.image_format,
-                env_info=str(self.env_info),
-            )
+                    call_index=self.n_calls - 1,
+                    baseline_source=preserved_baseline,
+                    generated_source=_get_generated_image_path(
+                        parent=cast("Path", self.generated_image_dir),
+                        image_name=image_name,
+                        generate_subdirs=self.generate_subdirs,
+                        env_info=self.env_info,
+                    ),
+                    cache_destination=current_cached_image,
+                    skipped=False,
+                    skip_reason=None,
+                    baseline_existed=preserved_baseline is not None,
+                    cache_write_reason=self._cache_write_reason(baseline_existed=preserved_baseline is not None, failed=bool(fail_msg)),
+                    error=None,
+                    error_threshold=allowed_error,
+                    warning_threshold=allowed_warning,
+                    high_variance_test=self.high_variance_test,
+                    matched_alternate=matched_alternate,
+                    matched_baseline=str(current_cached_image),
+                    candidate_baselines=[str(path) for path in cached_image_paths],
+                    image_format=self.image_format,
+                    env_info=str(self.env_info),
+                )
 
         if pending_error is not None:
             remove_plotter_close_callback()
@@ -702,7 +738,7 @@ class VerifyImageCache:
             return "macos_skip_image_cache"
         return "skip"
 
-    def _cache_write_reason(self, *, baseline_existed: bool, failed: bool) -> str | None:
+    def _cache_write_reason(self, *, baseline_existed: bool, failed: bool) -> CacheWriteReason | None:
         """Return which policy wrote this image to the cache during this run, if any."""
         if self.add_missing_images and not baseline_existed:
             return "add_missing_images"
@@ -992,14 +1028,29 @@ def _summary_html_statuses(pytestconfig: pytest.Config) -> tuple[str, ...]:
     return statuses
 
 
-def _make_summary_session(pytestconfig: pytest.Config) -> object | None:
+def _pyvista_run_id(config: pytest.Config) -> str:
+    """
+    Return the id identifying this whole test run, minting it once on first use.
+
+    Every record of a run carries this id, so it must be stored on the config rather than
+    minted per caller: xdist workers receive it through ``workerinput``, and the master
+    reads back the same value here whether or not xdist is in use.
+    """
+    run_id = getattr(config, "pyvista_run_id", None)
+    if run_id is None:
+        run_id = str(uuid.uuid4())
+        config.pyvista_run_id = run_id  # type: ignore[attr-defined]
+    return str(run_id)
+
+
+def _make_summary_session(pytestconfig: pytest.Config) -> SummarySession | None:
     """Build (once) the SummarySession for this run, or None when the report is off."""
     if not _summary_html_enabled(pytestconfig):
         return None
 
     existing = getattr(pytestconfig, "_pyvista_summary_session", None)
     if existing is not None:
-        return existing
+        return cast("SummarySession", existing)
 
     from pytest_pyvista.summary.session import SummarySession  # noqa: PLC0415
     from pytest_pyvista.summary.store import ReportImageStore  # noqa: PLC0415
@@ -1011,14 +1062,14 @@ def _make_summary_session(pytestconfig: pytest.Config) -> object | None:
     worker_input = getattr(pytestconfig, "workerinput", None)
     records_dir = Path(worker_input["pyvista_records_dir"]) if worker_input else Path(getattr(pytestconfig, PYVISTA_SUMMARY_RECORDS_DIRNAME))
     session = SummarySession(
-        run_id=worker_input["pyvista_run_id"] if worker_input else str(uuid.uuid4()),
+        run_id=worker_input["pyvista_run_id"] if worker_input else _pyvista_run_id(pytestconfig),
         records_dir=records_dir,
         store=ReportImageStore(report_dir, max_image_size=max_size, full_size=full_size),  # type: ignore[arg-type]
         worker_id=worker_input["workerid"] if worker_input else "master",
         statuses=_summary_html_statuses(pytestconfig),
         cache_dir=cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True)),
     )
-    pytestconfig._pyvista_summary_session = session  # noqa: SLF001
+    pytestconfig._pyvista_summary_session = session  # type: ignore[attr-defined]  # noqa: SLF001
     return session
 
 
@@ -1101,15 +1152,18 @@ def _make_config_cache_dir(config: pytest.Config, dirname: str, *, clean: bool =
     newdir = Path(config.cache.makedir(dirname))
     newdir.mkdir(exist_ok=True)
     if clean:
-        for item in newdir.iterdir():
-            # Suppress per-item so one failure (e.g. a locked file) doesn't abort the rest of
-            # the cleanup - this dir can contain subdirectories (e.g. the summary report's
-            # preserved-baseline copies), which plain unlink() cannot remove.
-            with contextlib.suppress(OSError):
-                if item.is_dir():
-                    shutil.rmtree(item)
-                else:
-                    item.unlink()
+        # The outer suppression covers listing the directory itself, which can fail (e.g. on
+        # permissions) and must not propagate out of pytest_configure.
+        with contextlib.suppress(OSError):
+            for item in newdir.iterdir():
+                # Suppress per-item too, so one failure (e.g. a locked file) doesn't abort the
+                # rest of the cleanup - this dir can contain subdirectories (e.g. the summary
+                # report's preserved-baseline copies), which plain unlink() cannot remove.
+                with contextlib.suppress(OSError):
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
     setattr(config, dirname, newdir)
     return newdir
 
@@ -1169,7 +1223,7 @@ def pytest_configure(config: pytest.Config) -> None:
         _summary_html_statuses(config)
         if is_master:
             _make_config_cache_dir(config, PYVISTA_SUMMARY_RECORDS_DIRNAME, clean=True)
-            config.pyvista_run_id = str(uuid.uuid4())
+            _pyvista_run_id(config)
 
     if doc_mode:
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
