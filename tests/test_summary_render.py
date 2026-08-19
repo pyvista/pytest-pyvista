@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from PIL import Image
 
 from pytest_pyvista.summary.record import ALL_STATUSES
+from pytest_pyvista.summary.record import SCHEMA_VERSION
 from pytest_pyvista.summary.record import ImageRecord
 from pytest_pyvista.summary.render import render_report
 from pytest_pyvista.summary.render import write_report
@@ -310,6 +311,13 @@ def test_manifest_round_trips_records_awaiting_approval() -> None:
             "destination": "cache/sphere.png",
         },
     ]
+
+
+def test_manifest_carries_the_python_schema_version() -> None:
+    """The export echoes this number, so the page and the approve CLI cannot diverge."""
+    document = render_report([_record()], run_id="run-1", metadata=_metadata())
+
+    assert json.loads(_manifest_payload(document))["schema_version"] == SCHEMA_VERSION
 
 
 def test_record_data_in_the_metadata_panel_is_escaped() -> None:

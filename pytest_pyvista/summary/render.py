@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pytest_pyvista.summary.record import ALL_STATUSES
+from pytest_pyvista.summary.record import SCHEMA_VERSION
 
 if TYPE_CHECKING:
     from pytest_pyvista.summary.record import ImageRecord
@@ -203,6 +204,9 @@ def _card(record: ImageRecord, embed_dir: Path | None) -> str:
 def _manifest(records: list[ImageRecord], run_id: str) -> str:
     """Build the embedded approval manifest describing every record awaiting approval."""
     payload: dict[str, object] = {
+        # Carried into the page so that the client-side export can echo it instead of
+        # hardcoding a second copy of the number the approve CLI validates against.
+        "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "cache_dir": records[0].cache_dir if records else "",
         "image_format": records[0].image_format if records else "png",

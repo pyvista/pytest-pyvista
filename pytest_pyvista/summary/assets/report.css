@@ -295,6 +295,10 @@ button:hover {
   margin-bottom: 1rem;
 }
 
+.notice button {
+  margin-left: 0.5rem;
+}
+
 .empty {
   color: var(--muted);
   padding: 2rem 0;
