@@ -24,7 +24,6 @@ from .pytest_pyvista import DEFAULT_WARNING_THRESHOLD
 from .pytest_pyvista import PYVISTA_FAILED_IMAGE_CACHE_DIRNAME
 from .pytest_pyvista import PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME
 from .pytest_pyvista import _AllowedImageFormats
-from .pytest_pyvista import _check_compare_fail
 from .pytest_pyvista import _ensure_dir_exists
 from .pytest_pyvista import _EnvInfo
 from .pytest_pyvista import _get_file_paths
@@ -534,7 +533,6 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
     cached_input_is_file = cached_image_path.is_file()
     cached_image_paths = [cached_image_path] if cached_input_is_file else _get_file_paths(cached_image_path, ext=_DocVerifyImageCache.image_format)
     cached_image_paths = cast("list[Path]", cached_image_paths)
-    current_cached_image_path = cached_image_paths[0]
 
     # Ensure test path is an image
     test_image_path = cast("Path", test_case.test_image_path)
@@ -546,28 +544,13 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
             test_image_path.rename(new_path)
             test_image_path = new_path
 
-    warn_msg, fail_msg = _test_compare_images(
+    warn_msg, fail_msg, current_cached_image_path = _test_compare_images(
         test_name=test_case.test_name,
         test_image=test_image_path,
-        cached_image=current_cached_image_path,
+        cached_image_paths=cached_image_paths,
         allowed_error=DEFAULT_ERROR_THRESHOLD,
         allowed_warning=DEFAULT_WARNING_THRESHOLD,
     )
-
-    # Try again and compare with other cached images
-    if fail_msg and len(cached_image_paths) > 1:
-        # Compare build image to other known valid versions
-        msg_start = "This test has multiple cached images. It initially failed (as above)"
-        for path in cached_image_paths[1:]:
-            error = pv.compare_images(pv.read(test_image_path), pv.read(path))
-            if _check_compare_fail(test_case.test_name, error, allowed_error=DEFAULT_ERROR_THRESHOLD) is None:
-                # Convert failure into a warning
-                warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
-                fail_msg = None
-                current_cached_image_path = path
-                break
-        else:  # Loop completed - test still fails
-            fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{_DocVerifyImageCache.image_cache_dir / test_case.test_name!s}"
 
     if fail_msg:
         _save_failed_test_image(test_image_path, "errors")
