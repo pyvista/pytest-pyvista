@@ -455,7 +455,7 @@ class VerifyImageCache:
         skip_macos = platform.system() == "Darwin" and macos_skip_image_cache
         return skip or ignore_image_cache or skip_windows or skip_macos
 
-    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912, PLR0915
+    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912
         """
         Either store or validate an image.
 
@@ -531,28 +531,13 @@ class VerifyImageCache:
             return
 
         test_name_no_prefix = test_name.removeprefix("test_")
-        warn_msg, fail_msg = _test_compare_images(
+        warn_msg, fail_msg, current_cached_image = _test_compare_images(
             test_name=test_name_no_prefix,
             test_image=plotter,
-            cached_image=current_cached_image,
+            cached_image_paths=cached_image_paths,
             allowed_error=allowed_error,
             allowed_warning=allowed_warning,
         )
-
-        # Try again and compare with other cached images
-        if fail_msg and len(cached_image_paths) > 1:
-            # Compare test image to other known valid versions
-            msg_start = "This test has multiple cached images. It initially failed (as above)"
-            for path in cached_image_paths[1:]:
-                error = _compare_images(plotter, path)
-                if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
-                    # Convert failure into a warning
-                    warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
-                    fail_msg = None
-                    current_cached_image = path
-                    break
-            else:  # Loop completed - test still fails
-                fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(self.cache_dir, test_name_no_prefix)!s}"
 
         if fail_msg:
             if self.failed_image_dir is not None:
@@ -696,17 +681,49 @@ def _screenshot(plotter: Plotter, *args, max_image_size: int | None, **kwargs) -
 
 
 def _test_compare_images(
-    test_name: str, test_image: Path | str | pyvista.Plotter, cached_image: Path | str, allowed_error: float, allowed_warning: float
-) -> tuple[str | None, str | None]:
-    try:
-        # Check if test should fail or warn
-        error = _compare_images(test_image, cached_image)
-        fail_msg = _check_compare_fail(test_name, error, allowed_error)
-        warn_msg = _check_compare_warn(test_name, error, allowed_warning)
-    except RuntimeError as e:
-        warn_msg = None
-        fail_msg = repr(e)
-    return warn_msg, fail_msg
+    test_name: str, test_image: Path | str | pyvista.Plotter, cached_image_paths: list[Path], allowed_error: float, allowed_warning: float
+) -> tuple[str | None, str | None, Path]:
+    """
+    Compare a test image to all of its cached images and grade it on the closest match.
+
+    Only warn if all of the cached images are above the warning threshold, and only
+    fail if none of them are below the error threshold. The closest matching cached
+    image is returned along with the messages.
+    """
+    closest_image = cached_image_paths[0]
+    best_error: float | None = None
+    fail_msg: str | None = None
+
+    for path in cached_image_paths:
+        try:
+            error = _compare_images(test_image, path)
+        except RuntimeError as e:
+            if best_error is None and fail_msg is None:
+                # Only report this if no image can be compared successfully
+                fail_msg = repr(e)
+            continue
+
+        if best_error is None or error < best_error:
+            best_error, closest_image = error, path
+
+        if error <= allowed_warning:
+            # A clean match, no other image can improve on this outcome
+            break
+
+    if best_error is None:
+        return None, fail_msg, closest_image
+
+    fail_msg = _check_compare_fail(test_name, best_error, allowed_error)
+    warn_msg = _check_compare_warn(test_name, best_error, allowed_warning)
+
+    if (fail_msg or warn_msg) and len(cached_image_paths) > 1:
+        msg_closest = f"\nThis test has multiple cached images. The closest match was:\n\t{closest_image}"
+        if fail_msg:
+            fail_msg += msg_closest
+        else:
+            warn_msg = cast("str", warn_msg) + msg_closest
+
+    return warn_msg, fail_msg, closest_image
 
 
 def _check_compare_fail(test_name: str, error_: float, allowed_error: float) -> str | None:
