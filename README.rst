@@ -434,8 +434,10 @@ above.
 
 Separately, the ``verify_image_cache`` fixture itself renders under PyVista's
 testing theme, restoring whatever theme was active before the test once it
-finishes. This is not configurable, since ``verify_image_cache`` needs a
-deterministic theme to produce comparable images.
+finishes. There is no flag or ini option for this, since ``verify_image_cache``
+needs a deterministic theme to produce comparable images; a test that needs a
+different theme can still construct its own plotter with ``pv.Plotter(theme=...)``
+to override it on a per-test basis.
 
 Configuration
 -------------
