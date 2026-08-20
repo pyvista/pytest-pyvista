@@ -48,6 +48,7 @@ PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
 PARSER_GROUP_NAME = "pyvista"
 DEFAULT_ERROR_THRESHOLD: float = 500.0
 DEFAULT_WARNING_THRESHOLD: float = 200.0
+DEFAULT_BLANK_IMAGE_ATOL: float = 25.0
 _DOC_MODE_CLI_ARGS: set[str] = set()
 _UNIT_TEST_CLI_ARGS: set[str] = set()
 
@@ -343,6 +344,27 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         help="Automatically close all plotters and run gc.collect() after each test (default: True).",
     )
 
+    # Blank image detection options
+    parser.addini(
+        "pyvista_check_blank_images",
+        type="bool",
+        default=False,
+        help=(
+            "Error if a test renders an essentially blank (near-uniform) image. "
+            "Opt-in, off by default. Bypass per-test with "
+            "``verify_image_cache.allow_blank_image = True`` (default: False)."
+        ),
+    )
+    parser.addini(
+        "pyvista_blank_image_atol",
+        default=str(DEFAULT_BLANK_IMAGE_ATOL),
+        help=(
+            "Absolute tolerance for the blank image check. A rendered image whose "
+            f"difference from a blank reference is <= this value is flagged as blank "
+            f"(default: {DEFAULT_BLANK_IMAGE_ATOL})."
+        ),
+    )
+
 
 class VerifyImageCache:
     """
@@ -407,6 +429,8 @@ class VerifyImageCache:
     add_missing_images = False
     reset_only_failed = False
     generate_subdirs: bool = False
+    check_blank_images: bool = False
+    blank_image_atol: float = DEFAULT_BLANK_IMAGE_ATOL
     image_format: _AllowedImageFormats
     max_image_size: int | None
 
@@ -447,6 +471,7 @@ class VerifyImageCache:
         self.macos_skip_image_cache = False
 
         self.skip = False
+        self.allow_blank_image = False
         self.n_calls = 0
 
     @staticmethod
@@ -495,6 +520,14 @@ class VerifyImageCache:
             return
 
         VISITED_CACHED_IMAGE_NAMES.add(image_name)
+
+        if self.check_blank_images and not self.allow_blank_image:
+            blank_msg = _check_blank_image(plotter, atol=self.blank_image_atol)
+            if blank_msg:
+                if self.failed_image_dir is not None:
+                    self._save_failed_test_images("error", plotter, image_name)
+                remove_plotter_close_callback()
+                raise RegressionError(blank_msg)
 
         image_filename = Path(self.cache_dir, image_name)
         image_dirname = Path(self.cache_dir, Path(image_name).stem)
@@ -638,8 +671,8 @@ def _get_file_paths(dir_: Path, ext: str) -> list[Path]:
     return sorted(dir_.rglob(f"*.{ext}"))
 
 
-def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path | str) -> float:
-    if isinstance(test_image, pyvista.Plotter) and Path(cached_image).suffix == ".jpg":
+def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path | str | np.ndarray) -> float:
+    if isinstance(test_image, pyvista.Plotter) and not isinstance(cached_image, np.ndarray) and Path(cached_image).suffix == ".jpg":
         # Need to process image to apply jpg compression
 
         # Get screenshot as a PIL image
@@ -657,7 +690,49 @@ def _compare_images(test_image: Path | str | pyvista.Plotter, cached_image: Path
         return pyvista.compare_images(arr_jpg, str(cached_image))
     # Cast Path to str
     test_img = test_image if isinstance(test_image, pyvista.Plotter) else str(test_image)
-    return pyvista.compare_images(test_img, str(cached_image))
+    cached = cached_image if isinstance(cached_image, np.ndarray) else str(cached_image)
+    return pyvista.compare_images(test_img, cached)
+
+
+def _check_blank_image(plotter: pyvista.Plotter, atol: float) -> str | None:
+    """
+    Detect whether a plotter rendered an essentially blank image.
+
+    Parameters
+    ----------
+    plotter : pyvista.Plotter
+        The plotter whose rendered image is checked for blankness.
+
+    atol : float
+        Tolerance. A difference from a blank reference ``<= atol`` is blank.
+
+    Returns
+    -------
+    str or None
+        An error message when the image is blank, otherwise ``None``.
+
+    """
+    window_size = cast("tuple[int, int]", tuple(plotter.window_size))
+    blank = pyvista.Plotter(off_screen=True, window_size=list(window_size))
+    try:
+        # Use ``screenshot`` directly rather than ``show``. The ``verify_image_cache``
+        # fixture monkeypatches ``Plotter.show`` to inject its callback, so calling
+        # ``show`` here would re-enter this check and recurse infinitely.
+        blank_image = _screenshot(blank, return_img=True, max_image_size=VerifyImageCache.max_image_size)
+        error = _compare_images(plotter, np.asarray(blank_image))
+    finally:
+        blank.close()
+
+    if error <= atol:
+        return (
+            f"Rendered image is essentially blank: its difference from an empty "
+            f"plotter ({error}) is within the blank image tolerance of {atol}. "
+            f"A test that renders nothing usually indicates a broken test. "
+            f"If this is intentional, set "
+            f"`verify_image_cache.allow_blank_image = True` for this test, or "
+            f"tune `pyvista_blank_image_atol`."
+        )
+    return None
 
 
 def _get_thumbnail_size(current_size: tuple[int, int], max_image_size: int) -> tuple[int, int]:
@@ -971,6 +1046,13 @@ def pytest_configure(config: pytest.Config) -> None:
                 msg = f"argument {arg} can only be used with --doc_mode enabled"
                 raise pytest.UsageError(msg)
 
+    blank_atol = config.getini("pyvista_blank_image_atol")
+    try:
+        float(blank_atol)
+    except (TypeError, ValueError):
+        msg = f"Invalid value for `pyvista_blank_image_atol`: {blank_atol!r}. Expected a number (for example {DEFAULT_BLANK_IMAGE_ATOL})."
+        raise pytest.UsageError(msg) from None
+
     is_master = _is_master(config)
     disallow_unused_cache = config.getoption("disallow_unused_cache")
     if is_master and disallow_unused_cache:
@@ -1037,6 +1119,8 @@ def verify_image_cache(
     VerifyImageCache.add_missing_images = pytestconfig.getoption("add_missing_images")
     VerifyImageCache.reset_only_failed = pytestconfig.getoption("reset_only_failed")
     VerifyImageCache.generate_subdirs = pytestconfig.getoption("generate_subdirs")
+    VerifyImageCache.check_blank_images = pytestconfig.getini("pyvista_check_blank_images")
+    VerifyImageCache.blank_image_atol = float(pytestconfig.getini("pyvista_blank_image_atol"))
     VerifyImageCache.image_format = cast("_AllowedImageFormats", _get_option_from_config_or_ini(pytestconfig, "image_format"))
     VerifyImageCache.max_image_size = cast("int | None", _get_option_from_config_or_ini(pytestconfig, "max_image_size"))
 

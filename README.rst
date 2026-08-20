@@ -350,6 +350,12 @@ in the beginning of your test function.
   ``verify_image_cache`` fixture is used but no images are generated. The value of this
   flag takes precedence over the global flag by the same name (see above).
 
+* ``allow_blank_image``: When the global ``pyvista_check_blank_images`` option is enabled
+  (see `Configuration`_), every test that renders an essentially blank (near-uniform)
+  image fails, since this usually indicates a broken test that renders nothing yet still
+  passes. Set this flag to ``True`` to bypass the check for a test that intentionally
+  renders a near-blank scene.
+
 * ``env_info``: Dataclass for controlling the environment info used to name the generated
   test image(s) when the ``--generate_dirs`` option is used. The info can be test-specific
   or can be modified globally by wrapping the ``verify_image_cache`` fixture, e.g.:
@@ -495,6 +501,24 @@ Or, set them to different values:
     [tool.pytest.ini_options]
     generate_subdirs = true
     doc_generate_subdirs = false
+
+Detect blank images. This is opt-in and off by default. When enabled, every test
+that renders an essentially blank (near-uniform) image fails, since a test that
+renders nothing usually indicates a silently broken test. The rendered image is
+compared against an empty ``pyvista.Plotter`` of the same window size; if the
+difference is within ``pyvista_blank_image_atol`` the image is treated as blank.
+
+.. code-block:: toml
+
+    [tool.pytest.ini_options]
+    pyvista_check_blank_images = true
+    pyvista_blank_image_atol = 25.0
+
+Bypass the check for a single test that intentionally renders a near-blank scene by
+setting ``verify_image_cache.allow_blank_image = True`` at the top of that test (see
+``Customizing unit tests``). Note that a legitimately mostly-empty scene, for example
+a small object on a large uniform background, can be flagged as blank. This is why
+the check is opt-in and ``pyvista_blank_image_atol`` is tunable.
 
 Contributing
 ------------
