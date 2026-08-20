@@ -31,6 +31,7 @@ from pyvista import Plotter
 import vtkmodules
 
 from pytest_pyvista import hooks
+from pytest_pyvista._reset_fixtures import _reset_pyvista_state  # noqa: F401
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
@@ -172,6 +173,11 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
     pluginmanager.add_hookspecs(hooks)
 
 
+def _parse_bool(value: str) -> bool:
+    """Parse a CLI value the same way pytest parses a ``type="bool"`` ini value."""
+    return value.strip().lower() not in {"false", "0", "no"}
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     """Add new flag options to the pyvista plugin."""
 
@@ -284,6 +290,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             action="store_true",
             help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
         )
+
+        option = "reset_global_state"
+        help_ = "Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test."
+        _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
 
     def _add_doc_cli_and_ini_options() -> None:
         """Add options specific to the documentation tests."""
@@ -1050,6 +1061,12 @@ def verify_image_cache(
         generated_image_dir=gen_dir,
         failed_image_dir=failed_dir,
     )
+
+    # Render under the testing theme; `_TestingTheme` is absent on older pyvista.
+    with contextlib.suppress(ImportError):
+        from pyvista.plotting.themes import _TestingTheme  # noqa: PLC0415
+
+        monkeypatch.setattr(pyvista, "global_theme", _TestingTheme())
 
     # Wrapping call to `Plotter.show` to inject the image cache callback
     def func_show(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
