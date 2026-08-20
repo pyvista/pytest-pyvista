@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
+from datetime import datetime
+from datetime import timezone
 from functools import cached_property
 import gc
 import importlib
@@ -32,11 +34,14 @@ import vtkmodules
 
 from pytest_pyvista import hooks
 from pytest_pyvista.summary.record import ALL_STATUSES
+from pytest_pyvista.summary.record import read_records
+from pytest_pyvista.summary.render import write_report
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
     from collections.abc import Generator
 
+    from _pytest.terminal import TerminalReporter
     import xdist.workermanage
 
     from pytest_pyvista.summary.record import CacheWriteReason
@@ -568,7 +573,9 @@ class VerifyImageCache:
             SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
             skip_summary = VerifyImageCache.summary_session
             if skip_summary is not None:
-                skipped_baseline = Path(self.cache_dir, image_name)
+                # A baseline may be a flat file or the first image of a per-test subdirectory;
+                # resolving both is what lets a skipped card still show what it skipped over.
+                skipped_baseline = self._resolve_baseline(image_name)
                 # Reporting must never change a test's outcome, so any failure here is
                 # downgraded to a warning (see the identical guard on the main capture).
                 with _summary_capture_failures_are_warnings():
@@ -576,12 +583,12 @@ class VerifyImageCache:
                         test_name=test_name,
                         image_name=image_name,
                         call_index=self.n_calls - 1,
-                        baseline_source=skipped_baseline if skipped_baseline.is_file() else None,
+                        baseline_source=skipped_baseline,
                         generated_source=None,
-                        cache_destination=skipped_baseline,
+                        cache_destination=skipped_baseline if skipped_baseline is not None else Path(self.cache_dir, image_name),
                         skipped=True,
                         skip_reason=self._skip_reason(),
-                        baseline_existed=skipped_baseline.is_file(),
+                        baseline_existed=skipped_baseline is not None,
                         cache_write_reason=None,
                         error=None,
                         error_threshold=allowed_error,
@@ -634,6 +641,37 @@ class VerifyImageCache:
             # Test image has been generated, but cached image does not exist
             # The generated image is considered unused, so exit safely before image
             # comparison to avoid a FileNotFoundError
+            if summary is not None:
+                # The image is real and has no baseline: without this it would vanish from
+                # the report entirely, with nothing to say it was ever rendered. Recorded as
+                # `new`, so the reader can approve it into the cache.
+                with _summary_capture_failures_are_warnings():
+                    summary.capture(
+                        test_name=test_name,
+                        image_name=image_name,
+                        call_index=self.n_calls - 1,
+                        baseline_source=None,
+                        generated_source=_get_generated_image_path(
+                            parent=cast("Path", self.generated_image_dir),
+                            image_name=image_name,
+                            generate_subdirs=self.generate_subdirs,
+                            env_info=self.env_info,
+                        ),
+                        cache_destination=current_cached_image,
+                        skipped=False,
+                        skip_reason=None,
+                        baseline_existed=False,
+                        cache_write_reason=None,
+                        error=None,
+                        error_threshold=allowed_error,
+                        warning_threshold=allowed_warning,
+                        high_variance_test=self.high_variance_test,
+                        matched_alternate=False,
+                        matched_baseline=None,
+                        candidate_baselines=[],
+                        image_format=self.image_format,
+                        env_info=str(self.env_info),
+                    )
             return
 
         test_name_no_prefix = test_name.removeprefix("test_")
@@ -725,6 +763,25 @@ class VerifyImageCache:
         if pending_error is not None:
             remove_plotter_close_callback()
             raise pending_error
+
+    def _resolve_baseline(self, image_name: str) -> Path | None:
+        """
+        Return the cached baseline this image would be compared against, if one exists.
+
+        A baseline is either the flat ``<cache_dir>/<image_name>`` or, for a test with
+        several valid baselines, the first image inside ``<cache_dir>/<stem>/``. Both are
+        resolved here so that a comparison which never runs - a skipped test - can still
+        report the baseline it skipped over.
+        """
+        flat = Path(self.cache_dir, image_name)
+        if flat.is_file():
+            return flat
+        image_dirname = Path(self.cache_dir, Path(image_name).stem)
+        if image_dirname.is_dir():
+            paths = _get_file_paths(image_dirname, ext=self.image_format)
+            if paths:
+                return paths[0]
+        return None
 
     def _skip_reason(self) -> str:
         """Return the flag responsible for skipping this image comparison."""
@@ -897,48 +954,112 @@ def _check_compare_warn(test_name: str, error_: float, allowed_warning: float) -
 
 
 @pytest.hookimpl
-def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ANN001, ARG001
+def pytest_terminal_summary(terminalreporter: TerminalReporter, exitstatus: int, config: pytest.Config) -> None:  # noqa: ARG001
     """Execute after the whole test run completes."""
     if hasattr(config, "workerinput"):
         # on an pytest-xdist worker node, exit early
         return
 
-    if config.getoption("disallow_unused_cache") and getattr(VerifyImageCache, "image_format", None):
-        value = _get_option_from_config_or_ini(config, "image_cache_dir")
-        cache_path = Path(cast("Path", value))
-        cached_image_names = {f.name for f in cache_path.glob(f"*.{VerifyImageCache.image_format}")}
+    try:
+        if config.getoption("disallow_unused_cache") and getattr(VerifyImageCache, "image_format", None):
+            value = _get_option_from_config_or_ini(config, "image_cache_dir")
+            cache_path = Path(cast("Path", value))
+            cached_image_names = {f.name for f in cache_path.glob(f"*.{VerifyImageCache.image_format}")}
 
-        image_names_dir = getattr(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, None)
-        if image_names_dir:
-            visited_cached_image_names = _combine_temp_jsons(image_names_dir, "visited")
-            skipped_cached_image_names = _combine_temp_jsons(image_names_dir, "skipped")
-        else:
-            visited_cached_image_names = set()
-            skipped_cached_image_names = set()
+            image_names_dir = getattr(config, PYVISTA_IMAGE_NAMES_CACHE_DIRNAME, None)
+            if image_names_dir:
+                visited_cached_image_names = _combine_temp_jsons(image_names_dir, "visited")
+                skipped_cached_image_names = _combine_temp_jsons(image_names_dir, "skipped")
+            else:
+                visited_cached_image_names = set()
+                skipped_cached_image_names = set()
 
-        unused_cached_image_names = cached_image_names - visited_cached_image_names - skipped_cached_image_names
+            unused_cached_image_names = cached_image_names - visited_cached_image_names - skipped_cached_image_names
 
-        # Exclude images from skipped tests where multiple images are generated
-        unused_skipped = unused_cached_image_names.copy()
-        for image_name in unused_cached_image_names:
-            base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name), image_format=VerifyImageCache.image_format)
-            if base_image_name in skipped_cached_image_names:
-                unused_skipped.remove(image_name)
+            # Exclude images from skipped tests where multiple images are generated
+            unused_skipped = unused_cached_image_names.copy()
+            for image_name in unused_cached_image_names:
+                base_image_name = _image_name_from_test_name(_test_name_from_image_name(image_name), image_format=VerifyImageCache.image_format)
+                if base_image_name in skipped_cached_image_names:
+                    unused_skipped.remove(image_name)
 
-        if unused_skipped:
-            tr = terminalreporter
-            tr.ensure_newline()
-            tr.section("pytest-pyvista ERROR", sep="=", red=True, bold=True)
-            tr.line(f"Unused cached image file(s) detected ({len(unused_skipped)}). The following images are", red=True)
-            tr.line("cached, but were not generated or skipped by any of the tests:", red=True)
-            tr.line(f"{sorted(unused_skipped)}", yellow=True)
-            tr.line("")
-            tr.line("These images should either be removed from the cache, or the corresponding", red=True)
-            tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
-            pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
+            if unused_skipped:
+                tr = terminalreporter
+                tr.ensure_newline()
+                tr.section("pytest-pyvista ERROR", sep="=", red=True, bold=True)
+                tr.line(f"Unused cached image file(s) detected ({len(unused_skipped)}). The following images are", red=True)
+                tr.line("cached, but were not generated or skipped by any of the tests:", red=True)
+                tr.line(f"{sorted(unused_skipped)}", yellow=True)
+                tr.line("")
+                tr.line("These images should either be removed from the cache, or the corresponding", red=True)
+                tr.line("tests should be modified to ensure an image is generated for comparison.", red=True)
+                pytest.exit("Unused cache images", returncode=pytest.ExitCode.TESTS_FAILED)
+    finally:
+        # The report is written here and no later: `pytest_unconfigure` wipes the records
+        # directory and the preserved baselines inside it. In a `finally` so that the
+        # unused-cache exit above still leaves a report behind - it is the report that would
+        # show which images are unused.
+        if _summary_html_enabled(config):
+            _write_summary_report(config, terminalreporter)
 
     VISITED_CACHED_IMAGE_NAMES.clear()
     SKIPPED_CACHED_IMAGE_NAMES.clear()
+
+
+def _summary_version(lookup: Callable[[], object]) -> str:
+    """Return the version ``lookup`` reports, or ``"unknown"`` when it cannot be read."""
+    try:
+        return str(lookup())
+    except Exception:  # noqa: BLE001 - one unreadable version must not cost the whole report
+        return "unknown"
+
+
+def _summary_report_metadata(config: pytest.Config, cache_dir: Path | None) -> dict[str, str]:
+    """Describe this run for the report header, tolerating a version that cannot be read."""
+    return {
+        "Generated": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "Run id": _pyvista_run_id(config),
+        "Cache directory": str(cache_dir),
+        "Python": _summary_version(platform.python_version),
+        "PyVista": _summary_version(lambda: pyvista.__version__),
+        "VTK": _summary_version(lambda: vtkmodules.__version__),
+        "pytest": _summary_version(lambda: pytest.__version__),
+    }
+
+
+def _write_summary_report(config: pytest.Config, terminalreporter: TerminalReporter) -> None:
+    """
+    Combine every worker's records into one HTML report and name it on the terminal.
+
+    The report only observes a run, so writing it must never break one: an unwritable or
+    full report directory, or a read-only filesystem, degrades to a warning line here and
+    changes neither the exit status nor the rest of the terminal summary.
+    """
+    records_dir = getattr(config, PYVISTA_SUMMARY_RECORDS_DIRNAME, None)
+    if records_dir is None:
+        # No records directory was ever created, so this run captured nothing: the report was
+        # switched on through an ini option while `--doc_mode` was in force, which is not
+        # supported and is deliberately inert rather than an error.
+        return
+
+    try:
+        cache_dir = _get_option_from_config_or_ini(config, "image_cache_dir", is_dir=True)
+        report_dir = config.rootpath / str(_get_option_from_config_or_ini(config, "summary_html_dir") or DEFAULT_SUMMARY_HTML_DIR)
+        path = write_report(
+            read_records(Path(records_dir)),
+            report_dir,
+            run_id=_pyvista_run_id(config),
+            metadata=_summary_report_metadata(config, cache_dir),
+            embed=bool(_get_option_from_config_or_ini(config, "summary_html_embed")),
+        )
+    except Exception as error:  # noqa: BLE001 - deliberately total: writing the report may not break the run
+        # `str` rather than `repr` because an OSError names the offending path only in `str`.
+        message, warning = f"pytest-pyvista WARNING: could not write the image summary report: {type(error).__name__}: {error}", True
+    else:
+        message, warning = f"pytest-pyvista image summary report: {path}", False
+
+    terminalreporter.ensure_newline()
+    terminalreporter.write_line(message, yellow=warning)
 
 
 def _ensure_dir_exists(dirpath: str | Path, msg_name: str) -> None:
