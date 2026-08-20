@@ -94,11 +94,17 @@ Can be replaced with multiple versions of the image:
    - Use the ``--generate_subdirs`` flag to automatically generate test images in a
      sub-directory format.
 
-When there are multiple images, the test will initially compare the test image
-to the first cached image. If that comparison fails, the test image is then
-compared to all other cached images for that test. The test is successful if one
-of the comparisons is successful, though a warning is still issued if it initially
-failed.
+When there are multiple images, the test image is compared to each of the cached
+images and is graded against the closest match. A warning is only issued if every
+cached image exceeds the warning threshold, and the test only fails if every
+cached image also exceeds the error threshold. A test which closely matches any
+one of its cached images therefore passes silently, regardless of the order in
+which the images are compared.
+
+.. note::
+
+   The comparisons stop as soon as an image is matched within the warning
+   threshold, so a passing test is typically only compared to a single image.
 
 Both use cases (i.e. unit tests and documentation tests) support specifying multiple
 cache images.
