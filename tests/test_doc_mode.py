@@ -373,10 +373,15 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
     images = "images"
 
     n_images = 50
+    # Images are only compared to each other in this test, so render them small: this is
+    # purely about exercising doc_mode with multiple xdist workers, not image fidelity.
+    # Skipped for vtksz: the html-rendered screenshot size doesn't reliably match the
+    # requested plotter window_size, so the comparison would spuriously fail.
+    window_size = None if include_vtksz else (100, 100)
     name_cache = "imcache{index}_vtksz.png" if include_vtksz else "imcache{index}.png"
-    make_multiple_cached_images(pytester.path, cache, n_images=n_images, name=name_cache)
+    make_multiple_cached_images(pytester.path, cache, n_images=n_images, name=name_cache, window_size=window_size)
     name_build = "imcache{index}.vtksz" if include_vtksz else "imcache{index}.png"
-    image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images, name=name_build)
+    image_filenames = make_multiple_cached_images(pytester.path, images, n_images=n_images, name=name_build, window_size=window_size)
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
@@ -393,7 +398,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     # replace a single image with a different image
     img_idx = 34
-    pl = pv.Plotter()
+    pl = pv.Plotter(window_size=window_size)
     pl.add_mesh(pv.Cube())
     if include_vtksz:
         pl.export_vtksz(image_filenames[img_idx])

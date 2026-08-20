@@ -12,7 +12,6 @@ import sys
 from typing import TYPE_CHECKING
 from unittest import mock
 
-import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 import vtkmodules
@@ -49,6 +48,22 @@ def test_arguments(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
+# Matplotlib's default "tab10" color cycle, hardcoded to avoid importing matplotlib
+# (a heavy, otherwise-unused dependency) just to read 10 static hex colors.
+_TAB10_COLORS = (
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+)
+
+
 def make_cached_images(  # noqa: PLR0913
     test_path, path="image_cache_dir", name="imcache.png", color="red", window_size=None, mesh: pv.DataSet | None = None
 ) -> Path:
@@ -68,9 +83,12 @@ def make_cached_images(  # noqa: PLR0913
     return filename
 
 
-def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int = 10, name: str = "imcache{index}.png") -> list[Path]:
+def make_multiple_cached_images(
+    test_path, path="image_cache_dir", n_images: int = 10, name: str = "imcache{index}.png", window_size=None
+) -> list[Path]:
     """Make image cache in `test_path/path` consisting of several images."""
-    colors = list(plt.rcParams["axes.prop_cycle"].by_key()["color"])
+    colors = _TAB10_COLORS
+    kwargs = {"window_size": window_size} if window_size else {}
 
     d = Path(test_path, path)
     d.mkdir(exist_ok=True, parents=True)
@@ -87,7 +105,7 @@ def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int
             # don't regenerate images when that color already exists
             shutil.copy(color_to_file[color], filename)
         else:
-            plotter = pv.Plotter(off_screen=True)
+            plotter = pv.Plotter(off_screen=True, **kwargs)
             plotter.add_mesh(mesh, color=color)
             if filename.suffix == ".vtksz":
                 plotter.export_vtksz(filename)
