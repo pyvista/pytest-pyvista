@@ -284,7 +284,12 @@ def apply_approvals(approved: list[ApprovedImage], *, dry_run: bool = False) -> 
       destination between validation and copy is replaced outright, not followed.
 
     The temp file is created in the same directory as the destination (not a generic temp
-    directory) so ``Path.replace()`` is a same-filesystem rename and therefore atomic.
+    directory) so ``Path.replace()`` is a same-filesystem rename and therefore atomic. Its name
+    is a short fixed prefix, not the destination's own name: ``mkstemp`` appends a random
+    suffix on top of whatever prefix it is given, and echoing a long destination basename back
+    into the prefix can push the combined temp filename past the filesystem's ``NAME_MAX``
+    (typically 255 bytes) even though the destination's own name alone would fit -- a filename
+    a plain copy could write becomes one this function fails to even create a temp file for.
     """
     copies: list[tuple[Path, Path]] = []
     for image in approved:
@@ -292,7 +297,7 @@ def apply_approvals(approved: list[ApprovedImage], *, dry_run: bool = False) -> 
             tmp_path: Path | None = None
             try:
                 image.destination.parent.mkdir(parents=True, exist_ok=True)
-                fd, tmp_name = tempfile.mkstemp(dir=image.destination.parent, prefix=f".{image.destination.name}.", suffix=".tmp")
+                fd, tmp_name = tempfile.mkstemp(dir=image.destination.parent, prefix=".pv-approve.", suffix=".tmp")
                 tmp_path = Path(tmp_name)
                 os.close(fd)
                 shutil.copy(image.source, tmp_path)
@@ -379,16 +384,39 @@ def _report(copies: list[tuple[Path, Path]], *, target_root: Path, dry_run: bool
     print(f"{len(copies)} image(s) {verb} to {target_root}{suffix}")  # noqa: T201
 
 
+def _reject_unsafe_root(flag: str, raw: str, resolved: Path) -> str | None:
+    """
+    Return a ready-to-print error message if ``raw``/``resolved`` is unsafe to write into, else None.
+
+    "Unsafe" means empty (which resolves to the cwd -- a plausible but almost certainly
+    unintended destination, so it must be opted into explicitly, e.g. with ``.``, not reached by
+    typing nothing) or the filesystem root (never a legitimate cache or staging directory,
+    regardless of which flag supplied it). The two conditions get distinct messages naming the
+    actual reason for the actual input, rather than one message that always echoes the resolved
+    path -- which, for the empty case, would print the cwd as though *it* were the problem.
+    """
+    if not raw.strip():
+        return f"error: {flag} must not be empty."
+    if _is_filesystem_root(resolved):
+        return f"error: {flag} {raw!r} resolves to the filesystem root ({resolved}); refusing to use it as a write root."
+    return None
+
+
 def _resolve_roots(args: argparse.Namespace) -> tuple[Path, Path, Path] | None:
     """
     Resolve ``--image_cache_dir``/``--generated_image_dir``/``--staging_dir`` into ``(image_cache_dir, source_root, target_root)``.
 
     Prints a clear stderr message and returns None, rather than letting a malformed argument
     (e.g. an existing symlink loop, or an embedded NUL byte) crash with a raw traceback, or
-    letting ``--image_cache_dir`` name the filesystem root or an empty string reopen the exact
-    outcome the manifest-side ``cache_dir`` guard in ``_check_cache_dir`` exists to prevent --
-    one flag away from the manifest, since this value is what every destination is actually
-    checked and copied against.
+    letting an empty value or the filesystem root -- arriving from *any* flag that supplies a
+    root this run will write into -- reopen the outcome the manifest-side ``cache_dir`` guard in
+    ``_check_cache_dir`` exists to prevent. ``--image_cache_dir`` is checked unconditionally: it
+    grounds the manifest's own ``cache_dir`` claim regardless of ``--target``, via
+    ``load_manifest``. Whichever flag supplies ``target_root`` -- the root this invocation will
+    actually copy into -- is checked too: that is ``--image_cache_dir`` again under
+    ``--target cache``, or ``--staging_dir`` under the default ``--target staging``. Validating
+    the value that will actually be written to, rather than one flag by name, is what stops a
+    structurally identical gap opening under some other flag next.
     """
     try:
         # image_cache_dir is independent ground truth for this run's real cache directory -- it
@@ -401,13 +429,15 @@ def _resolve_roots(args: argparse.Namespace) -> tuple[Path, Path, Path] | None:
         print(f"error: could not resolve --image_cache_dir/--generated_image_dir/--staging_dir: {error}", file=sys.stderr)  # noqa: T201
         return None
 
-    if not args.image_cache_dir.strip() or _is_filesystem_root(image_cache_dir):
-        msg = (
-            f"error: --image_cache_dir {args.image_cache_dir!r} must not be empty or the filesystem root "
-            f"({image_cache_dir}); refusing to treat that as an image cache."
-        )
-        print(msg, file=sys.stderr)  # noqa: T201
-        return None
+    roots_to_check = [("--image_cache_dir", args.image_cache_dir, image_cache_dir)]
+    if args.target == "staging":
+        roots_to_check.append(("--staging_dir", args.staging_dir, target_root))
+
+    for flag, raw, resolved in roots_to_check:
+        error_message = _reject_unsafe_root(flag, raw, resolved)
+        if error_message is not None:
+            print(error_message, file=sys.stderr)  # noqa: T201
+            return None
 
     return image_cache_dir, source_root, target_root
 

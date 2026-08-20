@@ -137,6 +137,28 @@ def test_empty_image_cache_dir_flag_is_rejected() -> None:
     assert main(["approvals.json", "--target", "cache", "--image_cache_dir", ""]) == 1
 
 
+def test_root_staging_dir_flag_is_rejected(project: Path) -> None:
+    """--staging_dir / reproduces N2's exact outcome one flag over, on the default --target: rejected the same way, no --force needed."""
+    victim = project.parent / "victim.txt"
+    victim.write_bytes(b"irreplaceable-victim-data")
+    cache = project / "image_cache_dir"
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    # destination lives inside the real cache (so load_manifest's own containment check would
+    # pass it) with a relative path chosen so that, once rejoined under a --staging_dir of "/",
+    # it reconstructs the victim's real absolute path -- the exact escape this test guards.
+    payload["approved"][0]["destination"] = str(cache / victim.relative_to(victim.anchor))
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--staging_dir", "/"]) == 1
+    assert victim.read_bytes() == b"irreplaceable-victim-data"
+
+
+@pytest.mark.usefixtures("project")
+def test_empty_staging_dir_flag_is_rejected() -> None:
+    """--staging_dir '' is rejected outright, for consistency with --image_cache_dir '' -- not silently treated as the cwd."""
+    assert main(["approvals.json", "--staging_dir", ""]) == 1
+
+
 def test_symlinked_staging_destination_is_not_followed(project: Path) -> None:
     """A pre-existing symlink at the staging destination, pointing outside staging, is rejected rather than written through."""
     outside = project.parent / "outside.png"
@@ -212,6 +234,36 @@ def test_unreadable_source_fails_the_copy_without_destroying_an_existing_baselin
 
     assert "Failed to copy" in capsys.readouterr().err
     assert destination.read_bytes() == b"IRREPLACEABLE-BASELINE"
+
+
+def test_long_destination_filename_does_not_prevent_the_copy(project: Path) -> None:
+    """
+    A destination basename long enough to overflow NAME_MAX once echoed into a temp-file prefix still copies cleanly.
+
+    250 chars is comfortably under NAME_MAX (255) for the real destination -- a plain copy would
+    succeed -- but an earlier version of apply_approvals built its temp filename as
+    f".{destination.name}." plus mkstemp's own random suffix and ".tmp", which overflowed 255
+    for exactly this length even though the destination name alone did not.
+    """
+    long_name = "a" * 246 + ".png"
+    generated = project / "generated_images"
+    (generated / long_name).write_bytes(b"long-name-bytes")
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["approved"].append(
+        {
+            "test_name": "test_long",
+            "image_name": long_name,
+            "call_index": 0,
+            "status": "new",
+            "source": str(generated / long_name),
+            "destination": str(project / "image_cache_dir" / long_name),
+        },
+    )
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache"]) == 0
+
+    assert (project / "image_cache_dir" / long_name).read_bytes() == b"long-name-bytes"
 
 
 def test_partial_failure_reports_every_completed_copy_before_stopping(project: Path, capsys: pytest.CaptureFixture) -> None:
