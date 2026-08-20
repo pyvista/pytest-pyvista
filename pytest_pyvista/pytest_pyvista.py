@@ -36,6 +36,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
     from collections.abc import Generator
 
+    from trame_server.core import Server
     import xdist.workermanage
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
@@ -479,7 +480,7 @@ class VerifyImageCache:
         skip_macos = platform.system() == "Darwin" and macos_skip_image_cache
         return skip or ignore_image_cache or skip_windows or skip_macos
 
-    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912, PLR0915
+    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912
         """
         Either store or validate an image.
 
@@ -563,28 +564,13 @@ class VerifyImageCache:
             return
 
         test_name_no_prefix = test_name.removeprefix("test_")
-        warn_msg, fail_msg = _test_compare_images(
+        warn_msg, fail_msg, current_cached_image = _test_compare_images(
             test_name=test_name_no_prefix,
             test_image=plotter,
-            cached_image=current_cached_image,
+            cached_image_paths=cached_image_paths,
             allowed_error=allowed_error,
             allowed_warning=allowed_warning,
         )
-
-        # Try again and compare with other cached images
-        if fail_msg and len(cached_image_paths) > 1:
-            # Compare test image to other known valid versions
-            msg_start = "This test has multiple cached images. It initially failed (as above)"
-            for path in cached_image_paths[1:]:
-                error = _compare_images(plotter, path)
-                if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
-                    # Convert failure into a warning
-                    warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
-                    fail_msg = None
-                    current_cached_image = path
-                    break
-            else:  # Loop completed - test still fails
-                fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(self.cache_dir, test_name_no_prefix)!s}"
 
         if fail_msg:
             if self.failed_image_dir is not None:
@@ -770,17 +756,49 @@ def _screenshot(plotter: Plotter, *args, max_image_size: int | None, **kwargs) -
 
 
 def _test_compare_images(
-    test_name: str, test_image: Path | str | pyvista.Plotter, cached_image: Path | str, allowed_error: float, allowed_warning: float
-) -> tuple[str | None, str | None]:
-    try:
-        # Check if test should fail or warn
-        error = _compare_images(test_image, cached_image)
-        fail_msg = _check_compare_fail(test_name, error, allowed_error)
-        warn_msg = _check_compare_warn(test_name, error, allowed_warning)
-    except RuntimeError as e:
-        warn_msg = None
-        fail_msg = repr(e)
-    return warn_msg, fail_msg
+    test_name: str, test_image: Path | str | pyvista.Plotter, cached_image_paths: list[Path], allowed_error: float, allowed_warning: float
+) -> tuple[str | None, str | None, Path]:
+    """
+    Compare a test image to all of its cached images and grade it on the closest match.
+
+    Only warn if all of the cached images are above the warning threshold, and only
+    fail if none of them are below the error threshold. The closest matching cached
+    image is returned along with the messages.
+    """
+    closest_image = cached_image_paths[0]
+    best_error: float | None = None
+    fail_msg: str | None = None
+
+    for path in cached_image_paths:
+        try:
+            error = _compare_images(test_image, path)
+        except RuntimeError as e:
+            if best_error is None and fail_msg is None:
+                # Only report this if no image can be compared successfully
+                fail_msg = repr(e)
+            continue
+
+        if best_error is None or error < best_error:
+            best_error, closest_image = error, path
+
+        if error <= allowed_warning:
+            # A clean match, no other image can improve on this outcome
+            break
+
+    if best_error is None:
+        return None, fail_msg, closest_image
+
+    fail_msg = _check_compare_fail(test_name, best_error, allowed_error)
+    warn_msg = _check_compare_warn(test_name, best_error, allowed_warning)
+
+    if (fail_msg or warn_msg) and len(cached_image_paths) > 1:
+        msg_closest = f"\nThis test has multiple cached images. The closest match was:\n\t{closest_image}"
+        if fail_msg:
+            fail_msg += msg_closest
+        else:
+            warn_msg = cast("str", warn_msg) + msg_closest
+
+    return warn_msg, fail_msg, closest_image
 
 
 def _check_compare_fail(test_name: str, error_: float, allowed_error: float) -> str | None:
@@ -1165,14 +1183,39 @@ def verify_image_cache(
             )
 
 
+def _dispose_trame_server(server: Server) -> None:
+    """
+    Stop a trame server and drop the reference that pins its ``vtkWebApplication``.
+
+    Forgetting a running server does not stop it, and a stopped one still holds its
+    ``vtkWebApplication``: one reference lives in ``CoreServer.sharedObjects``, which the
+    whole protocol graph cross-references, and another in the per-server ``Helper``, which
+    its own bound method keeps alive. Dropping both is what lets the collector take it
+    during the test that made it, rather than when the next server replaces it. See
+    pyvista/pyvista#8929.
+
+    TODO: upstream should do this on stop -- ``trame_server`` releases the transport but
+    nothing in its API dismantles the protocol graph.
+    """
+    import asyncio  # noqa: PLC0415
+
+    if getattr(server, "running", False):
+        with contextlib.suppress(Exception):
+            asyncio.run(server.stop())
+    shared = getattr(getattr(server, "_root_protocol", None), "sharedObjects", None)
+    if shared is not None:
+        shared["app"] = None
+
+
 @pytest.fixture(autouse=True)
 def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generator[None, None, None]:
     """
     Cleanup fixture.
 
     This teardown fixture serves mutltiple purposes:
-    - closing all plotters,
+    - stopping and disposing of trame servers,
     - clearing trame servers registry (to prevent test collision),
+    - closing all plotters,
     - forcing garbage collection.
     """
     yield
@@ -1182,7 +1225,21 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
     except ImportError:
         ...
     else:
+        for server in list(AVAILABLE_SERVERS.values()):
+            _dispose_trame_server(server)
         AVAILABLE_SERVERS.clear()
+
+    try:
+        from trame_vtk.modules.vtk import HELPERS_PER_SERVER  # noqa: PLC0415
+    except ImportError:
+        ...
+    else:
+        # The other half of the disposal above: the helper holds the vtkWebApplication
+        # too, and is keyed by server name, so a stale one would also be handed to the
+        # next server of that name.
+        for helper in list(HELPERS_PER_SERVER.values()):
+            helper._vtk_core = None  # noqa: SLF001
+        HELPERS_PER_SERVER.clear()
 
     if pytestconfig.getini("pyvista_close_all"):
         pyvista.close_all()
