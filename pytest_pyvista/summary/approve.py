@@ -1,10 +1,13 @@
-"""Validating exported approvals manifests before they are applied to the image cache."""
+"""Validating exported approvals manifests, and applying them, before they touch the image cache."""
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import shutil
+import sys
 
 from pytest_pyvista.summary.record import ALL_STATUSES
 from pytest_pyvista.summary.record import SCHEMA_VERSION
@@ -28,16 +31,24 @@ class ApprovedImage:
     destination: Path
 
 
-def _within(path: Path, root: Path) -> bool:
-    """Return True if ``path`` resolves to somewhere inside ``root``, following symlinks."""
+def _resolve_within(path: Path, root: Path) -> Path | None:
+    """
+    Resolve ``path`` and return the result if it lies inside ``root``, following symlinks; else None.
+
+    Resolves exactly once: the returned ``Path`` is the same object the caller then checks with
+    ``is_file()``, compares for equality, and stores on ``ApprovedImage`` -- there is no later,
+    separate ``resolve()`` call that could observe a different filesystem than the one this
+    containment check saw.
+    """
     try:
-        path.resolve().relative_to(root.resolve())
+        resolved = path.resolve()
+        resolved.relative_to(root.resolve())
     except (ValueError, RuntimeError, OSError):
         # ValueError: outside root. RuntimeError: symlink loop. OSError: e.g. an
         # embedded NUL byte makes the underlying lstat() fail. All three mean the
         # same thing here -- this path cannot be trusted to be inside `root`.
-        return False
-    return True
+        return None
+    return resolved
 
 
 def _entry_label(entry: dict, index: int) -> str:
@@ -98,16 +109,19 @@ def _validate_entry(entry: object, index: int, *, source_root: Path, target_root
     label = _entry_label(entry, index)
     _check_entry_field_types(entry, label)
 
-    source = Path(entry["source"])
-    destination = Path(entry["destination"])
-
-    if not _within(source, source_root):
-        msg = f"Approval {label}: source {source} resolves outside the generated image directory {source_root}."
+    # Resolved once, inside _resolve_within, and reused for every check below and for the
+    # returned value -- never re-resolved -- so the path that is checked for containment is
+    # provably the same object later checked for existence, returned to the caller, and (in
+    # Task 11) copied.
+    source = _resolve_within(Path(entry["source"]), source_root)
+    if source is None:
+        msg = f"Approval {label}: source {entry['source']} resolves outside the generated image directory {source_root}."
         raise ManifestError(msg)
-    if not _within(destination, target_root):
-        msg = f"Approval {label}: destination {destination} resolves outside the target directory {target_root}."
+    destination = _resolve_within(Path(entry["destination"]), target_root)
+    if destination is None:
+        msg = f"Approval {label}: destination {entry['destination']} resolves outside the target directory {target_root}."
         raise ManifestError(msg)
-    if destination.resolve() == target_root.resolve():
+    if destination == target_root.resolve():
         msg = f"Approval {label}: destination {destination} is the target directory itself, not a file within it."
         raise ManifestError(msg)
     if not source.is_file():
@@ -119,12 +133,8 @@ def _validate_entry(entry: object, index: int, *, source_root: Path, target_root
         image_name=str(entry["image_name"]),
         call_index=entry["call_index"],
         status=entry["status"],
-        # Resolved, not the raw string: this is the value that was actually checked for
-        # containment, so it must also be the value the caller copies to and from --
-        # otherwise a later symlink or an unresolved ".." could widen the gap between
-        # what was approved and what gets touched on disk.
-        source=source.resolve(),
-        destination=destination.resolve(),
+        source=source,
+        destination=destination,
     )
 
 
@@ -205,3 +215,138 @@ def load_manifest(
         raise ManifestError(msg)
 
     return [_validate_entry(entry, index, source_root=source_root, target_root=target_root) for index, entry in enumerate(approved)]
+
+
+def apply_approvals(approved: list[ApprovedImage], *, dry_run: bool = False) -> list[tuple[Path, Path]]:
+    """
+    Copy each approved image to its destination, returning the (source, destination) pairs applied.
+
+    Stops at the first copy failure instead of continuing past it. Baseline images are
+    load-bearing for the test suite and may be the only copy that exists; applying some
+    approvals from a batch while silently skipping others -- with no way for the caller to
+    see which succeeded -- would leave the cache in a worse, half-updated state than simply
+    stopping and saying exactly how far it got. The re-raised ``OSError`` names the pair that
+    failed and how many of the batch were already applied before it.
+    """
+    copies: list[tuple[Path, Path]] = []
+    for image in approved:
+        if not dry_run:
+            try:
+                image.destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(image.source, image.destination)
+            except OSError as error:
+                msg = f"Failed to copy {image.source} -> {image.destination} after applying {len(copies)} of {len(approved)}: {error}"
+                raise OSError(msg) from error
+        copies.append((image.source, image.destination))
+    return copies
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser for the ``pytest-pyvista-approve`` console script."""
+    parser = argparse.ArgumentParser(
+        prog="pytest-pyvista-approve",
+        description="Apply images approved in a pytest-pyvista image summary report.",
+    )
+    parser.add_argument("manifest", help="Path to the approvals.json exported from the report.")
+    parser.add_argument("--target", choices=["staging", "cache"], default="staging", help="Where to copy approved images.")
+    parser.add_argument("--staging_dir", default="approved_images", help="Staging directory used when --target=staging.")
+    parser.add_argument(
+        "--generated_image_dir",
+        default=None,
+        help="Override the generated image directory the manifest's sources must resolve inside.",
+    )
+    parser.add_argument("--force", action="store_true", help="Apply even if the manifest's cache directory does not match.")
+    parser.add_argument("--dry-run", action="store_true", help="Print the planned copies without performing them.")
+    return parser
+
+
+def _load_payload(manifest_path: Path) -> dict | None:
+    """Read and JSON-parse ``manifest_path``, printing a stderr message and returning None on failure."""
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as error:
+        print(f"error: {manifest_path} is not valid JSON: {error}", file=sys.stderr)  # noqa: T201
+        return None
+
+    if not isinstance(payload, dict):
+        print(f"error: {manifest_path} does not contain a JSON object.", file=sys.stderr)  # noqa: T201
+        return None
+
+    return payload
+
+
+def _restage(approved: list[ApprovedImage], *, cache_dir: Path, target_root: Path) -> list[ApprovedImage]:
+    """Rewrite each entry's destination from its manifest cache path to the equivalent path under ``target_root``."""
+    return [
+        ApprovedImage(
+            test_name=image.test_name,
+            image_name=image.image_name,
+            call_index=image.call_index,
+            status=image.status,
+            source=image.source,
+            destination=target_root / image.destination.relative_to(cache_dir),
+        )
+        for image in approved
+    ]
+
+
+def _report(copies: list[tuple[Path, Path]], *, target_root: Path, dry_run: bool) -> None:
+    """Print one line per copy performed (or planned), then a summary line."""
+    prefix = "would copy" if dry_run else "copied"
+    for source, destination in copies:
+        print(f"{prefix}: {source} -> {destination}")  # noqa: T201
+
+    verb = "planned" if dry_run else "applied"
+    suffix = " (dry run)" if dry_run else ""
+    print(f"{len(copies)} image(s) {verb} to {target_root}{suffix}")  # noqa: T201
+
+
+def main(argv: list[str] | None = None) -> int:
+    """
+    Entry point for the ``pytest-pyvista-approve`` console script.
+
+    Reads an exported ``approvals.json``, validates it with ``load_manifest``, and copies each
+    approved image to a staging directory (default) or straight into the image cache.
+    """
+    args = _build_parser().parse_args(argv)
+
+    manifest_path = Path(args.manifest)
+    if not manifest_path.is_file():
+        print(f"error: {manifest_path} does not exist", file=sys.stderr)  # noqa: T201
+        return 1
+
+    payload = _load_payload(manifest_path)
+    if payload is None:
+        return 1
+
+    cache_dir = Path(payload.get("cache_dir", "")).resolve()
+    target_root = cache_dir if args.target == "cache" else Path(args.staging_dir).resolve()
+    source_root = Path(args.generated_image_dir).resolve() if args.generated_image_dir else Path.cwd()
+
+    try:
+        approved = load_manifest(
+            manifest_path,
+            cache_dir=cache_dir,
+            target_root=cache_dir,
+            source_root=source_root,
+            force=args.force,
+        )
+    except ManifestError as error:
+        print(f"error: {error}", file=sys.stderr)  # noqa: T201
+        return 1
+
+    if args.target == "staging":
+        approved = _restage(approved, cache_dir=cache_dir, target_root=target_root)
+
+    if not approved:
+        print("No approved images in manifest; nothing to do.")  # noqa: T201
+        return 0
+
+    try:
+        copies = apply_approvals(approved, dry_run=args.dry_run)
+    except OSError as error:
+        print(f"error: {error}", file=sys.stderr)  # noqa: T201
+        return 1
+
+    _report(copies, target_root=target_root, dry_run=args.dry_run)
+    return 0
