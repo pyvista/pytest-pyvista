@@ -24,6 +24,17 @@ TEST_FILE = """
         pl.show()
 """
 
+SKIPPED_TEST_FILE = """
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+
+    def test_sphere(verify_image_cache):
+        verify_image_cache.skip = True
+        pl = pv.Plotter()
+        pl.add_mesh(pv.Sphere(), color="red")
+        pl.show()
+"""
+
 
 def _report(pytester: pytest.Pytester) -> str:
     """Read the rendered report page."""
@@ -98,18 +109,7 @@ def test_report_is_generated_when_a_test_fails(pytester: pytest.Pytester) -> Non
 
 def test_skipped_test_is_reported_as_skipped(pytester: pytest.Pytester) -> None:
     """A skipped comparison is reported as skipped."""
-    pytester.makepyfile(
-        """
-        import pyvista as pv
-        pv.OFF_SCREEN = True
-
-        def test_sphere(verify_image_cache):
-            verify_image_cache.skip = True
-            pl = pv.Plotter()
-            pl.add_mesh(pv.Sphere())
-            pl.show()
-        """
-    )
+    pytester.makepyfile(SKIPPED_TEST_FILE)
 
     pytester.runpytest("--summary_html")
 
@@ -131,6 +131,9 @@ def test_full_size_modes_control_retained_copies(pytester: pytest.Pytester) -> N
     pytester.runpytest("--add_missing_images")
 
     pytester.runpytest("--summary_html", "--summary_html_full_size", "none")
+    # Assert the report exists first: globbing a directory that was never created also
+    # returns nothing, which would make the assertion below unable to fail.
+    assert Path(pytester.path, REPORT_DIR, "index.html").is_file()
     assert not list(Path(pytester.path, REPORT_DIR, "images").glob("*.full.png"))
 
     pytester.runpytest("--summary_html", "--summary_html_full_size", "all")
@@ -231,23 +234,12 @@ def test_an_unused_generated_image_is_reported_as_new(pytester: pytest.Pytester)
 
 def test_a_skipped_test_shows_a_baseline_held_in_a_subdirectory(pytester: pytest.Pytester) -> None:
     """A skipped test whose baselines live in a subdirectory still shows one of them."""
-    cache = Path(pytester.path, CACHE_DIR, "sphere")
-    cache.mkdir(parents=True)
+    subdirectory = Path(pytester.path, CACHE_DIR, "sphere")
+    subdirectory.mkdir(parents=True)
     # Any readable image will do: the comparison is skipped, so the baseline is only ever
     # copied into the report. Drawing one here is far cheaper than rendering a real sphere.
-    Image.new("RGB", (64, 48), "red").save(cache / "one.png")
-    pytester.makepyfile(
-        """
-        import pyvista as pv
-        pv.OFF_SCREEN = True
-
-        def test_sphere(verify_image_cache):
-            verify_image_cache.skip = True
-            pl = pv.Plotter()
-            pl.add_mesh(pv.Sphere(), color="red")
-            pl.show()
-        """
-    )
+    Image.new("RGB", (64, 48), "red").save(subdirectory / "one.png")
+    pytester.makepyfile(SKIPPED_TEST_FILE)
 
     pytester.runpytest("--summary_html")
 

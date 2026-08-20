@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from PIL import Image
 import pyvista as pv
 
+from pytest_pyvista.pytest_pyvista import VerifyImageCache
 from pytest_pyvista.summary.record import ALL_STATUSES
 from pytest_pyvista.summary.record import ImageRecord
 from pytest_pyvista.summary.record import read_records
@@ -298,3 +299,25 @@ def test_records_carry_the_run_id_stored_on_the_config(pytester: pytest.Pytester
     result.assert_outcomes(passed=1)
     (record,) = _records_of(pytester)
     assert record.run_id == (pytester.path / "run_id.txt").read_text()
+
+
+def test_a_skipped_comparison_prefers_the_subdirectory_baseline_over_the_flat_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A cache holding both kinds of baseline for one test records the one a comparison would have used."""
+    # `raising=False` because `image_format` is only annotated on the class: nothing sets it
+    # until the fixture runs, so requiring it to exist would make this test order-dependent.
+    monkeypatch.setattr(VerifyImageCache, "image_format", "png", raising=False)
+    monkeypatch.setattr(VerifyImageCache, "summary_session", _session(tmp_path))
+    _write(tmp_path / "cache" / "sphere.png", (255, 0, 0))
+    subdirectory_baseline = _write(tmp_path / "cache" / "sphere" / "one.png", (0, 0, 255))
+    verify = VerifyImageCache("test_sphere", tmp_path / "cache")
+    verify.skip = True
+
+    # Driven directly rather than through a run: a cache with both a `sphere.png` and a
+    # `sphere/` is rejected by the cache validator, so this precedence - which the comparison
+    # path itself relies on - is only reachable here. The plotter is never touched, because
+    # the skip branch returns before anything is rendered.
+    verify(pv.Plotter(off_screen=True))
+
+    (record,) = read_records(tmp_path / "records")
+    assert record.cache_destination == str(subdirectory_baseline)
+    assert record.baseline_image is not None

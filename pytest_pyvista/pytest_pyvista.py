@@ -573,9 +573,9 @@ class VerifyImageCache:
             SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
             skip_summary = VerifyImageCache.summary_session
             if skip_summary is not None:
-                # A baseline may be a flat file or the first image of a per-test subdirectory;
-                # resolving both is what lets a skipped card still show what it skipped over.
-                skipped_baseline = self._resolve_baseline(image_name)
+                # The comparison never runs, but the card should still name the baseline it
+                # skipped over, so resolve the one the comparison would have used.
+                skipped_baseline = self._candidate_baselines(image_name)[0]
                 # Reporting must never change a test's outcome, so any failure here is
                 # downgraded to a warning (see the identical guard on the main capture).
                 with _summary_capture_failures_are_warnings():
@@ -583,12 +583,12 @@ class VerifyImageCache:
                         test_name=test_name,
                         image_name=image_name,
                         call_index=self.n_calls - 1,
-                        baseline_source=skipped_baseline,
+                        baseline_source=skipped_baseline if skipped_baseline.is_file() else None,
                         generated_source=None,
-                        cache_destination=skipped_baseline if skipped_baseline is not None else Path(self.cache_dir, image_name),
+                        cache_destination=skipped_baseline,
                         skipped=True,
                         skip_reason=self._skip_reason(),
-                        baseline_existed=skipped_baseline is not None,
+                        baseline_existed=skipped_baseline.is_file(),
                         cache_write_reason=None,
                         error=None,
                         error_threshold=allowed_error,
@@ -604,13 +604,9 @@ class VerifyImageCache:
 
         VISITED_CACHED_IMAGE_NAMES.add(image_name)
 
-        image_filename = Path(self.cache_dir, image_name)
         image_dirname = Path(self.cache_dir, Path(image_name).stem)
 
-        cached_image_paths = _get_file_paths(image_dirname, ext=self.image_format) if image_dirname.is_dir() else [image_filename]
-        if not cached_image_paths:
-            # Path is an empty dir, append default expected image path
-            cached_image_paths.append(image_dirname / f"{self.env_info}.{self.image_format}")
+        cached_image_paths = self._candidate_baselines(image_name)
         current_cached_image = cached_image_paths[0]
 
         summary = VerifyImageCache.summary_session
@@ -764,24 +760,23 @@ class VerifyImageCache:
             remove_plotter_close_callback()
             raise pending_error
 
-    def _resolve_baseline(self, image_name: str) -> Path | None:
+    def _candidate_baselines(self, image_name: str) -> list[Path]:
         """
-        Return the cached baseline this image would be compared against, if one exists.
+        Return every cached image this one may be compared against, best candidate first.
 
-        A baseline is either the flat ``<cache_dir>/<image_name>`` or, for a test with
-        several valid baselines, the first image inside ``<cache_dir>/<stem>/``. Both are
-        resolved here so that a comparison which never runs - a skipped test - can still
-        report the baseline it skipped over.
+        A test's baselines are either the single flat ``<cache_dir>/<image_name>`` or, when
+        ``<cache_dir>/<stem>/`` exists, every image inside it - the subdirectory wins outright
+        when both are present. Candidates are paths, not guarantees: neither the flat file nor
+        the default path standing in for an empty subdirectory need exist, and it is for the
+        caller to decide what a missing baseline means. Resolving this in one place is what
+        lets a comparison that never runs - a skipped test - report the same baseline the
+        comparison would have used.
         """
-        flat = Path(self.cache_dir, image_name)
-        if flat.is_file():
-            return flat
         image_dirname = Path(self.cache_dir, Path(image_name).stem)
-        if image_dirname.is_dir():
-            paths = _get_file_paths(image_dirname, ext=self.image_format)
-            if paths:
-                return paths[0]
-        return None
+        if not image_dirname.is_dir():
+            return [Path(self.cache_dir, image_name)]
+        # An empty dir yields the default expected image path
+        return _get_file_paths(image_dirname, ext=self.image_format) or [image_dirname / f"{self.env_info}.{self.image_format}"]
 
     def _skip_reason(self) -> str:
         """Return the flag responsible for skipping this image comparison."""
@@ -999,8 +994,16 @@ def pytest_terminal_summary(terminalreporter: TerminalReporter, exitstatus: int,
         # directory and the preserved baselines inside it. In a `finally` so that the
         # unused-cache exit above still leaves a report behind - it is the report that would
         # show which images are unused.
-        if _summary_html_enabled(config):
-            _write_summary_report(config, terminalreporter)
+        #
+        # Nothing in here may raise. `pytest.exit`'s `Exit` may be propagating through this
+        # `finally`, and an exception raised here would replace it, turning a TESTS_FAILED
+        # exit into an internal error. `_write_summary_report` already degrades a failed
+        # write to a warning line; this suppression covers the two things left over - the
+        # enablement lookup and the terminal write itself - for which there is by definition
+        # no way left to report anything.
+        with contextlib.suppress(Exception):
+            if _summary_html_enabled(config):
+                _write_summary_report(config, terminalreporter)
 
     VISITED_CACHED_IMAGE_NAMES.clear()
     SKIPPED_CACHED_IMAGE_NAMES.clear()
@@ -1044,10 +1047,9 @@ def _write_summary_report(config: pytest.Config, terminalreporter: TerminalRepor
 
     try:
         cache_dir = _get_option_from_config_or_ini(config, "image_cache_dir", is_dir=True)
-        report_dir = config.rootpath / str(_get_option_from_config_or_ini(config, "summary_html_dir") or DEFAULT_SUMMARY_HTML_DIR)
         path = write_report(
             read_records(Path(records_dir)),
-            report_dir,
+            _summary_report_dir(config),
             run_id=_pyvista_run_id(config),
             metadata=_summary_report_metadata(config, cache_dir),
             embed=bool(_get_option_from_config_or_ini(config, "summary_html_embed")),
@@ -1136,6 +1138,17 @@ def _summary_html_enabled(pytestconfig: pytest.Config) -> bool:
     return bool(_get_option_from_config_or_ini(pytestconfig, "summary_html_dir"))
 
 
+def _summary_report_dir(pytestconfig: pytest.Config) -> Path:
+    """
+    Return the directory holding the report page and its images.
+
+    One resolution serves both writers: the image store fills ``images/`` during the run and
+    the page is written here at the end of it. Were they to disagree, the page would silently
+    reference images that are not beside it.
+    """
+    return pytestconfig.rootpath / str(_get_option_from_config_or_ini(pytestconfig, "summary_html_dir") or DEFAULT_SUMMARY_HTML_DIR)
+
+
 def _summary_html_statuses(pytestconfig: pytest.Config) -> tuple[str, ...]:
     """Return the statuses to write to the summary report."""
     value = _get_option_from_config_or_ini(pytestconfig, "summary_html_include")
@@ -1176,7 +1189,7 @@ def _make_summary_session(pytestconfig: pytest.Config) -> SummarySession | None:
     from pytest_pyvista.summary.session import SummarySession  # noqa: PLC0415
     from pytest_pyvista.summary.store import ReportImageStore  # noqa: PLC0415
 
-    report_dir = pytestconfig.rootpath / str(_get_option_from_config_or_ini(pytestconfig, "summary_html_dir") or DEFAULT_SUMMARY_HTML_DIR)
+    report_dir = _summary_report_dir(pytestconfig)
     max_size = int(_get_option_from_config_or_ini(pytestconfig, "summary_html_max_image_size") or DEFAULT_SUMMARY_HTML_MAX_IMAGE_SIZE)
     full_size = str(_get_option_from_config_or_ini(pytestconfig, "summary_html_full_size") or DEFAULT_SUMMARY_HTML_FULL_SIZE)
 
