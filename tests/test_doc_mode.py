@@ -12,6 +12,7 @@ import sys
 import pytest
 import pyvista as pv
 
+from pytest_pyvista import doc_mode
 from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
@@ -250,8 +251,15 @@ ALMOST_RED = [254, 0, 0]
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("green", pytest.ExitCode.TESTS_FAILED)]
 )
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
-def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format) -> None:  # noqa: PLR0913
+def test_multiple_cache_images(  # noqa: PLR0913, PLR0917
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, build_color, return_code, nested_subdir, failed_image_dir, image_format
+) -> None:
     """Test when cache is a subdir with multiple images."""
+    if build_color == ALMOST_BLUE:
+        # Lower the warning threshold so that the matching second image is not a
+        # clean match and a warning is emitted for it instead
+        monkeypatch.setattr(doc_mode, "DEFAULT_WARNING_THRESHOLD", -1.0)
+
     cache = "cache"
     images = "images"
     name = f"imcache.{image_format}"
@@ -275,17 +283,18 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
     if build_color == ALMOST_RED:
         # Comparison with first image succeeds without issue
         result.stdout.no_re_match_line(rf".*UserWarning: {partial_match}")
+        result.stdout.no_re_match_line(r".*This test has multiple cached images.*")
 
         # Test no images are saved
         assert not Path(failed).is_dir()
 
     elif build_color == ALMOST_BLUE:
-        # Comparison with first image fails
-        # Expect error was converted to a warning
+        # Comparison with first image errors, but the second image is the closest
+        # match and is only above the warning threshold
         result.stdout.re_match_lines(
             [
-                rf".*UserWarning: {partial_match}",
-                r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
+                r".*UserWarning: imcache Exceeded image regression warning of -1\.0 with an image error of [0-9]+\.[0-9]+",
+                r".*This test has multiple cached images. The closest match was:",
                 f".*im2.{image_format}",
             ]
         )
@@ -305,7 +314,7 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         result.stdout.re_match_lines(
             [
                 rf".*Failed: {partial_match}",
-                r".*This test has multiple cached images. It initially failed \(as above\) and failed again for all images in:",
+                r".*This test has multiple cached images. The closest match was:",
                 ".*" + re.escape(str(Path("cache/imcache"))),
             ]
         )
@@ -322,6 +331,39 @@ def test_multiple_cache_images(pytester: pytest.Pytester, build_color, return_co
         assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_test), str(from_cache))
+
+
+@pytest.mark.parametrize("error_value", [500.0, 100000.0], ids=["initially_errors", "initially_warns"])
+def test_multiple_cache_images_clean_match(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, error_value: float) -> None:
+    """
+    Test that a clean match with any cached image passes silently.
+
+    The first cached image is always compared first and does not match here. Whether
+    that mismatch initially exceeds the error threshold or only the warning threshold,
+    the second cached image is a clean match and so the test must pass without
+    emitting a warning.
+    """
+    monkeypatch.setattr(doc_mode, "DEFAULT_ERROR_THRESHOLD", error_value)
+
+    cache = "cache"
+    images = "images"
+    name = "imcache.png"
+    subdir = Path(name).stem
+    cache_parent = pytester.path / cache
+    make_cached_images(cache_parent, subdir, name="im1.png", color="red")
+    make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
+    make_cached_images(pytester.path, images, name=name, color=ALMOST_BLUE)
+
+    failed = "failed"
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--failed_image_dir", failed]
+    result = pytester.runpytest(*args)
+
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.no_re_match_line(r".*imcache Exceeded image regression.*")
+    result.stdout.no_re_match_line(r".*This test has multiple cached images.*")
+
+    # Test no images are saved
+    assert not Path(failed).is_dir()
 
 
 @pytest.mark.parametrize("include_vtksz", [True, False])

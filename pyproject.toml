@@ -32,7 +32,7 @@ Home = "https://github.com/pyvista/pytest-pyvista"
 
 [project.optional-dependencies]
 docs = [
-  "pydata-sphinx-theme==0.17.1",
+  "pydata-sphinx-theme==0.18.0",
   "sphinx-notfound-page==1.1.0",
   "sphinx==9.1.0",
   "sphinx_copybutton==0.5.2",
@@ -42,7 +42,7 @@ vtksz = ["playwright", "trame-vtk>=2.6"]
 [dependency-groups]
 tests = [
   "codecov<2.2.0",
-  "coverage==7.13.5",
+  "coverage==7.14.1",
   "numpy<2.5",
   "pytest-cov==7.1.0",
   "pytest-pyvista[vtksz]",
@@ -66,7 +66,7 @@ line-length = 150
 docstring-code-format = true
 
 [tool.ruff.lint]
-ignore = ["COM812", "D203", "D212", "ISC001"]
+ignore = ["COM812", "CPY001", "D203", "D212", "ISC001"]
 select = ["ALL"]
 
 [tool.ruff.lint.isort]
