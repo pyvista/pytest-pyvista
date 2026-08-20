@@ -11,6 +11,10 @@ import pyvista
 _MARKER_DEFINITIONS = (
     ("skip_egl(reason=...)", "skip the test when running with a headless OSMesa/EGL VTK build."),
     (
+        "skip_linux(machine=None, reason=...)",
+        "skip the test on Linux; if machine is given (e.g. 'aarch64') only skip when platform.machine() matches.",
+    ),
+    (
         "skip_mac(machine=None, reason=...)",
         "skip the test on macOS; if machine is given (e.g. 'arm64') only skip when platform.machine() matches.",
     ),
@@ -23,7 +27,7 @@ _MARKER_DEFINITIONS = (
 
 
 def register_markers(config: pytest.Config) -> None:
-    """Register the ``skip_egl``, ``skip_mac``, ``skip_windows`` and ``needs_vtk_version`` markers."""
+    """Register the ``skip_egl``, ``skip_linux``, ``skip_mac``, ``skip_windows`` and ``needs_vtk_version`` markers."""
     for signature, description in _MARKER_DEFINITIONS:
         config.addinivalue_line("markers", f"{signature}: {description}")
 
@@ -33,11 +37,11 @@ def register_ini_options(parser: pytest.Parser) -> None:
     parser.addini(
         "raise_obsolete_vtk",
         type="bool",
-        default=True,
+        default=False,
         help=(
             "Error when a `needs_vtk_version` bound is at or below pyvista's own "
             "supported VTK floor, since such a check is guaranteed to always pass and "
-            "can be removed (default: True)."
+            "can be removed (default: False, opt-in)."
         ),
     )
 
@@ -75,6 +79,35 @@ def _pad_version(version: tuple[int, ...]) -> tuple[int, int, int]:
 def _marker_skip_reason(mark: pytest.Mark, default: str) -> str:
     """Return the marker's positional or ``reason=`` skip message, falling back to ``default``."""
     return mark.args[0] if mark.args else mark.kwargs.get("reason", default)
+
+
+def _platform_marker_skip_reason(item_mark: pytest.Mark, system_name: str, default: str) -> str | None:
+    """
+    Return a skip reason for a ``skip_linux``/``skip_mac``-style marker, or ``None``.
+
+    Skips when :func:`platform.system` matches ``system_name``, optionally narrowed
+    further by the marker's ``machine=`` kwarg matching :func:`platform.machine`.
+
+    Parameters
+    ----------
+    item_mark : pytest.Mark
+        The marker collected from the test item.
+    system_name : str
+        The :func:`platform.system` value that should trigger a skip (e.g. ``"Linux"``).
+    default : str
+        Fallback skip reason if the marker gives no ``reason``.
+
+    Returns
+    -------
+    str | None
+        The skip reason if the marker's condition holds, otherwise ``None``.
+
+    """
+    machine = item_mark.kwargs.get("machine")
+    should_skip = platform.system() == system_name
+    if machine is not None:
+        should_skip = should_skip and machine == platform.machine()
+    return _marker_skip_reason(item_mark, default) if should_skip else None
 
 
 def _parse_vtk_version_constraint(
@@ -206,10 +239,10 @@ def _needs_vtk_version_skip_reason(item_mark: pytest.Mark, config: pytest.Config
     supported VTK floor, regardless of whether the installed VTK actually
     satisfies the marker. Instead, this plugin runs its own obsolete-constraint
     check first (see :func:`_obsolete_vtk_version_reason`), gated on the
-    ``raise_obsolete_vtk`` ini option (default: ``True``)
-    so it can be disabled per-project, with a message that names the exact
-    ini setting to flip -- unlike pyvista's own side effect, which cannot be
-    turned off independently of the real comparison.
+    ``raise_obsolete_vtk`` ini option (default: ``False``, opt-in)
+    so a project can enable it deliberately, with a message that names the
+    exact ini setting to flip -- unlike pyvista's own side effect, which
+    cannot be turned off independently of the real comparison.
 
     Parameters
     ----------
@@ -252,7 +285,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     """
     Apply the reusable platform and VTK conditional skip markers.
 
-    Reads the ``skip_egl``, ``skip_mac``, ``skip_windows`` and
+    Reads the ``skip_egl``, ``skip_linux``, ``skip_mac``, ``skip_windows`` and
     ``needs_vtk_version`` markers off ``item`` and calls :func:`pytest.skip`
     when the corresponding condition holds.
     """
@@ -270,11 +303,12 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         if os.name == "nt":
             pytest.skip(reason)
 
-    if item_mark := item.get_closest_marker("skip_mac"):
-        reason = _marker_skip_reason(item_mark, "Test fails on MacOS")
-        machine = item_mark.kwargs.get("machine")
-        should_skip = platform.system() == "Darwin"
-        if machine is not None:
-            should_skip = should_skip and machine == platform.machine()
-        if should_skip:
-            pytest.skip(reason)
+    if (item_mark := item.get_closest_marker("skip_mac")) and (
+        platform_reason := _platform_marker_skip_reason(item_mark, "Darwin", "Test fails on MacOS")
+    ) is not None:
+        pytest.skip(platform_reason)
+
+    if (item_mark := item.get_closest_marker("skip_linux")) and (
+        platform_reason := _platform_marker_skip_reason(item_mark, "Linux", "Test fails on Linux")
+    ) is not None:
+        pytest.skip(platform_reason)
