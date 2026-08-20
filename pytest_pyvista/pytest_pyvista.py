@@ -34,6 +34,7 @@ from pytest_pyvista import hooks
 from pytest_pyvista._markers import pytest_runtest_setup  # noqa: F401
 from pytest_pyvista._markers import register_ini_options
 from pytest_pyvista._markers import register_markers
+from pytest_pyvista._markers import validate_ini_options
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
@@ -962,9 +963,11 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
-    # Register markers unconditionally so they are available even if the
-    # doc-mode CLI validation below raises pytest.UsageError.
+    # Register markers and validate the needs_vtk_version_floor ini option
+    # unconditionally so they take effect even if the doc-mode CLI validation
+    # below raises pytest.UsageError.
     register_markers(config)
+    validate_ini_options(config)
 
     # Validate CLI args
     doc_mode = config.getoption("doc_mode")

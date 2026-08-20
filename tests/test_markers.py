@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import platform
-from typing import TYPE_CHECKING
 
+import pytest
 import pyvista
 from pyvista.plotting.utilities import gl_checks
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -478,58 +475,16 @@ def test_needs_vtk_version_single_component(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(skipped=1)
 
 
-def test_needs_vtk_version_obsolete_check_off_by_default(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    Without `raise_obsolete_vtk = true`, a bound below pyvista's VTK floor does not raise.
-
-    The obsolete-constraint check is opt-in: a project may be pinning an old bound
-    deliberately (e.g. to keep supporting an older pyvista whose floor hasn't caught
-    up yet), so by default the marker just evaluates the bound normally against the
-    (pinned) installed version instead of raising.
-    """
+def test_needs_vtk_version_floor_defaults_to_pyvista_floor(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no `needs_vtk_version_floor` set, a bound at/below pyvista's own floor raises."""
     monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
     pytester.makepyfile(
         """
         import pytest
 
-        @pytest.mark.needs_vtk_version(at_least=(9, 0))
-        def test_obsolete_but_not_checked():
-            pass
-        """
-    )
-    result = pytester.runpytest("-v")
-    result.assert_outcomes(passed=1)
-
-
-def test_needs_vtk_version_obsolete_constraint_raises_when_enabled(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    With `raise_obsolete_vtk = true`, a bound at or below pyvista's VTK floor raises.
-
-    A bound above the floor is unaffected and just evaluates normally. An obsolete
-    bound is guaranteed to always be satisfied (`at_least`) or never satisfied
-    (`less_than`), so it is a stale check a maintainer can safely delete once opted in
-    to this check. The message names the exact ini setting to flip back off if a
-    project wants to keep such checks anyway (e.g. while still supporting an older
-    pyvista). Pins `pyvista.vtk_version_info` and `pyvista._MIN_SUPPORTED_VTK_VERSION`
-    so this does not depend on the VTK or floor the installed pyvista happens to use.
-    """
-    monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
-    monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
-    pytester.makeini(
-        """
-        [pytest]
-        raise_obsolete_vtk = true
-        """
-    )
-    pytester.makepyfile(
-        """
-        import pytest
-
-        # Above the pinned floor, so the enabled check leaves it alone -- it just
-        # evaluates normally against the pinned installed version and passes.
         @pytest.mark.needs_vtk_version(at_least=(9, 3, 0))
-        def test_not_obsolete_still_runs():
+        def test_above_floor_still_runs():
             pass
 
         @pytest.mark.needs_vtk_version(at_least=(9, 0))
@@ -543,9 +498,88 @@ def test_needs_vtk_version_obsolete_constraint_raises_when_enabled(pytester: pyt
     )
     result = pytester.runpytest("-v")
     result.assert_outcomes(passed=1, errors=2)
-    result.stdout.fnmatch_lines(["*at_least=9.0.0*is obsolete*always passes*safely removed*"])
-    result.stdout.fnmatch_lines(["*less_than=9.0.0*is obsolete*can now never pass*safely removed*"])
-    result.stdout.fnmatch_lines(["*raise_obsolete_vtk = false*"])
+    result.stdout.fnmatch_lines(["*at_least=9.0.0*at or below*needs_vtk_version_floor*(9.2.2)*always passes*safely removed*"])
+    result.stdout.fnmatch_lines(["*less_than=9.0.0*at or below*needs_vtk_version_floor*(9.2.2)*can now never pass*safely removed*"])
+    result.stdout.fnmatch_lines(["*needs_vtk_version_floor*to*false*"])
+
+
+def test_needs_vtk_version_floor_false_disables_check(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`needs_vtk_version_floor = false` evaluates a below-floor bound normally instead of raising."""
+    monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
+    monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
+    pytester.makeini(
+        """
+        [pytest]
+        needs_vtk_version_floor = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.needs_vtk_version(at_least=(9, 0))
+        def test_obsolete_but_not_checked():
+            pass
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=1)
+
+
+def test_needs_vtk_version_floor_explicit_version_overrides_pyvista(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit `needs_vtk_version_floor` is used verbatim, independent of pyvista's own floor."""
+    monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
+    monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (0, 0, 1), raising=False)
+    pytester.makeini(
+        """
+        [pytest]
+        needs_vtk_version_floor = 9.5
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.needs_vtk_version(at_least=(9, 6))
+        def test_above_custom_floor_runs():
+            pass
+
+        @pytest.mark.needs_vtk_version(at_least=(9, 0))
+        def test_below_custom_floor_errors():
+            pass
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=1, errors=1)
+    result.stdout.fnmatch_lines(["*needs_vtk_version_floor*(9.5.0)*"])
+
+
+def test_needs_vtk_version_floor_invalid_value_errors(pytester: pytest.Pytester) -> None:
+    """A malformed `needs_vtk_version_floor` fails the whole run with a clear usage error."""
+    pytester.makeini(
+        """
+        [pytest]
+        needs_vtk_version_floor = not-a-version
+        """
+    )
+    pytester.makepyfile("def test_never_collected(): pass")
+    result = pytester.runpytest("-v")
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*Invalid*needs_vtk_version_floor*not-a-version*"])
+
+
+def test_needs_vtk_version_floor_too_many_components_errors(pytester: pytest.Pytester) -> None:
+    """A four-component `needs_vtk_version_floor` fails the run with a clear usage error."""
+    pytester.makeini(
+        """
+        [pytest]
+        needs_vtk_version_floor = 9.3.1.2
+        """
+    )
+    pytester.makepyfile("def test_never_collected(): pass")
+    result = pytester.runpytest("-v")
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(["*Invalid*needs_vtk_version_floor*9.3.1.2*"])
 
 
 def test_needs_vtk_version_obsolete_raise_falls_back_without_vtk_version_error(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -553,18 +587,10 @@ def test_needs_vtk_version_obsolete_raise_falls_back_without_vtk_version_error(p
     The obsolete-constraint raise falls back to `RuntimeError` if pyvista lacks `VTKVersionError`.
 
     Deletes `pyvista.VTKVersionError` via ``monkeypatch`` so the `getattr(...,
-    RuntimeError)` fallback is the branch under test (older pyvista lacks this error
-    class); reverted automatically at teardown. Enables `raise_obsolete_vtk` since the
-    check is opt-in.
+    RuntimeError)` fallback is the branch under test.
     """
     monkeypatch.delattr(pyvista, "VTKVersionError")
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
-    pytester.makeini(
-        """
-        [pytest]
-        raise_obsolete_vtk = true
-        """
-    )
     pytester.makepyfile(
         """
         import pytest
@@ -576,7 +602,7 @@ def test_needs_vtk_version_obsolete_raise_falls_back_without_vtk_version_error(p
     )
     result = pytester.runpytest("-v")
     result.assert_outcomes(errors=1)
-    result.stdout.fnmatch_lines(["*RuntimeError*is obsolete*"])
+    result.stdout.fnmatch_lines(["*RuntimeError*"])
 
 
 def test_needs_vtk_version_custom_reason_in_report(pytester: pytest.Pytester) -> None:

@@ -348,17 +348,24 @@ during test setup.
   tuples are padded with zeros so ``(9, 3)`` compares correctly against
   ``(9, 3, 0)``.
 
-  Opt in to ``raise_obsolete_vtk = true`` to error instead of silently skipping or
-  running forever when a bound is at or below the installed pyvista's own supported
-  VTK floor: such a check is guaranteed to always (or never) be satisfied, so it is
-  stale and safe to delete. Off by default, since a project may be pinning an older
-  bound deliberately (e.g. to keep supporting an older pyvista whose floor hasn't
-  caught up yet):
+  By default, a bound at or below pyvista's own supported VTK floor errors instead of
+  silently skipping or running forever: such a check is guaranteed to always (or never)
+  be satisfied, so it is stale and safe to delete. Control this with
+  ``needs_vtk_version_floor``:
+
+  * unset, or ``true`` (the default) -- use pyvista's own supported VTK floor
+    (``pyvista._MIN_SUPPORTED_VTK_VERSION``).
+  * ``false`` -- disable the check entirely, e.g. for a project that pins an older
+    bound deliberately (to keep supporting an older pyvista whose floor hasn't caught
+    up yet).
+  * a dotted VTK version (e.g. ``"9.3"`` or ``"9.3.1"``) -- use that as the floor
+    instead of pyvista's own, e.g. to match the actual minimum VTK the project itself
+    still supports.
 
   .. code-block:: toml
 
       [tool.pytest.ini_options]
-      raise_obsolete_vtk = true
+      needs_vtk_version_floor = false
 
 .. code-block:: python
 
