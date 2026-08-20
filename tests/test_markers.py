@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import platform
+
 import pytest
 import pyvista
 
@@ -123,27 +125,36 @@ def test_needs_vtk_version_tuple_padding(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1, skipped=2)
 
 
-def test_skip_windows_and_mac_run_on_linux(pytester: pytest.Pytester) -> None:
-    """On this Linux box skip_windows and skip_mac do not skip."""
+def test_skip_windows_and_mac_only_skip_on_their_own_platform(pytester: pytest.Pytester) -> None:
+    """
+    skip_windows and skip_mac only skip on their own platform, whatever this runs on.
+
+    CI runs this suite on Linux, macOS, and Windows, so the expected outcome is
+    computed from the current platform instead of assuming Linux (previously this
+    hardcoded passed=3, which only holds on Linux and failed on the other two).
+    """
     pytester.makepyfile(
         """
         import pytest
 
         @pytest.mark.skip_windows
-        def test_not_windows():
+        def test_windows_marker():
             pass
 
         @pytest.mark.skip_mac
-        def test_not_mac():
+        def test_mac_marker():
             pass
 
         @pytest.mark.skip_mac(machine="arm64")
-        def test_not_mac_arm64():
+        def test_mac_arm64_marker():
             pass
         """
     )
     result = pytester.runpytest("-v")
-    result.assert_outcomes(passed=3)
+
+    system = platform.system()
+    skipped = int(system == "Windows") + int(system == "Darwin") + int(system == "Darwin" and platform.machine() == "arm64")
+    result.assert_outcomes(passed=3 - skipped, skipped=skipped)
 
 
 def test_skip_windows_skips_when_windows(pytester: pytest.Pytester) -> None:
