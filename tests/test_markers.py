@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import pytest
+import pytest
+import pyvista
 
 
 def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester) -> None:
@@ -22,7 +20,11 @@ def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester)
         def test_at_least_higher():
             pass
 
-        @pytest.mark.needs_vtk_version(less_than=(1, 0))
+        # A `less_than` bound must stay at or above the plugin's own supported
+        # VTK floor (9.2.2, see README) -- anything lower is an obsolete
+        # constraint that `pyvista.vtk_version_info`'s own comparison raises
+        # on for free (see test_needs_vtk_version_obsolete_constraint_raises).
+        @pytest.mark.needs_vtk_version(less_than=(9, 2, 2))
         def test_less_than_lower():
             pass
         """
@@ -41,7 +43,10 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> Non
         def test_positional_satisfied():
             pass
 
-        @pytest.mark.needs_vtk_version(at_least=(9, 0))
+        # `at_least` must stay at or above the plugin's own supported VTK
+        # floor (9.2.2, see README) to avoid the obsolete-constraint raise
+        # that `pyvista.vtk_version_info` triggers for free on older bounds.
+        @pytest.mark.needs_vtk_version(at_least=(9, 2, 2))
         def test_at_least_satisfied():
             pass
 
@@ -49,7 +54,7 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> Non
         def test_less_than_satisfied():
             pass
 
-        @pytest.mark.needs_vtk_version(at_least=(9, 0), less_than=(99, 0))
+        @pytest.mark.needs_vtk_version(at_least=(9, 2, 2), less_than=(99, 0))
         def test_range_satisfied():
             pass
         """
@@ -59,28 +64,40 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> Non
 
 
 def test_needs_vtk_version_tuple_padding(pytester: pytest.Pytester) -> None:
-    """A short version tuple is padded so (9, 6) compares against (9, 6, 1)."""
+    """
+    A short version tuple is padded so (9, 6) compares against (9, 6, 1).
+
+    Pins ``pyvista.vtk_version_info`` at module scope, so this must run in a
+    subprocess -- an in-process run would leak the pinned plain tuple into
+    the outer suite, since pytester's in-process runner shares the same
+    ``pyvista`` module object as the tests that follow it in this file.
+    """
     pytester.makepyfile(
         """
+        import pyvista as pv
         import pytest
 
-        # Installed is 9.6.1; (9, 6) -> (9, 6, 0) which is <= installed, so it runs.
+        # Pin the installed version so this test does not depend on the VTK
+        # actually installed in the environment.
+        pv.vtk_version_info = (9, 6, 1)
+
+        # (9, 6) -> (9, 6, 0) which is <= pinned (9, 6, 1), so it runs.
         @pytest.mark.needs_vtk_version(9, 6)
         def test_padded_runs():
             pass
 
-        # (9, 6, 2) > installed (9, 6, 1), so it skips.
+        # (9, 6, 2) > pinned (9, 6, 1), so it skips.
         @pytest.mark.needs_vtk_version(9, 6, 2)
         def test_padded_skips():
             pass
 
-        # less_than=(9, 6) -> (9, 6, 0); installed (9, 6, 1) >= that, so it skips.
+        # less_than=(9, 6) -> (9, 6, 0); pinned (9, 6, 1) >= that, so it skips.
         @pytest.mark.needs_vtk_version(less_than=(9, 6))
         def test_padded_less_than_skips():
             pass
         """
     )
-    result = pytester.runpytest("-v")
+    result = pytester.runpytest_subprocess("-v")
     result.assert_outcomes(passed=1, skipped=2)
 
 
@@ -256,7 +273,7 @@ def test_needs_vtk_version_too_many_components_errors(pytester: pytest.Pytester)
 
 
 def test_needs_vtk_version_string_component_errors(pytester: pytest.Pytester) -> None:
-    """A string version component raises a clear UsageError, not an opaque TypeError."""
+    """A string version component raises a clear TypeError, not an opaque one."""
     pytester.makepyfile(
         """
         import pytest
@@ -268,19 +285,14 @@ def test_needs_vtk_version_string_component_errors(pytester: pytest.Pytester) ->
     )
     result = pytester.runpytest("-v")
     result.assert_outcomes(errors=1)
-    result.stdout.fnmatch_lines(["*must be integers*"])
+    result.stdout.fnmatch_lines(["*must be a tuple of integers*"])
 
 
 def test_needs_vtk_version_single_component(pytester: pytest.Pytester) -> None:
-    """A single-component positional version runs or skips correctly."""
+    """A single-component positional version pads to (N, 0, 0) and skips correctly."""
     pytester.makepyfile(
         """
         import pytest
-
-        # Installed VTK is 9.x, so (9,) -> (9, 0, 0) is satisfied -> runs.
-        @pytest.mark.needs_vtk_version(9)
-        def test_single_runs():
-            pass
 
         # (99,) -> (99, 0, 0) far exceeds installed -> skips.
         @pytest.mark.needs_vtk_version(99)
@@ -289,7 +301,35 @@ def test_needs_vtk_version_single_component(pytester: pytest.Pytester) -> None:
         """
     )
     result = pytester.runpytest("-v")
-    result.assert_outcomes(passed=1, skipped=1)
+    result.assert_outcomes(skipped=1)
+
+
+def test_needs_vtk_version_obsolete_constraint_raises_for_free(pytester: pytest.Pytester) -> None:
+    """
+    A single-component ``at_least`` below the plugin's VTK floor is obsolete and errors.
+
+    Because the padded minor/micro are always zero, ``needs_vtk_version(9)`` pads to
+    ``(9, 0, 0)`` -- below the 9.2.2 floor this plugin documents as its minimum
+    supported VTK version (see README). The plugin does not check for this itself:
+    the error comes straight out of comparing against ``pyvista.vtk_version_info``,
+    which raises on this comparison on its own on pyvista versions where it is
+    version-aware.
+    """
+    if not hasattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION"):
+        pytest.skip("requires a pyvista with a version-aware vtk_version_info")
+
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.needs_vtk_version(9)
+        def test_obsolete_constraint():
+            pass
+        """
+    )
+    result = pytester.runpytest("-v")
+    result.assert_outcomes(errors=1)
+    result.stdout.fnmatch_lines(["*VTKVersionError*unsupported VTK version*"])
 
 
 def test_needs_vtk_version_custom_reason_in_report(pytester: pytest.Pytester) -> None:

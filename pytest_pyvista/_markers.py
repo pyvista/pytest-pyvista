@@ -28,9 +28,9 @@ def register_markers(config: pytest.Config) -> None:
         config.addinivalue_line("markers", f"{signature}: {description}")
 
 
-def _pad_version(version: tuple[int, ...]) -> tuple[int, ...]:
+def _pad_version(version: tuple[int, ...]) -> tuple[int, int, int]:
     """
-    Pad a version tuple with trailing zeros to a length of three.
+    Validate and pad a version tuple with trailing zeros to a length of three.
 
     This makes shorter tuples such as ``(9, 3)`` compare correctly against the
     three-element :data:`pyvista.vtk_version_info` named tuple (e.g.
@@ -43,15 +43,19 @@ def _pad_version(version: tuple[int, ...]) -> tuple[int, ...]:
 
     Returns
     -------
-    tuple[int, ...]
+    tuple[int, int, int]
         The version tuple right-padded with zeros to a length of three.
 
     """
+    if not all(isinstance(item, int) for item in version):
+        msg = f"Version must be a tuple of integers, got {version!r}."
+        raise TypeError(msg)
+
     expected = 3
-    if len(version) > expected:
-        msg = f"Version tuple incorrect length (needs <= {expected})"
+    if (length := len(version)) > expected:
+        msg = f"Version tuple incorrect length (needs <= {expected}), got {version!r}."
         raise ValueError(msg)
-    return version + (0,) * (expected - len(version))
+    return (*version, *(0,) * (expected - length))  # type: ignore[return-value]
 
 
 def _marker_skip_reason(mark: pytest.Mark, default: str) -> str:
@@ -59,11 +63,69 @@ def _marker_skip_reason(mark: pytest.Mark, default: str) -> str:
     return mark.args[0] if mark.args else mark.kwargs.get("reason", default)
 
 
-def _validate_version_components(version: tuple[int, ...], origin: str) -> None:
-    """Raise a clear ``pytest.UsageError`` if any version component is not an int."""
-    if not all(isinstance(part, int) for part in version):
-        msg = f"`needs_vtk_version` {origin} must be integers, got {version!r}."
-        raise pytest.UsageError(msg)
+def _parse_vtk_version_constraint(
+    item_mark: pytest.Mark,
+) -> tuple[tuple[int, int, int] | None, tuple[int, int, int] | None]:
+    """
+    Normalize a ``needs_vtk_version`` marker as a pair of minimum and maximum versions.
+
+    Supports the positional form (``needs_vtk_version(9, 3)`` means
+    ``at_least=(9, 3)``) and the explicit ``at_least=``/``less_than=`` tuple
+    forms.
+
+    Parameters
+    ----------
+    item_mark : pytest.Mark
+        The ``needs_vtk_version`` marker collected from the test item.
+
+    Returns
+    -------
+    tuple[tuple[int, int, int] | None, tuple[int, int, int] | None]
+        The padded ``(minimum, maximum)`` version bound. Either element may be
+        ``None`` if that bound was not specified.
+
+    """
+    versions = item_mark.args
+    at_least = item_mark.kwargs.get("at_least")
+    less_than = item_mark.kwargs.get("less_than")
+
+    if versions and at_least is not None:
+        msg = "Cannot specify both positional versions and the `at_least` keyword argument to the `needs_vtk_version` marker."
+        raise ValueError(msg)
+
+    minimum_: tuple[int, ...] | None
+    if versions:
+        first = versions[0]
+        minimum_ = first if len(versions) == 1 and isinstance(first, tuple) else versions
+    else:
+        minimum_ = at_least
+        if minimum_ is None and less_than is None:
+            msg = "Need to specify either `at_least` or `less_than` keyword arguments to the `needs_vtk_version` marker."
+            raise ValueError(msg)
+
+    minimum = _pad_version(tuple(minimum_)) if minimum_ is not None else None
+    maximum = _pad_version(tuple(less_than)) if less_than is not None else None
+
+    if minimum is not None and maximum is not None and minimum > maximum:
+        msg = "Cannot specify a minimum version greater than the maximum one."
+        raise ValueError(msg)
+
+    return minimum, maximum
+
+
+def _default_reason(
+    minimum: tuple[int, int, int] | None,
+    maximum: tuple[int, int, int] | None,
+    current: tuple[int, ...],
+) -> str:
+    """Generate a message describing an unsatisfied ``needs_vtk_version`` constraint."""
+    if maximum is None:
+        requirement = f"VTK version {'.'.join(map(str, minimum))} or greater"  # type: ignore[arg-type]
+    elif minimum is None:
+        requirement = f"a VTK version less than {'.'.join(map(str, maximum))}"
+    else:
+        requirement = f"a VTK version of at least {'.'.join(map(str, minimum))} and less than {'.'.join(map(str, maximum))}"
+    return f"Test needs {requirement}. The installed version is {'.'.join(map(str, current))}."
 
 
 def _uses_egl() -> bool:
@@ -85,10 +147,11 @@ def _needs_vtk_version_skip_reason(item_mark: pytest.Mark) -> str | None:
     """
     Evaluate a ``needs_vtk_version`` marker against the running VTK version.
 
-    Supports the positional form (``needs_vtk_version(9, 3)`` means
-    ``at_least=(9, 3)``) and the explicit ``at_least=``/``less_than=`` tuple
-    forms. Version tuples are padded to length three so ``(9, 3)`` compares
-    correctly against ``(9, 3, 0)``.
+    The comparison is made directly against :data:`pyvista.vtk_version_info`
+    (not a plain tuple derived from it) so that, on pyvista versions where it
+    is a version-aware type, comparing against a constraint older than
+    pyvista's own supported VTK floor raises for free — the plugin does not
+    reimplement that check.
 
     Parameters
     ----------
@@ -102,48 +165,12 @@ def _needs_vtk_version_skip_reason(item_mark: pytest.Mark) -> str | None:
         bound, otherwise ``None``.
 
     """
-    args = tuple(item_mark.args)
-    at_least = item_mark.kwargs.get("at_least")
-    less_than = item_mark.kwargs.get("less_than")
+    minimum, maximum = _parse_vtk_version_constraint(item_mark)
     reason = item_mark.kwargs.get("reason")
+    current = pyvista.vtk_version_info
 
-    if args and at_least is not None:
-        msg = "Cannot specify both *args and the `at_least` keyword argument to the `needs_vtk_version` marker."
-        raise ValueError(msg)
-
-    if args:
-        _min = args[0] if len(args) == 1 and isinstance(args[0], tuple) else args
-        _max = less_than
-    else:
-        _min = at_least
-        _max = less_than
-        if _min is None and _max is None:
-            msg = "Need to specify either `at_least` or `less_than` keyword arguments to the `needs_vtk_version` marker."
-            raise ValueError(msg)
-
-    if _min is not None:
-        _min = tuple(_min)
-        _validate_version_components(_min, "version components")
-        _min = _pad_version(_min)
-    if _max is not None:
-        _max = tuple(_max)
-        _validate_version_components(_max, "`less_than` version components")
-        _max = _pad_version(_max)
-
-    if _min is not None and _max is not None and _min > _max:
-        msg = "Cannot specify a minimum version greater than the maximum one."
-        raise ValueError(msg)
-
-    curr_version = tuple(pyvista.vtk_version_info)
-
-    if _max is None and _min is not None and curr_version < _min:
-        return reason or f"Test needs VTK version >= {_min}, current is {curr_version}."
-
-    if _min is None and _max is not None and curr_version >= _max:
-        return reason or f"Test needs VTK version < {_max}, current is {curr_version}."
-
-    if _min is not None and _max is not None and (curr_version < _min or curr_version >= _max):
-        return reason or f"Test needs {_min} <= VTK version < {_max}, current is {curr_version}."
+    if (minimum is not None and current < minimum) or (maximum is not None and current >= maximum):
+        return reason if reason is not None else _default_reason(minimum, maximum, tuple(current))
 
     return None
 

@@ -336,7 +336,9 @@ during test setup.
   skips the test unless the running VTK version satisfies the given bound. The
   positional form ``needs_vtk_version(9, 3)`` means ``at_least=(9, 3)``. Version
   tuples are padded with zeros so ``(9, 3)`` compares correctly against
-  ``(9, 3, 0)``.
+  ``(9, 3, 0)``. On pyvista versions where ``pyvista.vtk_version_info`` is
+  version-aware, a bound older than pyvista's own minimum supported VTK version
+  raises on its own -- the marker does not reimplement that check.
 
 .. code-block:: python
 
