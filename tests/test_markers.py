@@ -10,15 +10,7 @@ from pyvista.plotting.utilities import gl_checks
 
 
 def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    needs_vtk_version skips when requiring a version higher than installed.
-
-    Pins ``pyvista.vtk_version_info`` and ``pyvista._MIN_SUPPORTED_VTK_VERSION`` via
-    ``monkeypatch`` so this does not depend on the VTK actually installed in the
-    environment, nor on pyvista's own supported floor. The patch is visible to
-    pytester's in-process run since it shares the same ``pyvista`` module, and is
-    reverted automatically at teardown.
-    """
+    """needs_vtk_version skips when requiring a version higher than installed."""
     monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
     pytester.makepyfile(
@@ -43,13 +35,7 @@ def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester,
 
 
 def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    needs_vtk_version runs when the installed version satisfies the bound.
-
-    Pins ``pyvista.vtk_version_info`` and ``pyvista._MIN_SUPPORTED_VTK_VERSION`` via
-    ``monkeypatch`` so this does not depend on the VTK actually installed in the
-    environment, nor on pyvista's own supported floor.
-    """
+    """needs_vtk_version runs when the installed version satisfies the bound."""
     monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
     pytester.makepyfile(
@@ -78,13 +64,7 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester, monkey
 
 
 def test_needs_vtk_version_tuple_padding(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    A short version tuple is padded so (9, 6) compares against (9, 6, 1).
-
-    Pins ``pyvista.vtk_version_info`` and ``pyvista._MIN_SUPPORTED_VTK_VERSION`` via
-    ``monkeypatch`` so this does not depend on the VTK actually installed in the
-    environment, nor on pyvista's own supported floor.
-    """
+    """A short version tuple is padded so (9, 6) compares against (9, 6, 1)."""
     monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
     pytester.makepyfile(
@@ -112,14 +92,7 @@ def test_needs_vtk_version_tuple_padding(pytester: pytest.Pytester, monkeypatch:
 
 
 def test_needs_vtk_version_range_skips_when_only_max_violated(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    A range bound skips when only the `less_than` side is violated.
-
-    The other range test (test_needs_vtk_version_skips_when_higher_required) only
-    exercises a violated `at_least` side; this covers the other half of the ``or``
-    in the version comparison. Pins ``pyvista.vtk_version_info`` and
-    ``pyvista._MIN_SUPPORTED_VTK_VERSION`` for determinism.
-    """
+    """A range bound skips when only the `less_than` side is violated."""
     monkeypatch.setattr(pyvista, "vtk_version_info", (9, 6, 1))
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
     pytester.makepyfile(
@@ -136,14 +109,7 @@ def test_needs_vtk_version_range_skips_when_only_max_violated(pytester: pytest.P
 
 
 def test_needs_vtk_version_default_reason_messages(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    The auto-generated skip reason covers all three ``needs_vtk_version`` bound shapes.
-
-    Pins ``pyvista.vtk_version_info`` below ``pyvista._MIN_SUPPORTED_VTK_VERSION``'s
-    installed value so an ``at_least``-only, a ``less_than``-only, and a range bound
-    can each be genuinely unsatisfied (and skip with their default message) without
-    tripping the obsolete-constraint check.
-    """
+    """The auto-generated skip reason covers all three ``needs_vtk_version`` bound shapes."""
     monkeypatch.setattr(pyvista, "vtk_version_info", (9, 0, 0))
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (8, 0, 0), raising=False)
     pytester.makepyfile(
@@ -175,8 +141,7 @@ def test_skip_windows_mac_linux_only_skip_on_their_own_platform(pytester: pytest
     skip_windows, skip_mac and skip_linux only skip on their own platform.
 
     CI runs this suite on Linux, macOS, and Windows, so the expected outcome is
-    computed from the current platform instead of assuming Linux (previously this
-    hardcoded passed=3, which only holds on Linux and failed on the other two).
+    computed from the current platform instead of assuming Linux.
     """
     pytester.makepyfile(
         """
@@ -358,13 +323,7 @@ def test_skip_egl_runs_when_not_detected(pytester: pytest.Pytester) -> None:
 
 
 def test_skip_egl_survives_uses_egl_import_error(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    `_uses_egl` degrades gracefully to `False` when the private `uses_egl` helper is absent.
-
-    Deletes it from `gl_checks` via ``monkeypatch`` so the `except ImportError` guard is
-    the branch under test (older pyvista lacks this helper); reverted automatically at
-    teardown.
-    """
+    """`_uses_egl` degrades gracefully to `False` when the private `uses_egl` helper is absent."""
     monkeypatch.delattr(gl_checks, "uses_egl")
     pytester.makepyfile(
         """
@@ -583,12 +542,7 @@ def test_needs_vtk_version_floor_too_many_components_errors(pytester: pytest.Pyt
 
 
 def test_needs_vtk_version_obsolete_raise_falls_back_without_vtk_version_error(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    The obsolete-constraint raise falls back to `RuntimeError` if pyvista lacks `VTKVersionError`.
-
-    Deletes `pyvista.VTKVersionError` via ``monkeypatch`` so the `getattr(...,
-    RuntimeError)` fallback is the branch under test.
-    """
+    """The obsolete-constraint raise falls back to `RuntimeError` if pyvista lacks `VTKVersionError`."""
     monkeypatch.delattr(pyvista, "VTKVersionError")
     monkeypatch.setattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", (9, 2, 2), raising=False)
     pytester.makepyfile(

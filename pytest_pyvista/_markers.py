@@ -50,38 +50,25 @@ def register_ini_options(parser: pytest.Parser) -> None:
 
 
 def validate_ini_options(config: pytest.Config) -> None:
-    """
-    Eagerly parse and validate the ``needs_vtk_version_floor`` ini option.
-
-    Stores the resolved floor (or ``None`` to disable the check) as a private
-    attribute on ``config`` so :func:`_needs_vtk_version_skip_reason` does not
-    reparse it for every ``needs_vtk_version``-marked test, and so a malformed
-    value surfaces immediately as a :class:`pytest.UsageError` at configure time
-    rather than on the first test that happens to use the marker.
-    """
+    """Parse and validate ``needs_vtk_version_floor`` once, caching the result on ``config``."""
     setattr(config, _FLOOR_CONFIG_ATTR, _resolve_needs_vtk_version_floor(config.getini(_FLOOR_INI_OPTION)))
 
 
 def _resolve_needs_vtk_version_floor(raw: str) -> tuple[int, int, int] | None:
     """
-    Resolve the ``needs_vtk_version_floor`` ini value to a floor tuple, or ``None`` to disable.
-
-    Empty (the default) or the literal ``"true"`` resolves to pyvista's own
-    ``_MIN_SUPPORTED_VTK_VERSION`` if pyvista exposes it, degrading to disabled on
-    older pyvista that lacks it. The literal ``"false"`` disables the check entirely.
-    Any other value is parsed as a dotted VTK version (e.g. ``"9.3"`` or ``"9.3.1"``)
-    and used as an explicit floor instead of pyvista's own.
+    Resolve ``needs_vtk_version_floor`` to a floor tuple, or ``None`` to disable the check.
 
     Parameters
     ----------
     raw : str
-        The raw ``needs_vtk_version_floor`` ini value.
+        The raw ini value: ``""``/``"true"`` for pyvista's own
+        ``_MIN_SUPPORTED_VTK_VERSION`` (degrading to disabled if pyvista lacks it),
+        ``"false"`` to disable, or a dotted VTK version (e.g. ``"9.3"``) to use instead.
 
     Returns
     -------
     tuple[int, int, int] | None
-        The floor to compare ``needs_vtk_version`` bounds against, or ``None`` if the
-        check is disabled.
+        The floor to compare ``needs_vtk_version`` bounds against, or ``None`` if disabled.
 
     Raises
     ------
@@ -113,11 +100,7 @@ def _resolve_needs_vtk_version_floor(raw: str) -> tuple[int, int, int] | None:
 
 def _pad_version(version: tuple[int, ...]) -> tuple[int, int, int]:
     """
-    Validate and pad a version tuple with trailing zeros to a length of three.
-
-    This makes shorter tuples such as ``(9, 3)`` compare correctly against the
-    three-element :data:`pyvista.vtk_version_info` named tuple (e.g.
-    ``(9, 3, 0)``).
+    Validate and pad a version tuple to length three, e.g. ``(9, 3)`` -> ``(9, 3, 0)``.
 
     Parameters
     ----------
@@ -150,9 +133,6 @@ def _platform_marker_skip_reason(item_mark: pytest.Mark, system_name: str, defau
     """
     Return a skip reason for a ``skip_linux``/``skip_mac``-style marker, or ``None``.
 
-    Skips when :func:`platform.system` matches ``system_name``, optionally narrowed
-    further by the marker's ``machine=`` kwarg matching :func:`platform.machine`.
-
     Parameters
     ----------
     item_mark : pytest.Mark
@@ -181,9 +161,7 @@ def _parse_vtk_version_constraint(
     """
     Normalize a ``needs_vtk_version`` marker as a pair of minimum and maximum versions.
 
-    Supports the positional form (``needs_vtk_version(9, 3)`` means
-    ``at_least=(9, 3)``) and the explicit ``at_least=``/``less_than=`` tuple
-    forms.
+    The positional form (``needs_vtk_version(9, 3)``) means ``at_least=(9, 3)``.
 
     Parameters
     ----------
@@ -242,9 +220,7 @@ def _default_reason(
 
 def _obsolete_vtk_version_reason(keyword: str, bound: tuple[int, int, int], floor: tuple[int, int, int]) -> str | None:
     """
-    Return a message if ``bound`` is guaranteed to be satisfied by any VTK at or above ``floor``.
-
-    ``None`` if ``bound`` is above ``floor``.
+    Return a message if ``bound`` is at or below ``floor``, otherwise ``None``.
 
     Parameters
     ----------
@@ -280,13 +256,7 @@ def _obsolete_vtk_version_reason(keyword: str, bound: tuple[int, int, int], floo
 
 
 def _uses_egl() -> bool:
-    """
-    Return whether the running VTK is a headless OSMesa/EGL build.
-
-    The ``uses_egl`` helper lives at a private path that is not guaranteed on
-    older supported pyvista (>=0.37); when it cannot be imported the safe
-    fallback is ``False`` so the test runs instead of being skipped.
-    """
+    """Return whether the running VTK is a headless OSMesa/EGL build, defaulting to ``False``."""
     try:
         from pyvista.plotting.utilities.gl_checks import uses_egl  # noqa: PLC0415
     except ImportError:
@@ -298,24 +268,12 @@ def _needs_vtk_version_skip_reason(item_mark: pytest.Mark, config: pytest.Config
     """
     Evaluate a ``needs_vtk_version`` marker against the running VTK version.
 
-    The version comparison itself is made against a plain tuple copy of
-    :data:`pyvista.vtk_version_info`, not the object itself -- comparing it
-    directly would raise whenever the *constraint* is older than pyvista's own
-    supported VTK floor, regardless of whether the installed VTK actually
-    satisfies the marker. Instead, this plugin runs its own obsolete-constraint
-    check first (see :func:`_obsolete_vtk_version_reason`), against the floor
-    resolved by :func:`validate_ini_options` from the ``needs_vtk_version_floor``
-    ini option, with a message that names the exact ini setting to change --
-    unlike pyvista's own side effect, which cannot be turned off or retargeted
-    independently of the real comparison.
-
     Parameters
     ----------
     item_mark : pytest.Mark
         The ``needs_vtk_version`` marker collected from the test item.
     config : pytest.Config
-        The pytest config, used to read the floor resolved by
-        :func:`validate_ini_options`.
+        The pytest config, used to read the floor resolved by :func:`validate_ini_options`.
 
     Returns
     -------
@@ -348,13 +306,7 @@ def _needs_vtk_version_skip_reason(item_mark: pytest.Mark, config: pytest.Config
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
-    """
-    Apply the reusable platform and VTK conditional skip markers.
-
-    Reads the ``skip_egl``, ``skip_linux``, ``skip_mac``, ``skip_windows`` and
-    ``needs_vtk_version`` markers off ``item`` and calls :func:`pytest.skip`
-    when the corresponding condition holds.
-    """
+    """Apply the ``skip_egl``, ``skip_linux``, ``skip_mac``, ``skip_windows`` and ``needs_vtk_version`` markers."""
     for item_mark in item.iter_markers("needs_vtk_version"):
         if (skip_reason := _needs_vtk_version_skip_reason(item_mark, item.config)) is not None:
             pytest.skip(skip_reason)

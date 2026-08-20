@@ -963,9 +963,8 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
-    # Register markers and validate the needs_vtk_version_floor ini option
-    # unconditionally so they take effect even if the doc-mode CLI validation
-    # below raises pytest.UsageError.
+    # Register markers/ini options unconditionally so they take effect even
+    # if the doc-mode CLI validation below raises pytest.UsageError.
     register_markers(config)
     validate_ini_options(config)
 
