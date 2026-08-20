@@ -7,10 +7,21 @@ import pyvista
 
 
 def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester) -> None:
-    """needs_vtk_version skips when requiring a version higher than installed."""
+    """
+    needs_vtk_version skips when requiring a version higher than installed.
+
+    Pins ``pyvista.vtk_version_info`` at module scope so this does not depend
+    on the VTK actually installed in the environment (a bare ``needs_vtk_version(9, 9)``
+    would otherwise start passing the day CI's VTK reaches 9.9). Must run in a
+    subprocess since pytester's in-process runner shares the live ``pyvista``
+    module with the tests that follow it in this file.
+    """
     pytester.makepyfile(
         """
+        import pyvista as pv
         import pytest
+
+        pv.vtk_version_info = (9, 6, 1)
 
         @pytest.mark.needs_vtk_version(9, 9)
         def test_positional_higher():
@@ -29,15 +40,26 @@ def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester)
             pass
         """
     )
-    result = pytester.runpytest("-v")
+    result = pytester.runpytest_subprocess("-v")
     result.assert_outcomes(skipped=3)
 
 
 def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> None:
-    """needs_vtk_version runs when the installed version satisfies the bound."""
+    """
+    needs_vtk_version runs when the installed version satisfies the bound.
+
+    Pins ``pyvista.vtk_version_info`` at module scope so this does not depend
+    on the VTK actually installed in the environment (a bare ``needs_vtk_version(9, 6)``
+    would otherwise skip on any CI runner with an older VTK). Must run in a
+    subprocess since pytester's in-process runner shares the live ``pyvista``
+    module with the tests that follow it in this file.
+    """
     pytester.makepyfile(
         """
+        import pyvista as pv
         import pytest
+
+        pv.vtk_version_info = (9, 6, 1)
 
         @pytest.mark.needs_vtk_version(9, 6)
         def test_positional_satisfied():
@@ -59,7 +81,7 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> Non
             pass
         """
     )
-    result = pytester.runpytest("-v")
+    result = pytester.runpytest_subprocess("-v")
     result.assert_outcomes(passed=4)
 
 
