@@ -988,10 +988,15 @@ def test_multiple_cache_images(  # noqa: PLR0913
     red_filename = make_cached_images(cache_parent, subdir, name=f"im1.{image_format}", color="red")
     blue_filename = make_cached_images(cache_parent, subdir, name=f"im2.{image_format}", color="blue")
 
+    # For the ALMOST_BLUE case, lower the warning threshold so that the matching
+    # second image is not a clean match and a warning is emitted for it instead
+    warning_value = -1.0 if build_color == ALMOST_BLUE else 200.0
+
     pyfile = f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
+            verify_image_cache.warning_value = {warning_value}
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color={build_color})
@@ -1012,17 +1017,18 @@ def test_multiple_cache_images(  # noqa: PLR0913
     if build_color == ALMOST_RED:
         # Comparison with first image succeeds without issue
         result.stdout.no_re_match_line(rf".*UserWarning: {partial_match}")
+        result.stdout.no_re_match_line(r".*This test has multiple cached images.*")
 
         # Test no images are saved
         assert not Path(failed).is_dir()
 
     elif build_color == ALMOST_BLUE:
-        # Comparison with first image fails
-        # Expect error was converted to a warning
+        # Comparison with first image errors, but the second image is the closest
+        # match and is only above the warning threshold
         result.stdout.re_match_lines(
             [
-                rf".*UserWarning: {partial_match}",
-                r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
+                r".*UserWarning: imcache Exceeded image regression warning of -1\.0 with an image error of [0-9]+\.[0-9]+",
+                r".*This test has multiple cached images. The closest match was:",
                 f".*im2.{image_format}",
             ]
         )
@@ -1042,7 +1048,7 @@ def test_multiple_cache_images(  # noqa: PLR0913
         result.stdout.re_match_lines(
             [
                 rf".*RegressionError: {partial_match}",
-                r".*This test has multiple cached images. It initially failed \(as above\) and failed again for all images in:",
+                r".*This test has multiple cached images. The closest match was:",
                 f".*{re.escape(str(Path('cache/imcache')))}",
             ]
         )
@@ -1059,6 +1065,47 @@ def test_multiple_cache_images(  # noqa: PLR0913
         assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_test), str(from_cache))
+
+
+@pytest.mark.parametrize("error_value", [500.0, 100000.0], ids=["initially_errors", "initially_warns"])
+def test_multiple_cache_images_clean_match(pytester: pytest.Pytester, error_value: float) -> None:
+    """
+    Test that a clean match with any cached image passes silently.
+
+    The first cached image is always compared first and does not match here. Whether
+    that mismatch initially exceeds the error threshold or only the warning threshold,
+    the second cached image is a clean match and so the test must pass without
+    emitting a warning.
+    """
+    cache = "cache"
+    name = "imcache.png"
+    subdir = Path(name).stem
+    cache_parent = pytester.path / cache
+    make_cached_images(cache_parent, subdir, name="im1.png", color="red")
+    make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
+
+    pytester.makepyfile(
+        f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            verify_image_cache.error_value = {error_value}
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color={ALMOST_BLUE})
+            plotter.show()
+        """
+    )
+
+    failed = "failed"
+    result = pytester.runpytest("--image_cache_dir", cache, "--failed_image_dir", failed)
+
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.no_re_match_line(r".*imcache Exceeded image regression.*")
+    result.stdout.no_re_match_line(r".*This test has multiple cached images.*")
+
+    # Test no images are saved
+    assert not Path(failed).is_dir()
 
 
 @pytest.mark.parametrize("on_ci", [True, False], ids=["on_ci", "not_on_ci"])
