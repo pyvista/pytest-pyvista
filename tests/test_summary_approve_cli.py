@@ -119,6 +119,24 @@ def test_empty_cache_dir_manifest_is_rejected(project: Path) -> None:
     assert main(["approvals.json", "--target", "cache"]) == 1
 
 
+def test_root_image_cache_dir_flag_is_rejected_even_with_force(project: Path) -> None:
+    """--image_cache_dir / is rejected outright: the manifest-side root guard means nothing if the CLI-side flag can still name the root."""
+    victim = project.parent / "victim.txt"
+    victim.write_bytes(b"irreplaceable-victim-data")
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["approved"][0]["destination"] = str(victim)
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache", "--force", "--image_cache_dir", "/"]) == 1
+    assert victim.read_bytes() == b"irreplaceable-victim-data"
+
+
+@pytest.mark.usefixtures("project")
+def test_empty_image_cache_dir_flag_is_rejected() -> None:
+    """--image_cache_dir '' is rejected outright, the same as an empty manifest cache_dir."""
+    assert main(["approvals.json", "--target", "cache", "--image_cache_dir", ""]) == 1
+
+
 def test_symlinked_staging_destination_is_not_followed(project: Path) -> None:
     """A pre-existing symlink at the staging destination, pointing outside staging, is rejected rather than written through."""
     outside = project.parent / "outside.png"
@@ -181,8 +199,10 @@ def test_overwriting_existing_baseline_replaces_its_content(project: Path) -> No
     assert (project / "image_cache_dir" / "sphere.png").read_bytes() == b"generated-bytes"
 
 
-def test_unreadable_source_fails_the_copy(project: Path, capsys: pytest.CaptureFixture) -> None:
-    """A source file that exists but cannot be read fails the copy with exit code 1, not a raw traceback."""
+def test_unreadable_source_fails_the_copy_without_destroying_an_existing_baseline(project: Path, capsys: pytest.CaptureFixture) -> None:
+    """A source that cannot be read fails the copy with exit code 1 -- and a pre-existing baseline at the destination survives untouched."""
+    destination = project / "image_cache_dir" / "sphere.png"
+    destination.write_bytes(b"IRREPLACEABLE-BASELINE")
     source = project / "generated_images" / "sphere.png"
     source.chmod(0o000)
     try:
@@ -191,7 +211,7 @@ def test_unreadable_source_fails_the_copy(project: Path, capsys: pytest.CaptureF
         source.chmod(0o644)
 
     assert "Failed to copy" in capsys.readouterr().err
-    assert not (project / "image_cache_dir" / "sphere.png").exists()
+    assert destination.read_bytes() == b"IRREPLACEABLE-BASELINE"
 
 
 def test_partial_failure_reports_every_completed_copy_before_stopping(project: Path, capsys: pytest.CaptureFixture) -> None:

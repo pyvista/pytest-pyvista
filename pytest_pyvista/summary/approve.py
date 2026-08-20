@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 
 from pytest_pyvista.summary.record import ALL_STATUSES
 from pytest_pyvista.summary.record import SCHEMA_VERSION
@@ -152,6 +154,17 @@ def _validate_entry(entry: object, index: int, *, source_root: Path, target_root
     )
 
 
+def _is_filesystem_root(path: Path) -> bool:
+    """
+    Return True if the already-resolved ``path`` is the filesystem root.
+
+    Shared between the manifest-supplied cache_dir check and the CLI-supplied --image_cache_dir
+    check: neither an untrusted manifest claiming "/" nor a user mistyping --image_cache_dir as
+    "/" should ever be accepted as an image cache -- the two checks must agree.
+    """
+    return path == Path(path.anchor)
+
+
 def _check_cache_dir(payload: dict, cache_dir: Path, *, force: bool) -> None:
     """
     Check the manifest's top-level ``cache_dir`` against the run's actual cache directory.
@@ -180,7 +193,7 @@ def _check_cache_dir(payload: dict, cache_dir: Path, *, force: bool) -> None:
         msg = f"Manifest 'cache_dir' {manifest_cache!r} is not a usable path: {error}"
         raise ManifestError(msg) from error
 
-    if manifest_root == Path(manifest_root.anchor):
+    if _is_filesystem_root(manifest_root):
         msg = f"Manifest 'cache_dir' {manifest_cache!r} resolves to the filesystem root ({manifest_root}); refusing to treat that as an image cache."
         raise ManifestError(msg)
 
@@ -253,20 +266,40 @@ def apply_approvals(approved: list[ApprovedImage], *, dry_run: bool = False) -> 
     already applied (``.completed``) so the caller can report precisely what changed on disk,
     not just how many.
 
-    Before copying, any existing file at the destination is removed rather than overwritten in
-    place: ``shutil.copy`` opens the destination for writing, which follows a symlink if one is
-    there, so an existing destination that is a symlink pointing outside the approved target
-    root could otherwise be written through even after validation confirmed the *checked* path
-    was safe. Removing it first guarantees the write always creates a fresh regular file.
+    Each copy is written to a fresh temporary file in the destination's own directory, then
+    moved into place with ``Path.replace()``, rather than overwritten (or, as an earlier version
+    of this function did, unlinked) at the destination path directly. Two failure modes that
+    approach had are both closed by this:
+
+    - **Data loss on failure.** Unlinking the destination first, then copying, left the
+      destination *missing* -- not just unchanged -- if the copy failed afterwards (unreadable
+      source, a dropped network mount, ENOSPC). For a tool whose entire job is safely updating
+      baseline images that may be the only copy on disk, deleting one on a failed attempt is
+      exactly the outcome this tool exists to prevent. Writing to a temp file first means a
+      failed copy leaves the temp file orphaned (cleaned up below) and the real destination,
+      and whatever baseline it held, untouched.
+    - **The symlink-TOCTOU goal, served more directly.** ``Path.replace()`` retargets the
+      destination *name* to point at the new file; it does not open through an existing symlink
+      the way writing directly to the destination path would. A symlink swapped in at the
+      destination between validation and copy is replaced outright, not followed.
+
+    The temp file is created in the same directory as the destination (not a generic temp
+    directory) so ``Path.replace()`` is a same-filesystem rename and therefore atomic.
     """
     copies: list[tuple[Path, Path]] = []
     for image in approved:
         if not dry_run:
+            tmp_path: Path | None = None
             try:
                 image.destination.parent.mkdir(parents=True, exist_ok=True)
-                image.destination.unlink(missing_ok=True)
-                shutil.copy(image.source, image.destination)
+                fd, tmp_name = tempfile.mkstemp(dir=image.destination.parent, prefix=f".{image.destination.name}.", suffix=".tmp")
+                tmp_path = Path(tmp_name)
+                os.close(fd)
+                shutil.copy(image.source, tmp_path)
+                tmp_path.replace(image.destination)
             except OSError as error:
+                if tmp_path is not None:
+                    tmp_path.unlink(missing_ok=True)
                 msg = f"Failed to copy {image.source} -> {image.destination} after applying {len(copies)} of {len(approved)}: {error}"
                 raise ApplyError(msg, completed=copies) from error
         copies.append((image.source, image.destination))
@@ -346,6 +379,39 @@ def _report(copies: list[tuple[Path, Path]], *, target_root: Path, dry_run: bool
     print(f"{len(copies)} image(s) {verb} to {target_root}{suffix}")  # noqa: T201
 
 
+def _resolve_roots(args: argparse.Namespace) -> tuple[Path, Path, Path] | None:
+    """
+    Resolve ``--image_cache_dir``/``--generated_image_dir``/``--staging_dir`` into ``(image_cache_dir, source_root, target_root)``.
+
+    Prints a clear stderr message and returns None, rather than letting a malformed argument
+    (e.g. an existing symlink loop, or an embedded NUL byte) crash with a raw traceback, or
+    letting ``--image_cache_dir`` name the filesystem root or an empty string reopen the exact
+    outcome the manifest-side ``cache_dir`` guard in ``_check_cache_dir`` exists to prevent --
+    one flag away from the manifest, since this value is what every destination is actually
+    checked and copied against.
+    """
+    try:
+        # image_cache_dir is independent ground truth for this run's real cache directory -- it
+        # never comes from the manifest's own (untrusted) 'cache_dir' claim. The manifest's
+        # claim is only ever *compared* against it (in load_manifest, via _check_cache_dir).
+        image_cache_dir = Path(args.image_cache_dir).resolve()
+        source_root = Path(args.generated_image_dir).resolve() if args.generated_image_dir else Path.cwd()
+        target_root = image_cache_dir if args.target == "cache" else Path(args.staging_dir).resolve()
+    except (ValueError, RuntimeError, OSError) as error:
+        print(f"error: could not resolve --image_cache_dir/--generated_image_dir/--staging_dir: {error}", file=sys.stderr)  # noqa: T201
+        return None
+
+    if not args.image_cache_dir.strip() or _is_filesystem_root(image_cache_dir):
+        msg = (
+            f"error: --image_cache_dir {args.image_cache_dir!r} must not be empty or the filesystem root "
+            f"({image_cache_dir}); refusing to treat that as an image cache."
+        )
+        print(msg, file=sys.stderr)  # noqa: T201
+        return None
+
+    return image_cache_dir, source_root, target_root
+
+
 def main(argv: list[str] | None = None) -> int:
     """
     Entry point for the ``pytest-pyvista-approve`` console script.
@@ -360,16 +426,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {manifest_path} does not exist", file=sys.stderr)  # noqa: T201
         return 1
 
-    try:
-        # image_cache_dir is independent ground truth for this run's real cache directory --
-        # it never comes from the manifest's own (untrusted) 'cache_dir' claim. The manifest's
-        # claim is only ever *compared* against it (in load_manifest, via _check_cache_dir).
-        image_cache_dir = Path(args.image_cache_dir).resolve()
-        source_root = Path(args.generated_image_dir).resolve() if args.generated_image_dir else Path.cwd()
-        target_root = image_cache_dir if args.target == "cache" else Path(args.staging_dir).resolve()
-    except (ValueError, RuntimeError, OSError) as error:
-        print(f"error: could not resolve --image_cache_dir/--generated_image_dir/--staging_dir: {error}", file=sys.stderr)  # noqa: T201
+    roots = _resolve_roots(args)
+    if roots is None:
         return 1
+    image_cache_dir, source_root, target_root = roots
 
     try:
         approved = load_manifest(
