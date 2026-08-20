@@ -36,6 +36,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
     from collections.abc import Generator
 
+    from trame_server.core import Server
     import xdist.workermanage
 
 VISITED_CACHED_IMAGE_NAMES: set[str] = set()
@@ -1081,14 +1082,39 @@ def verify_image_cache(
             )
 
 
+def _dispose_trame_server(server: Server) -> None:
+    """
+    Stop a trame server and drop the reference that pins its ``vtkWebApplication``.
+
+    Forgetting a running server does not stop it, and a stopped one still holds its
+    ``vtkWebApplication``: one reference lives in ``CoreServer.sharedObjects``, which the
+    whole protocol graph cross-references, and another in the per-server ``Helper``, which
+    its own bound method keeps alive. Dropping both is what lets the collector take it
+    during the test that made it, rather than when the next server replaces it. See
+    pyvista/pyvista#8929.
+
+    TODO: upstream should do this on stop -- ``trame_server`` releases the transport but
+    nothing in its API dismantles the protocol graph.
+    """
+    import asyncio  # noqa: PLC0415
+
+    if getattr(server, "running", False):
+        with contextlib.suppress(Exception):
+            asyncio.run(server.stop())
+    shared = getattr(getattr(server, "_root_protocol", None), "sharedObjects", None)
+    if shared is not None:
+        shared["app"] = None
+
+
 @pytest.fixture(autouse=True)
 def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generator[None, None, None]:
     """
     Cleanup fixture.
 
     This teardown fixture serves mutltiple purposes:
-    - closing all plotters,
+    - stopping and disposing of trame servers,
     - clearing trame servers registry (to prevent test collision),
+    - closing all plotters,
     - forcing garbage collection.
     """
     yield
@@ -1098,7 +1124,21 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
     except ImportError:
         ...
     else:
+        for server in list(AVAILABLE_SERVERS.values()):
+            _dispose_trame_server(server)
         AVAILABLE_SERVERS.clear()
+
+    try:
+        from trame_vtk.modules.vtk import HELPERS_PER_SERVER  # noqa: PLC0415
+    except ImportError:
+        ...
+    else:
+        # The other half of the disposal above: the helper holds the vtkWebApplication
+        # too, and is keyed by server name, so a stale one would also be handed to the
+        # next server of that name.
+        for helper in list(HELPERS_PER_SERVER.values()):
+            helper._vtk_core = None  # noqa: SLF001
+        HELPERS_PER_SERVER.clear()
 
     if pytestconfig.getini("pyvista_close_all"):
         pyvista.close_all()
