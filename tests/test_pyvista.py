@@ -49,7 +49,7 @@ def test_arguments(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-def make_cached_images(  # noqa: PLR0913
+def make_cached_images(  # noqa: PLR0913, PLR0917
     test_path, path="image_cache_dir", name="imcache.png", color="red", window_size=None, mesh: pv.DataSet | None = None
 ) -> Path:
     """Make image cache in `test_path/path`."""
@@ -784,7 +784,7 @@ def _unused_cache_lines(image_name: str) -> list[str]:
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [*_unused_cache_lines("imcache.png")], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),
     ],
 )
-def test_disallow_unused_cache(pytester: pytest.Pytester, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
+def test_disallow_unused_cache(pytester: pytest.Pytester, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913, PLR0917
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
     image_name = test_name + ".png"
@@ -976,7 +976,7 @@ ALMOST_RED = [254, 0, 0]
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("'green'", pytest.ExitCode.TESTS_FAILED)]
 )
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
-def test_multiple_cache_images(  # noqa: PLR0913
+def test_multiple_cache_images(  # noqa: PLR0913, PLR0917
     pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format
 ) -> None:
     """Test when cache is a subdir with multiple images."""
