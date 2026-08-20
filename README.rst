@@ -274,21 +274,11 @@ These flags are specific to the unit tests. They cannot be used with
   by default. Set this CLI flag to allow this globally, or use the test-specific flag
   by the same name below to configure this on a per-test basis.
 
-* ``--reset_global_state`` controls whether PyVista global state (snake case,
-  verbosity, attributes, pickle format) is reset to its defaults after each
-  test. Enabled by default; pass ``--reset_global_state=false`` to disable it
-  for a single invocation, or set ``reset_global_state = false`` in your
-  pytest configuration to disable it by default:
-
-  .. code-block:: toml
-
-      [tool.pytest.ini_options]
-      reset_global_state = false
-
-  Separately, the ``verify_image_cache`` fixture always renders under
-  PyVista's testing theme, restoring whatever theme was active before the
-  test once it finishes. This is not configurable, since ``verify_image_cache``
-  needs a deterministic theme to produce comparable images.
+* ``--reset_global_state`` controls whether PyVista global state is reset to
+  its defaults after each test. Enabled by default; pass
+  ``--reset_global_state=false`` to disable it for a single invocation, or
+  set ``reset_global_state = false`` in your pytest configuration to disable
+  it by default. See `Automatic state reset`_ for details.
 
 Documentation testing flags
 ===========================
@@ -430,6 +420,22 @@ allowed file size to ``50`` for the ``foo.vtksz`` file:
         if test_case.test_name == 'foo':
             test_case.max_vtksz_file_size = 50
         return test_case
+
+Automatic state reset
+----------------------
+An ``autouse`` fixture, ``_reset_pyvista_state``, resets PyVista global state to
+its defaults after each test: ``pyvista.vtk_snake_case("error")``,
+``pyvista.vtk_verbosity("info")``, ``pyvista.allow_new_attributes("private")``,
+and ``pyvista.PICKLE_FORMAT``. Each reset is individually guarded so the
+fixture degrades gracefully on older pyvista where some of these APIs do not
+exist. This is controlled by the ``--reset_global_state`` flag and
+``reset_global_state`` ini option (default: ``True``); see `Unit testing flags`_
+above.
+
+Separately, the ``verify_image_cache`` fixture itself renders under PyVista's
+testing theme, restoring whatever theme was active before the test once it
+finishes. This is not configurable, since ``verify_image_cache`` needs a
+deterministic theme to produce comparable images.
 
 Configuration
 -------------
