@@ -171,6 +171,32 @@ def test_symlinked_staging_destination_is_not_followed(project: Path) -> None:
     assert outside.read_bytes() == b"do-not-touch"
 
 
+def test_restaged_destination_equal_to_the_staging_root_is_rejected(project: Path, capsys: pytest.CaptureFixture) -> None:
+    """
+    A restaged destination that resolves to the staging root itself is rejected by name, not merely failing closed later for an unrelated reason.
+
+    Constructed via a pre-existing symlink at the intermediate restaged path that points back at
+    the staging root: _resolve_within follows it, sees the result is (trivially) contained in
+    the root, and returns it -- without a destination-equals-root check, apply_approvals would
+    then act on that path's *parent*, one level above the validated staging directory, and only
+    happen to fail (with an unrelated "Is a directory" error from the final rename) rather than
+    being rejected for the real reason. Asserting the specific message, not just the exit code,
+    is what makes this a regression test for the missing check rather than for the fallback
+    failure mode -- exit code 1 alone is unchanged whether the check is present or not.
+    """
+    cache = project / "image_cache_dir"
+    staging = project / "approved_images"
+    (staging / "sub").mkdir(parents=True)
+    (staging / "sub" / "x.png").symlink_to(staging)
+
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["approved"][0]["destination"] = str(cache / "sub" / "x.png")
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json"]) == 1
+    assert "is the staging directory itself" in capsys.readouterr().err
+
+
 def test_mismatched_cache_dir_requires_force_and_still_writes_to_the_real_cache(project: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
     """A manifest exported against a different cache_dir needs --force, which then still writes to the *real* cache, not the manifest's claim."""
     decoy_cache = tmp_path_factory.mktemp("decoy_cache")

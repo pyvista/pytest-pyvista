@@ -348,6 +348,11 @@ def _restage(approved: list[ApprovedImage], *, cache_dir: Path, target_root: Pat
     Task 10's containment check never ran against these rewritten paths. Re-resolving and
     re-checking each one here closes that gap: a pre-existing symlink sitting at the staging
     destination and pointing outside ``target_root`` is rejected rather than followed on copy.
+    Also rejects a restaged destination that *equals* ``target_root`` itself, mirroring
+    ``_validate_entry``'s equivalent check for the cache path: ``apply_approvals`` acts on
+    ``image.destination.parent``, and "destination is inside the root" does not imply
+    "destination's parent is inside the root" -- it fails exactly when they are equal, which
+    would put every later `mkdir`/`mkstemp`/copy one level above the validated staging root.
     """
     restaged = []
     for image in approved:
@@ -355,6 +360,11 @@ def _restage(approved: list[ApprovedImage], *, cache_dir: Path, target_root: Pat
         destination = _resolve_within(candidate, target_root)
         if destination is None:
             msg = f"Staging destination for {image.test_name}/{image.image_name} ({candidate}) resolves outside the staging directory {target_root}."
+            raise ManifestError(msg)
+        if destination == target_root.resolve():
+            msg = (
+                f"Staging destination for {image.test_name}/{image.image_name} ({destination}) is the staging directory itself, not a file within it."
+            )
             raise ManifestError(msg)
         restaged.append(
             ApprovedImage(
@@ -410,13 +420,18 @@ def _resolve_roots(args: argparse.Namespace) -> tuple[Path, Path, Path] | None:
     (e.g. an existing symlink loop, or an embedded NUL byte) crash with a raw traceback, or
     letting an empty value or the filesystem root -- arriving from *any* flag that supplies a
     root this run will write into -- reopen the outcome the manifest-side ``cache_dir`` guard in
-    ``_check_cache_dir`` exists to prevent. ``--image_cache_dir`` is checked unconditionally: it
-    grounds the manifest's own ``cache_dir`` claim regardless of ``--target``, via
-    ``load_manifest``. Whichever flag supplies ``target_root`` -- the root this invocation will
-    actually copy into -- is checked too: that is ``--image_cache_dir`` again under
-    ``--target cache``, or ``--staging_dir`` under the default ``--target staging``. Validating
-    the value that will actually be written to, rather than one flag by name, is what stops a
-    structurally identical gap opening under some other flag next.
+    ``_check_cache_dir`` exists to prevent.
+
+    ``--image_cache_dir`` is always checked: it grounds the manifest's own ``cache_dir`` claim
+    regardless of ``--target``, via ``load_manifest``. ``target_root`` -- the root this
+    invocation will actually copy into -- is checked too, but *which flag* supplied it is never
+    decided separately from *what its value is*: the branch below picks ``target_root`` and its
+    ``(flag name, raw string)`` together, in one place, so a future ``--target`` choice cannot
+    add a new write root without its validation coming along in the same edit. An earlier
+    version of this function re-derived "which flag is target_root" a second time, independently,
+    to build the check list -- two expressions that happened to agree for exactly as long as
+    someone remembered to keep them in sync, which a reviewer demonstrated failing for a
+    hypothetical third ``--target`` choice that touched only the first expression.
     """
     try:
         # image_cache_dir is independent ground truth for this run's real cache directory -- it
@@ -424,16 +439,21 @@ def _resolve_roots(args: argparse.Namespace) -> tuple[Path, Path, Path] | None:
         # claim is only ever *compared* against it (in load_manifest, via _check_cache_dir).
         image_cache_dir = Path(args.image_cache_dir).resolve()
         source_root = Path(args.generated_image_dir).resolve() if args.generated_image_dir else Path.cwd()
-        target_root = image_cache_dir if args.target == "cache" else Path(args.staging_dir).resolve()
+
+        if args.target == "cache":
+            target_root_flag, target_root_raw = "--image_cache_dir", args.image_cache_dir
+            target_root = image_cache_dir
+        else:
+            target_root_flag, target_root_raw = "--staging_dir", args.staging_dir
+            target_root = Path(target_root_raw).resolve()
     except (ValueError, RuntimeError, OSError) as error:
         print(f"error: could not resolve --image_cache_dir/--generated_image_dir/--staging_dir: {error}", file=sys.stderr)  # noqa: T201
         return None
 
-    roots_to_check = [("--image_cache_dir", args.image_cache_dir, image_cache_dir)]
-    if args.target == "staging":
-        roots_to_check.append(("--staging_dir", args.staging_dir, target_root))
-
-    for flag, raw, resolved in roots_to_check:
+    for flag, raw, resolved in (
+        ("--image_cache_dir", args.image_cache_dir, image_cache_dir),
+        (target_root_flag, target_root_raw, target_root),
+    ):
         error_message = _reject_unsafe_root(flag, raw, resolved)
         if error_message is not None:
             print(error_message, file=sys.stderr)  # noqa: T201
