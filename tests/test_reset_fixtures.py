@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pytest_pyvista import _reset_fixtures
+from pytest_pyvista._reset_fixtures import _capture_default
+
 if TYPE_CHECKING:
     import pytest
 
@@ -95,3 +98,25 @@ def test_reset_pyvista_state_suppresses_attribute_error(pytester: pytest.Pyteste
     )
     result = pytester.runpytest_subprocess()
     result.assert_outcomes(passed=2)
+
+
+def test_capture_default_returns_none_on_attribute_error() -> None:
+    """`_capture_default` returns None when the getter raises `AttributeError`."""
+
+    def _raises() -> None:
+        raise AttributeError
+
+    assert _capture_default(_raises) is None
+
+
+def test_restore_default_pyvista_state_skips_uncaptured_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_restore_default_pyvista_state` does nothing for a setting that was `None` at capture time."""
+    for name in (
+        "_DEFAULT_VTK_SNAKE_CASE",
+        "_DEFAULT_VTK_VERBOSITY",
+        "_DEFAULT_ALLOW_NEW_ATTRIBUTES",
+        "_DEFAULT_PICKLE_FORMAT",
+    ):
+        monkeypatch.setattr(_reset_fixtures, name, None)
+
+    _reset_fixtures._restore_default_pyvista_state()  # noqa: SLF001
