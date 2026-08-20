@@ -46,8 +46,8 @@ def _restore_default_pyvista_state() -> None:
 
 @pytest.fixture(autouse=True)
 def _reset_pyvista_state(pytestconfig: pytest.Config) -> Generator[None, None, None]:
-    """Reset PyVista global state to defaults after each test, gated on the ``pyvista_reset_global_state`` ini option."""
+    """Reset PyVista global state to defaults after each test, gated on the ``reset_global_state`` ini option."""
     yield
 
-    if pytestconfig.getini("pyvista_reset_global_state"):
+    if pytestconfig.getini("reset_global_state"):
         _restore_default_pyvista_state()

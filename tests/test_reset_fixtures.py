@@ -30,11 +30,11 @@ def test_reset_pyvista_state_restores_defaults(pytester: pytest.Pytester) -> Non
 
 
 def test_reset_pyvista_state_disabled_is_noop(pytester: pytest.Pytester) -> None:
-    """With ``pyvista_reset_global_state = false`` the mutation persists."""
+    """With ``reset_global_state = false`` the mutation persists."""
     pytester.makeini(
         """
         [pytest]
-        pyvista_reset_global_state = false
+        reset_global_state = false
         """
     )
     pytester.makepyfile(

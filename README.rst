@@ -422,13 +422,13 @@ its defaults after each test: ``pyvista.vtk_snake_case("error")``,
 ``pyvista.vtk_verbosity("info")``, ``pyvista.allow_new_attributes("private")``,
 and ``pyvista.PICKLE_FORMAT``. Each reset is individually guarded so the
 fixture degrades gracefully on older pyvista where some of these APIs do not
-exist. This is enabled by the ``pyvista_reset_global_state`` ini option
+exist. This is enabled by the ``reset_global_state`` ini option
 (default: ``True``); set it to ``false`` to make the fixture a no-op:
 
 .. code-block:: toml
 
     [tool.pytest.ini_options]
-    pyvista_reset_global_state = false
+    reset_global_state = false
 
 Separately, the ``verify_image_cache`` fixture itself renders under PyVista's
 testing theme, restoring whatever theme was active before the test once it

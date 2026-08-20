@@ -1542,11 +1542,11 @@ def test_clear_trame_servers(pytester: pytest.Pytester) -> None:
 
 
 def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
-    """Setting pyvista_close_all = false should skip cleanup."""
+    """Setting close_all = false should skip cleanup."""
     pytester.makeini(
         """
         [pytest]
-        pyvista_close_all = false
+        close_all = false
         """
     )
     pytester.makepyfile(

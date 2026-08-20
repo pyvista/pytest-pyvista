@@ -338,13 +338,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
 
     # VTK resource cleanup options
     parser.addini(
-        "pyvista_close_all",
+        "close_all",
         type="bool",
         default=True,
         help="Automatically close all plotters and run gc.collect() after each test (default: True).",
     )
     parser.addini(
-        "pyvista_reset_global_state",
+        "reset_global_state",
         type="bool",
         default=True,
         help="Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test (default: True).",
@@ -1170,7 +1170,7 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
             helper._vtk_core = None  # noqa: SLF001
         HELPERS_PER_SERVER.clear()
 
-    if pytestconfig.getini("pyvista_close_all"):
+    if pytestconfig.getini("close_all"):
         pyvista.close_all()
         gc.collect()
 
