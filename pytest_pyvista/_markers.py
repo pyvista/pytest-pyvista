@@ -32,29 +32,13 @@ def register_markers(config: pytest.Config) -> None:
         config.addinivalue_line("markers", f"{signature}: {description}")
 
 
-_FLOOR_INI_OPTION = "needs_vtk_version_floor"
-_FLOOR_CONFIG_ATTR = "_needs_vtk_version_floor"
+#: Name of the ``needs_vtk_version_floor`` ini option (registered in pytest_pyvista.py).
+FLOOR_INI_OPTION = "needs_vtk_version_floor"
+#: Name of the private ``config`` attribute holding its resolved value.
+FLOOR_CONFIG_ATTR = "_needs_vtk_version_floor"
 
 
-def register_ini_options(parser: pytest.Parser) -> None:
-    """Register the ``needs_vtk_version_floor`` ini option."""
-    parser.addini(
-        _FLOOR_INI_OPTION,
-        default="",
-        help=(
-            "Minimum VTK version used to flag `needs_vtk_version` bounds as obsolete "
-            "and error, e.g. '9.3' or '9.3.1'. `true` (the default) uses pyvista's own "
-            "supported VTK floor; `false` disables the check entirely."
-        ),
-    )
-
-
-def validate_ini_options(config: pytest.Config) -> None:
-    """Parse and validate ``needs_vtk_version_floor`` once, caching the result on ``config``."""
-    setattr(config, _FLOOR_CONFIG_ATTR, _resolve_needs_vtk_version_floor(config.getini(_FLOOR_INI_OPTION)))
-
-
-def _resolve_needs_vtk_version_floor(raw: str) -> tuple[int, int, int] | None:
+def resolve_needs_vtk_version_floor(raw: str) -> tuple[int, int, int] | None:
     """
     Resolve ``needs_vtk_version_floor`` to a floor tuple, or ``None`` to disable the check.
 
@@ -88,13 +72,13 @@ def _resolve_needs_vtk_version_floor(raw: str) -> tuple[int, int, int] | None:
     try:
         parts = tuple(int(part) for part in raw.strip().split("."))
     except ValueError:
-        msg = f"Invalid `{_FLOOR_INI_OPTION}` value {raw!r}: must be `true`, `false`, or a dotted VTK version like '9.3' or '9.3.1'."
+        msg = f"Invalid `{FLOOR_INI_OPTION}` value {raw!r}: must be `true`, `false`, or a dotted VTK version like '9.3' or '9.3.1'."
         raise pytest.UsageError(msg) from None
 
     try:
         return _pad_version(parts)
     except (TypeError, ValueError) as error:
-        msg = f"Invalid `{_FLOOR_INI_OPTION}` value {raw!r}: {error}"
+        msg = f"Invalid `{FLOOR_INI_OPTION}` value {raw!r}: {error}"
         raise pytest.UsageError(msg) from None
 
 
@@ -249,8 +233,8 @@ def _obsolete_vtk_version_reason(keyword: str, bound: tuple[int, int, int], floo
     )
     return (
         f"`needs_vtk_version` constraint `{keyword}={formatted_bound}` is at or below the "
-        f"configured `{_FLOOR_INI_OPTION}` ({formatted_floor}), so this check {outcome}. Lower "
-        f"`{_FLOOR_INI_OPTION}` if you need to keep checking an older VTK version, or set it to "
+        f"configured `{FLOOR_INI_OPTION}` ({formatted_floor}), so this check {outcome}. Lower "
+        f"`{FLOOR_INI_OPTION}` if you need to keep checking an older VTK version, or set it to "
         f"`false` to disable this check entirely."
     )
 
@@ -290,7 +274,7 @@ def _needs_vtk_version_skip_reason(item_mark: pytest.Mark, config: pytest.Config
     minimum, maximum = _parse_vtk_version_constraint(item_mark)
     reason = item_mark.kwargs.get("reason")
 
-    floor = getattr(config, _FLOOR_CONFIG_ATTR, None)
+    floor = getattr(config, FLOOR_CONFIG_ATTR, None)
     if floor is not None:
         for keyword, bound in (("at_least", minimum), ("less_than", maximum)):
             if bound is not None and (obsolete_reason := _obsolete_vtk_version_reason(keyword, bound, floor)) is not None:

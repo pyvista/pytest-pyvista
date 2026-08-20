@@ -31,10 +31,11 @@ from pyvista import Plotter
 import vtkmodules
 
 from pytest_pyvista import hooks
+from pytest_pyvista._markers import FLOOR_CONFIG_ATTR
+from pytest_pyvista._markers import FLOOR_INI_OPTION
 from pytest_pyvista._markers import pytest_runtest_setup  # noqa: F401
-from pytest_pyvista._markers import register_ini_options
 from pytest_pyvista._markers import register_markers
-from pytest_pyvista._markers import validate_ini_options
+from pytest_pyvista._markers import resolve_needs_vtk_version_floor
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
@@ -289,6 +290,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
         )
 
+        parser.addini(
+            FLOOR_INI_OPTION,
+            default="",
+            help=(
+                "Minimum VTK version used to flag `needs_vtk_version` bounds as obsolete "
+                "and error, e.g. '9.3' or '9.3.1'. `true` (the default) uses pyvista's own "
+                "supported VTK floor; `false` disables the check entirely."
+            ),
+        )
+
     def _add_doc_cli_and_ini_options() -> None:
         """Add options specific to the documentation tests."""
         _add_doc_cli_option(
@@ -346,8 +357,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         default=True,
         help="Automatically close all plotters and run gc.collect() after each test (default: True).",
     )
-
-    register_ini_options(parser)
 
 
 class VerifyImageCache:
@@ -963,10 +972,9 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
-    # Register markers/ini options unconditionally so they take effect even
-    # if the doc-mode CLI validation below raises pytest.UsageError.
+    # Register markers unconditionally so they are available even if the
+    # doc-mode CLI validation below raises pytest.UsageError.
     register_markers(config)
-    validate_ini_options(config)
 
     # Validate CLI args
     doc_mode = config.getoption("doc_mode")
@@ -981,6 +989,9 @@ def pytest_configure(config: pytest.Config) -> None:
             if not doc_mode and arg not in _UNIT_TEST_CLI_ARGS:
                 msg = f"argument {arg} can only be used with --doc_mode enabled"
                 raise pytest.UsageError(msg)
+
+    # Validate ini options
+    setattr(config, FLOOR_CONFIG_ATTR, resolve_needs_vtk_version_floor(config.getini(FLOOR_INI_OPTION)))
 
     is_master = _is_master(config)
     disallow_unused_cache = config.getoption("disallow_unused_cache")
