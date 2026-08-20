@@ -24,9 +24,8 @@ from tests.test_pyvista import file_has_changed
 from tests.test_pyvista import make_cached_images as _make_cached_images
 from tests.test_pyvista import make_multiple_cached_images as _make_multiple_cached_images
 
-# Doc-mode tests do not use the `verify_image_cache` fixture, so the plugin's
-# autouse `_set_default_theme` fixture never fires for them; their rendering
-# uses the default theme. Generate baselines with the default theme to match.
+# Doc-mode tests do not use the `verify_image_cache` fixture, so their rendering
+# uses the default theme, not the testing theme. Generate baselines to match.
 make_cached_images = functools.partial(_make_cached_images, use_testing_theme=False)
 make_multiple_cached_images = functools.partial(_make_multiple_cached_images, use_testing_theme=False)
 

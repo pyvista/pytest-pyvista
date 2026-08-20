@@ -50,21 +50,18 @@ def test_reset_pyvista_state_disabled_is_noop(pytester: pytest.Pytester) -> None
     result.assert_outcomes(passed=2)
 
 
-def test_reset_pyvista_state_survives_missing_attribute(pytester: pytest.Pytester) -> None:
-    """The fixture must not raise if a reset API is absent on older pyvista."""
+def test_reset_pyvista_state_restores_deleted_attribute(pytester: pytest.Pytester) -> None:
+    """The fixture recreates an attribute a test deleted, using the value captured at import time."""
     pytester.makepyfile(
         """
         import pyvista as pv
 
         def test_delete_pickle_format():
-            # Permanently remove the attribute so the autouse fixture teardown
-            # must run with PICKLE_FORMAT absent and rely on its hasattr guard.
             del pv.PICKLE_FORMAT
             assert not hasattr(pv, "PICKLE_FORMAT")
 
-        def test_fixture_did_not_raise():
-            # If the previous teardown had raised, this test would error out.
-            assert not hasattr(pv, "PICKLE_FORMAT")
+        def test_attribute_was_restored():
+            assert pv.PICKLE_FORMAT == "vtk"
         """
     )
     result = pytester.runpytest()
