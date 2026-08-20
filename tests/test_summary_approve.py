@@ -296,6 +296,30 @@ def test_non_string_cache_dir_is_rejected(workspace: dict[str, Path]) -> None:
         _load(workspace, _manifest(workspace, cache_dir=12345))
 
 
+def test_empty_cache_dir_is_rejected(workspace: dict[str, Path]) -> None:
+    """An empty top-level cache_dir is rejected outright, not silently resolved to the cwd."""
+    with pytest.raises(ManifestError, match="must not be empty"):
+        _load(workspace, _manifest(workspace, cache_dir=""))
+
+
+def test_empty_cache_dir_is_rejected_even_with_force(workspace: dict[str, Path]) -> None:
+    """Force overrides a cache_dir *mismatch*, not an empty cache_dir -- there is nothing to match against."""
+    with pytest.raises(ManifestError, match="must not be empty"):
+        _load(workspace, _manifest(workspace, cache_dir=""), force=True)
+
+
+def test_root_cache_dir_is_rejected(workspace: dict[str, Path]) -> None:
+    """A top-level cache_dir naming the filesystem root is rejected outright: never a real image cache."""
+    with pytest.raises(ManifestError, match="filesystem root"):
+        _load(workspace, _manifest(workspace, cache_dir="/"))
+
+
+def test_root_cache_dir_is_rejected_even_with_force(workspace: dict[str, Path]) -> None:
+    """Force overrides a cache_dir *mismatch*, not a manifest claiming the filesystem root as its cache."""
+    with pytest.raises(ManifestError, match="filesystem root"):
+        _load(workspace, _manifest(workspace, cache_dir="/"), force=True)
+
+
 def test_missing_cache_dir_key_is_rejected(workspace: dict[str, Path]) -> None:
     """A manifest missing the top-level cache_dir key entirely is rejected, like a missing schema_version."""
     path = workspace["root"] / "approvals.json"

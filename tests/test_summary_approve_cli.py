@@ -97,3 +97,134 @@ def test_empty_manifest_reports_nothing_to_do(project: Path, capsys: pytest.Capt
 
     assert main(["approvals.json"]) == 0
     assert "no approved images" in capsys.readouterr().out.lower()
+
+
+def test_root_cache_dir_manifest_is_rejected(project: Path) -> None:
+    """A manifest claiming the filesystem root as its cache_dir is rejected, even with --force, and writes nothing."""
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["cache_dir"] = "/"
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache"]) == 1
+    assert main(["approvals.json", "--target", "cache", "--force"]) == 1
+    assert not (project / "image_cache_dir" / "sphere.png").exists()
+
+
+def test_empty_cache_dir_manifest_is_rejected(project: Path) -> None:
+    """A manifest with an empty cache_dir is rejected outright, not silently resolved to the cwd."""
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["cache_dir"] = ""
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache"]) == 1
+
+
+def test_symlinked_staging_destination_is_not_followed(project: Path) -> None:
+    """A pre-existing symlink at the staging destination, pointing outside staging, is rejected rather than written through."""
+    outside = project.parent / "outside.png"
+    outside.write_bytes(b"do-not-touch")
+    staging = project / "approved_images"
+    staging.mkdir()
+    (staging / "sphere.png").symlink_to(outside)
+
+    assert main(["approvals.json"]) == 1
+    assert outside.read_bytes() == b"do-not-touch"
+
+
+def test_mismatched_cache_dir_requires_force_and_still_writes_to_the_real_cache(project: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """A manifest exported against a different cache_dir needs --force, which then still writes to the *real* cache, not the manifest's claim."""
+    decoy_cache = tmp_path_factory.mktemp("decoy_cache")
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["cache_dir"] = str(decoy_cache)
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache"]) == 1
+
+    assert main(["approvals.json", "--target", "cache", "--force"]) == 0
+    assert (project / "image_cache_dir" / "sphere.png").read_bytes() == b"generated-bytes"
+    assert not (decoy_cache / "sphere.png").exists()
+
+
+def test_generated_image_dir_override_is_honoured(project: Path, tmp_path_factory: pytest.TempPathFactory) -> None:
+    """--generated_image_dir lets sources live outside the current working directory."""
+    external = tmp_path_factory.mktemp("external_generated")
+    (external / "sphere.png").write_bytes(b"external-bytes")
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["approved"][0]["source"] = str(external / "sphere.png")
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache", "--generated_image_dir", str(external)]) == 0
+
+    assert (project / "image_cache_dir" / "sphere.png").read_bytes() == b"external-bytes"
+
+
+def test_source_outside_default_generated_dir_is_rejected_without_the_override(
+    project: Path,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    """Without --generated_image_dir, a source outside the cwd is rejected -- confirms the override in the test above is load-bearing."""
+    external = tmp_path_factory.mktemp("external_generated")
+    (external / "sphere.png").write_bytes(b"external-bytes")
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["approved"][0]["source"] = str(external / "sphere.png")
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache"]) == 1
+
+
+def test_overwriting_existing_baseline_replaces_its_content(project: Path) -> None:
+    """Applying an approval for a baseline that already exists in the cache replaces its bytes."""
+    (project / "image_cache_dir" / "sphere.png").write_bytes(b"old-baseline-bytes")
+
+    assert main(["approvals.json", "--target", "cache"]) == 0
+
+    assert (project / "image_cache_dir" / "sphere.png").read_bytes() == b"generated-bytes"
+
+
+def test_unreadable_source_fails_the_copy(project: Path, capsys: pytest.CaptureFixture) -> None:
+    """A source file that exists but cannot be read fails the copy with exit code 1, not a raw traceback."""
+    source = project / "generated_images" / "sphere.png"
+    source.chmod(0o000)
+    try:
+        assert main(["approvals.json", "--target", "cache"]) == 1
+    finally:
+        source.chmod(0o644)
+
+    assert "Failed to copy" in capsys.readouterr().err
+    assert not (project / "image_cache_dir" / "sphere.png").exists()
+
+
+def test_partial_failure_reports_every_completed_copy_before_stopping(project: Path, capsys: pytest.CaptureFixture) -> None:
+    """When one copy in a batch fails, every copy that succeeded before it is still printed, and the batch stops there."""
+    generated = project / "generated_images"
+    cache = project / "image_cache_dir"
+    (generated / "cube.png").write_bytes(b"cube-bytes")
+    blocked = cache / "blocked"
+    blocked.mkdir()
+
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["approved"].append(
+        {
+            "test_name": "test_cube",
+            "image_name": "cube.png",
+            "call_index": 0,
+            "status": "new",
+            "source": str(generated / "cube.png"),
+            "destination": str(blocked / "cube.png"),
+        },
+    )
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+    blocked.chmod(0o555)
+
+    try:
+        assert main(["approvals.json", "--target", "cache"]) == 1
+    finally:
+        blocked.chmod(0o755)
+
+    out, err = capsys.readouterr()
+    assert (cache / "sphere.png").read_bytes() == b"generated-bytes"
+    assert "copied:" in out
+    assert "sphere.png" in out
+    assert "cube.png" not in out
+    assert "after applying 1 of 2" in err
+    assert not (blocked / "cube.png").exists()
