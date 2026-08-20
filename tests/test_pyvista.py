@@ -186,6 +186,54 @@ def test_verify_image_cache(pytester: pytest.Pytester, plot_property: bool) -> N
     assert not (pytester.path / "failed_image_dir").is_dir()
 
 
+def test_verify_image_cache_restores_prior_theme(pytester: pytest.Pytester) -> None:
+    """`verify_image_cache` restores the theme that was active before the test, not the testing theme."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_sets_ambient_theme():
+            pv.global_theme.background = "purple"
+
+        def test_b_uses_testing_theme(verify_image_cache):
+            assert pv.global_theme.background != pv.Color("purple")
+            verify_image_cache.allow_useless_fixture = True
+
+        def test_c_ambient_theme_restored():
+            assert pv.global_theme.background == pv.Color("purple")
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=3)
+
+
+def test_verify_image_cache_survives_testing_theme_import_error(pytester: pytest.Pytester) -> None:
+    """`verify_image_cache` degrades gracefully when `_TestingTheme` import fails."""
+    pytester.makeconftest(
+        """
+        import pyvista.plotting.themes as themes
+
+        del themes._TestingTheme
+        assert not hasattr(themes, "_TestingTheme")
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a(verify_image_cache):
+            verify_image_cache.allow_useless_fixture = True
+            pv.global_theme.background = "purple"
+
+        def test_b_mutation_persists(verify_image_cache):
+            verify_image_cache.allow_useless_fixture = True
+            assert pv.global_theme.background == pv.Color("purple")
+        """
+    )
+    result = pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=2)
+
+
 def test_verify_image_cache_fail_regression(pytester: pytest.Pytester) -> None:
     """Test regression of the `verify_image_cache` fixture."""
     make_cached_images(pytester.path)
@@ -492,8 +540,8 @@ def test_add_missing_images_commandline(tmp_path, pytester: pytest.Pytester, res
         result.assert_outcomes(passed=2 if add_second_test else 1)
         assert result.ret == pytest.ExitCode.OK
 
-        # Make sure the final image in the cache matches the generated test image
-        pl = pv.Plotter()
+        # Match the testing theme the inner test rendered under via `verify_image_cache`.
+        pl = pv.Plotter(theme=_TestingTheme())
         pl.add_mesh(pv.Sphere(), color=color)
         assert pv.compare_images(pl, str(expected_file)) == 0.0
 

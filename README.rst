@@ -415,28 +415,25 @@ allowed file size to ``50`` for the ``foo.vtksz`` file:
             test_case.max_vtksz_file_size = 50
         return test_case
 
-Automatic state reset fixtures
-------------------------------
-Two ``autouse`` fixtures are applied automatically to every test so downstream
-PyVista test suites do not have to reimplement them.
+Automatic state reset
+----------------------
+An ``autouse`` fixture, ``_reset_pyvista_state``, resets PyVista global state to
+its defaults after each test: ``pyvista.vtk_snake_case("error")``,
+``pyvista.vtk_verbosity("info")``, ``pyvista.allow_new_attributes("private")``,
+and ``pyvista.PICKLE_FORMAT``. Each reset is individually guarded so the
+fixture degrades gracefully on older pyvista where some of these APIs do not
+exist. This is enabled by the ``pyvista_reset_global_state`` ini option
+(default: ``True``); set it to ``false`` to make the fixture a no-op:
 
-* ``_reset_pyvista_state`` resets PyVista global state to its defaults after each
-  test: ``pyvista.vtk_snake_case("error")``, ``pyvista.vtk_verbosity("info")``,
-  ``pyvista.allow_new_attributes(False)``, and ``pyvista.PICKLE_FORMAT = "vtk"``.
-  Each reset is individually guarded so the fixture degrades gracefully on older
-  pyvista where some of these APIs do not exist. This is enabled by the
-  ``pyvista_reset_global_state`` ini option (default: ``True``); set it to
-  ``false`` to make the fixture a no-op:
+.. code-block:: toml
 
-  .. code-block:: toml
+    [tool.pytest.ini_options]
+    pyvista_reset_global_state = false
 
-      [tool.pytest.ini_options]
-      pyvista_reset_global_state = false
-
-* ``_set_default_theme`` resets the plotting theme to the PyVista testing theme
-  both before and after the test, but only for tests that request the
-  ``verify_image_cache`` fixture. Non-plotting tests are left untouched to keep
-  them fast.
+Separately, the ``verify_image_cache`` fixture itself renders under PyVista's
+testing theme, restoring whatever theme was active before the test once it
+finishes. This is not configurable, since ``verify_image_cache`` needs a
+deterministic theme to produce comparable images.
 
 Configuration
 -------------

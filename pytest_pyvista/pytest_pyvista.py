@@ -32,7 +32,6 @@ import vtkmodules
 
 from pytest_pyvista import hooks
 from pytest_pyvista._reset_fixtures import _reset_pyvista_state  # noqa: F401
-from pytest_pyvista._reset_fixtures import _set_default_theme  # noqa: F401
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
@@ -1058,6 +1057,12 @@ def verify_image_cache(
         generated_image_dir=gen_dir,
         failed_image_dir=failed_dir,
     )
+
+    # Render under the testing theme; `_TestingTheme` is absent on older pyvista.
+    with contextlib.suppress(ImportError):
+        from pyvista.plotting.themes import _TestingTheme  # noqa: PLC0415
+
+        monkeypatch.setattr(pyvista, "global_theme", _TestingTheme())
 
     # Wrapping call to `Plotter.show` to inject the image cache callback
     def func_show(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
