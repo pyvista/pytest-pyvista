@@ -331,23 +331,31 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Maximum size allowed for vtksz interactive plot files.",
         )
 
+    def _add_vtk_cleanup_cli_and_ini_options() -> None:
+        """
+        Add options for the autouse ``_reset_pyvista_state`` fixture.
+
+        This fixture runs in both regular unit tests and doc mode, and
+        defaults to enabled; the CLI flag is a ``--no_*`` override so a
+        single invocation can disable it without editing the ini config.
+        """
+        option = "reset_global_state"
+        help_ = "Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test."
+        _add_common_cli_option(f"--no_{option}", action="store_false", dest=option, default=None, help=f"Disable: {help_}")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
+
     group = parser.getgroup(PARSER_GROUP_NAME)
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()
     _add_doc_cli_and_ini_options()
+    _add_vtk_cleanup_cli_and_ini_options()
 
     # VTK resource cleanup options
     parser.addini(
-        "close_all",
+        "pyvista_close_all",
         type="bool",
         default=True,
         help="Automatically close all plotters and run gc.collect() after each test (default: True).",
-    )
-    parser.addini(
-        "reset_global_state",
-        type="bool",
-        default=True,
-        help="Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test (default: True).",
     )
 
 
@@ -1170,7 +1178,7 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
             helper._vtk_core = None  # noqa: SLF001
         HELPERS_PER_SERVER.clear()
 
-    if pytestconfig.getini("close_all"):
+    if pytestconfig.getini("pyvista_close_all"):
         pyvista.close_all()
         gc.collect()
 

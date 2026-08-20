@@ -21,6 +21,14 @@ def _capture_default(getter: Callable[[], Any]) -> Any | None:  # noqa: ANN401
     return None
 
 
+def _bool_option_enabled(pytestconfig: pytest.Config, name: str) -> bool:
+    """Resolve a boolean option, letting a `--no_<name>` CLI flag override the ini value."""
+    cli_value = pytestconfig.getoption(name)
+    if cli_value is not None:
+        return bool(cli_value)
+    return bool(pytestconfig.getini(name))
+
+
 # Captured once at import time (before any test can mutate them), rather than
 # hardcoded, so this stays correct however pyvista computes its own defaults.
 _DEFAULT_VTK_SNAKE_CASE = _capture_default(pyvista.vtk_snake_case)
@@ -46,8 +54,8 @@ def _restore_default_pyvista_state() -> None:
 
 @pytest.fixture(autouse=True)
 def _reset_pyvista_state(pytestconfig: pytest.Config) -> Generator[None, None, None]:
-    """Reset PyVista global state to defaults after each test, gated on the ``reset_global_state`` ini option."""
+    """Reset PyVista global state to defaults after each test, unless disabled via ini or `--no_reset_global_state`."""
     yield
 
-    if pytestconfig.getini("reset_global_state"):
+    if _bool_option_enabled(pytestconfig, "reset_global_state"):
         _restore_default_pyvista_state()
