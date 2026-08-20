@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import platform
+from typing import TYPE_CHECKING
 
-import pytest
-import pyvista
+if TYPE_CHECKING:
+    import pytest
 
 
 def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester) -> None:
     """
     needs_vtk_version skips when requiring a version higher than installed.
 
-    Pins ``pyvista.vtk_version_info`` at module scope so this does not depend
-    on the VTK actually installed in the environment (a bare ``needs_vtk_version(9, 9)``
-    would otherwise start passing the day CI's VTK reaches 9.9). Must run in a
-    subprocess since pytester's in-process runner shares the live ``pyvista``
-    module with the tests that follow it in this file.
+    Pins ``pyvista.vtk_version_info`` and ``pyvista._MIN_SUPPORTED_VTK_VERSION`` at
+    module scope so this does not depend on the VTK actually installed in the
+    environment, nor on pyvista's own supported floor (which would otherwise make
+    a bound like ``less_than=(9, 3, 0)`` obsolete and raise instead of skip, see
+    test_needs_vtk_version_obsolete_constraint_raises). Must run in a subprocess
+    since pytester's in-process runner shares the live ``pyvista`` module with the
+    tests that follow it in this file.
     """
     pytester.makepyfile(
         """
@@ -24,6 +27,7 @@ def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester)
         import pytest
 
         pv.vtk_version_info = (9, 6, 1)
+        pv._MIN_SUPPORTED_VTK_VERSION = (9, 2, 2)
 
         @pytest.mark.needs_vtk_version(9, 9)
         def test_positional_higher():
@@ -33,11 +37,7 @@ def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester)
         def test_at_least_higher():
             pass
 
-        # A `less_than` bound must stay at or above the plugin's own supported
-        # VTK floor (9.2.2, see README) -- anything lower is an obsolete
-        # constraint that `pyvista.vtk_version_info`'s own comparison raises
-        # on for free (see test_needs_vtk_version_obsolete_constraint_raises).
-        @pytest.mark.needs_vtk_version(less_than=(9, 2, 2))
+        @pytest.mark.needs_vtk_version(less_than=(9, 3, 0))
         def test_less_than_lower():
             pass
         """
@@ -50,11 +50,13 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> Non
     """
     needs_vtk_version runs when the installed version satisfies the bound.
 
-    Pins ``pyvista.vtk_version_info`` at module scope so this does not depend
-    on the VTK actually installed in the environment (a bare ``needs_vtk_version(9, 6)``
-    would otherwise skip on any CI runner with an older VTK). Must run in a
-    subprocess since pytester's in-process runner shares the live ``pyvista``
-    module with the tests that follow it in this file.
+    Pins ``pyvista.vtk_version_info`` and ``pyvista._MIN_SUPPORTED_VTK_VERSION`` at
+    module scope so this does not depend on the VTK actually installed in the
+    environment, nor on pyvista's own supported floor (which would otherwise make
+    a bound like ``at_least=(9, 3, 0)`` obsolete and raise instead of pass, see
+    test_needs_vtk_version_obsolete_constraint_raises). Must run in a subprocess
+    since pytester's in-process runner shares the live ``pyvista`` module with the
+    tests that follow it in this file.
     """
     pytester.makepyfile(
         """
@@ -62,15 +64,13 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> Non
         import pytest
 
         pv.vtk_version_info = (9, 6, 1)
+        pv._MIN_SUPPORTED_VTK_VERSION = (9, 2, 2)
 
         @pytest.mark.needs_vtk_version(9, 6)
         def test_positional_satisfied():
             pass
 
-        # `at_least` must stay at or above the plugin's own supported VTK
-        # floor (9.2.2, see README) to avoid the obsolete-constraint raise
-        # that `pyvista.vtk_version_info` triggers for free on older bounds.
-        @pytest.mark.needs_vtk_version(at_least=(9, 2, 2))
+        @pytest.mark.needs_vtk_version(at_least=(9, 3, 0))
         def test_at_least_satisfied():
             pass
 
@@ -78,7 +78,7 @@ def test_needs_vtk_version_runs_when_satisfied(pytester: pytest.Pytester) -> Non
         def test_less_than_satisfied():
             pass
 
-        @pytest.mark.needs_vtk_version(at_least=(9, 2, 2), less_than=(99, 0))
+        @pytest.mark.needs_vtk_version(at_least=(9, 3, 0), less_than=(99, 0))
         def test_range_satisfied():
             pass
         """
@@ -102,8 +102,10 @@ def test_needs_vtk_version_tuple_padding(pytester: pytest.Pytester) -> None:
         import pytest
 
         # Pin the installed version so this test does not depend on the VTK
-        # actually installed in the environment.
+        # actually installed in the environment, and the floor so none of
+        # these bounds are flagged as obsolete regardless of pyvista version.
         pv.vtk_version_info = (9, 6, 1)
+        pv._MIN_SUPPORTED_VTK_VERSION = (9, 2, 2)
 
         # (9, 6) -> (9, 6, 0) which is <= pinned (9, 6, 1), so it runs.
         @pytest.mark.needs_vtk_version(9, 6)
@@ -337,32 +339,73 @@ def test_needs_vtk_version_single_component(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(skipped=1)
 
 
-def test_needs_vtk_version_obsolete_constraint_raises_for_free(pytester: pytest.Pytester) -> None:
+def test_needs_vtk_version_obsolete_constraint_raises(pytester: pytest.Pytester) -> None:
     """
-    A single-component ``at_least`` below the plugin's VTK floor is obsolete and errors.
+    An `at_least`/`less_than` bound at or below pyvista's VTK floor raises by default.
 
-    Because the padded minor/micro are always zero, ``needs_vtk_version(9)`` pads to
-    ``(9, 0, 0)`` -- below the 9.2.2 floor this plugin documents as its minimum
-    supported VTK version (see README). The plugin does not check for this itself:
-    the error comes straight out of comparing against ``pyvista.vtk_version_info``,
-    which raises on this comparison on its own on pyvista versions where it is
-    version-aware.
+    Such a bound is guaranteed to always be satisfied (`at_least`) or never satisfied
+    (`less_than`), so it is a stale check a maintainer can safely delete -- and the
+    default (`raise_obsolete_vtk = true`) surfaces that instead
+    of silently skipping or running the guarded test forever. The message names the
+    exact ini setting to flip if a project wants to keep such checks anyway (e.g.
+    while still supporting an older pyvista). Pins `pyvista._MIN_SUPPORTED_VTK_VERSION`
+    so this does not depend on which floor the installed pyvista happens to use, and
+    must run in a subprocess since pytester's in-process runner shares the live
+    `pyvista` module with the tests that follow it in this file.
     """
-    if not hasattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION"):
-        pytest.skip("requires a pyvista with a version-aware vtk_version_info")
-
     pytester.makepyfile(
         """
+        import pyvista as pv
         import pytest
 
-        @pytest.mark.needs_vtk_version(9)
-        def test_obsolete_constraint():
+        pv._MIN_SUPPORTED_VTK_VERSION = (9, 2, 2)
+
+        @pytest.mark.needs_vtk_version(at_least=(9, 0))
+        def test_obsolete_at_least():
+            pass
+
+        @pytest.mark.needs_vtk_version(less_than=(9, 0))
+        def test_obsolete_less_than():
             pass
         """
     )
-    result = pytester.runpytest("-v")
-    result.assert_outcomes(errors=1)
-    result.stdout.fnmatch_lines(["*VTKVersionError*unsupported VTK version*"])
+    result = pytester.runpytest_subprocess("-v")
+    result.assert_outcomes(errors=2)
+    result.stdout.fnmatch_lines(["*at_least=9.0.0*is obsolete*always passes*safely removed*"])
+    result.stdout.fnmatch_lines(["*less_than=9.0.0*is obsolete*can now never pass*safely removed*"])
+    result.stdout.fnmatch_lines(["*raise_obsolete_vtk = false*"])
+
+
+def test_needs_vtk_version_obsolete_check_disabled_via_ini(pytester: pytest.Pytester) -> None:
+    """
+    Setting `raise_obsolete_vtk = false` restores the plain check.
+
+    With the obsolete check off, a bound below pyvista's VTK floor is evaluated
+    normally against the (pinned) installed version instead of raising. Must run
+    in a subprocess since pytester's in-process runner shares the live `pyvista`
+    module with the tests that follow it in this file.
+    """
+    pytester.makeini(
+        """
+        [pytest]
+        raise_obsolete_vtk = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        import pytest
+
+        pv.vtk_version_info = (9, 6, 1)
+        pv._MIN_SUPPORTED_VTK_VERSION = (9, 2, 2)
+
+        @pytest.mark.needs_vtk_version(at_least=(9, 0))
+        def test_obsolete_but_disabled():
+            pass
+        """
+    )
+    result = pytester.runpytest_subprocess("-v")
+    result.assert_outcomes(passed=1)
 
 
 def test_needs_vtk_version_custom_reason_in_report(pytester: pytest.Pytester) -> None:

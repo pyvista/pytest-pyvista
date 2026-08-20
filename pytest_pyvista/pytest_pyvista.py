@@ -32,6 +32,7 @@ import vtkmodules
 
 from pytest_pyvista import hooks
 from pytest_pyvista._markers import pytest_runtest_setup  # noqa: F401
+from pytest_pyvista._markers import register_ini_options
 from pytest_pyvista._markers import register_markers
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -344,6 +345,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         default=True,
         help="Automatically close all plotters and run gc.collect() after each test (default: True).",
     )
+
+    register_ini_options(parser)
 
 
 class VerifyImageCache:

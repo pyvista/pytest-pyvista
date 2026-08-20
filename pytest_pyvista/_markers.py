@@ -28,6 +28,20 @@ def register_markers(config: pytest.Config) -> None:
         config.addinivalue_line("markers", f"{signature}: {description}")
 
 
+def register_ini_options(parser: pytest.Parser) -> None:
+    """Register the ``raise_obsolete_vtk`` ini option."""
+    parser.addini(
+        "raise_obsolete_vtk",
+        type="bool",
+        default=True,
+        help=(
+            "Error when a `needs_vtk_version` bound is at or below pyvista's own "
+            "supported VTK floor, since such a check is guaranteed to always pass and "
+            "can be removed (default: True)."
+        ),
+    )
+
+
 def _pad_version(version: tuple[int, ...]) -> tuple[int, int, int]:
     """
     Validate and pad a version tuple with trailing zeros to a length of three.
@@ -128,6 +142,45 @@ def _default_reason(
     return f"Test needs {requirement}. The installed version is {'.'.join(map(str, current))}."
 
 
+def _obsolete_vtk_version_reason(keyword: str, bound: tuple[int, int, int]) -> str | None:
+    """
+    Return a message if ``bound`` is guaranteed to be satisfied by any supported VTK.
+
+    ``None`` when pyvista does not expose ``_MIN_SUPPORTED_VTK_VERSION`` (older
+    pyvista, degrades gracefully) or ``bound`` is above that floor.
+
+    Parameters
+    ----------
+    keyword : str
+        Either ``"at_least"`` or ``"less_than"``, for the message.
+    bound : tuple[int, int, int]
+        The padded version bound to check.
+
+    Returns
+    -------
+    str | None
+        An explanatory, actionable message if ``bound`` is obsolete, otherwise ``None``.
+
+    """
+    min_supported = getattr(pyvista, "_MIN_SUPPORTED_VTK_VERSION", None)
+    if min_supported is None or bound > tuple(min_supported):
+        return None
+
+    formatted_bound = ".".join(map(str, bound))
+    formatted_floor = ".".join(map(str, min_supported))
+    outcome = (
+        "always passes and can be safely removed"
+        if keyword == "at_least"
+        else "can now never pass (the test would be permanently skipped) and its guarded code can be safely removed"
+    )
+    return (
+        f"`needs_vtk_version` constraint `{keyword}={formatted_bound}` is obsolete: pyvista "
+        f"{pyvista.__version__} already requires VTK >= {formatted_floor}, so this check {outcome}. "
+        f"To keep this check anyway (e.g. while still supporting older pyvista), set "
+        f"`raise_obsolete_vtk = false` in your pytest configuration."
+    )
+
+
 def _uses_egl() -> bool:
     """
     Return whether the running VTK is a headless OSMesa/EGL build.
@@ -143,20 +196,27 @@ def _uses_egl() -> bool:
     return uses_egl()
 
 
-def _needs_vtk_version_skip_reason(item_mark: pytest.Mark) -> str | None:
+def _needs_vtk_version_skip_reason(item_mark: pytest.Mark, config: pytest.Config) -> str | None:
     """
     Evaluate a ``needs_vtk_version`` marker against the running VTK version.
 
-    The comparison is made directly against :data:`pyvista.vtk_version_info`
-    (not a plain tuple derived from it) so that, on pyvista versions where it
-    is a version-aware type, comparing against a constraint older than
-    pyvista's own supported VTK floor raises for free — the plugin does not
-    reimplement that check.
+    The version comparison itself is made against a plain tuple copy of
+    :data:`pyvista.vtk_version_info`, not the object itself -- comparing it
+    directly would raise whenever the *constraint* is older than pyvista's own
+    supported VTK floor, regardless of whether the installed VTK actually
+    satisfies the marker. Instead, this plugin runs its own obsolete-constraint
+    check first (see :func:`_obsolete_vtk_version_reason`), gated on the
+    ``raise_obsolete_vtk`` ini option (default: ``True``)
+    so it can be disabled per-project, with a message that names the exact
+    ini setting to flip -- unlike pyvista's own side effect, which cannot be
+    turned off independently of the real comparison.
 
     Parameters
     ----------
     item_mark : pytest.Mark
         The ``needs_vtk_version`` marker collected from the test item.
+    config : pytest.Config
+        The pytest config, used to read ``raise_obsolete_vtk``.
 
     Returns
     -------
@@ -164,13 +224,26 @@ def _needs_vtk_version_skip_reason(item_mark: pytest.Mark) -> str | None:
         A skip reason when the running VTK version does not satisfy the
         bound, otherwise ``None``.
 
+    Raises
+    ------
+    pyvista.VTKVersionError
+        If ``raise_obsolete_vtk`` is enabled and the
+        constraint is at or below pyvista's own supported VTK floor.
+
     """
     minimum, maximum = _parse_vtk_version_constraint(item_mark)
     reason = item_mark.kwargs.get("reason")
-    current = pyvista.vtk_version_info
+
+    if config.getini("raise_obsolete_vtk"):
+        for keyword, bound in (("at_least", minimum), ("less_than", maximum)):
+            if bound is not None and (obsolete_reason := _obsolete_vtk_version_reason(keyword, bound)) is not None:
+                error_cls = getattr(pyvista, "VTKVersionError", RuntimeError)
+                raise error_cls(obsolete_reason)
+
+    current = tuple(pyvista.vtk_version_info)
 
     if (minimum is not None and current < minimum) or (maximum is not None and current >= maximum):
-        return reason if reason is not None else _default_reason(minimum, maximum, tuple(current))
+        return reason if reason is not None else _default_reason(minimum, maximum, current)
 
     return None
 
@@ -184,7 +257,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     when the corresponding condition holds.
     """
     for item_mark in item.iter_markers("needs_vtk_version"):
-        if (skip_reason := _needs_vtk_version_skip_reason(item_mark)) is not None:
+        if (skip_reason := _needs_vtk_version_skip_reason(item_mark, item.config)) is not None:
             pytest.skip(skip_reason)
 
     if item_mark := item.get_closest_marker("skip_egl"):

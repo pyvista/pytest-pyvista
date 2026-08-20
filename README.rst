@@ -342,9 +342,19 @@ during test setup.
   skips the test unless the running VTK version satisfies the given bound. The
   positional form ``needs_vtk_version(9, 3)`` means ``at_least=(9, 3)``. Version
   tuples are padded with zeros so ``(9, 3)`` compares correctly against
-  ``(9, 3, 0)``. On pyvista versions where ``pyvista.vtk_version_info`` is
-  version-aware, a bound older than pyvista's own minimum supported VTK version
-  raises on its own -- the marker does not reimplement that check.
+  ``(9, 3, 0)``.
+
+  By default, a bound at or below the installed pyvista's own supported VTK floor
+  raises an error instead of silently skipping or running forever: such a check is
+  guaranteed to always (or never) be satisfied, so it is stale and safe to delete.
+  Set ``raise_obsolete_vtk = false`` to disable this and fall
+  back to a plain comparison, e.g. to keep supporting an older pyvista whose floor
+  hasn't caught up yet:
+
+  .. code-block:: toml
+
+      [tool.pytest.ini_options]
+      raise_obsolete_vtk = false
 
 .. code-block:: python
 
