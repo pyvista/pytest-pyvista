@@ -56,12 +56,14 @@ def test_reset_pyvista_state_restores_deleted_attribute(pytester: pytest.Pyteste
         """
         import pyvista as pv
 
+        _original_pickle_format = pv.PICKLE_FORMAT
+
         def test_delete_pickle_format():
             del pv.PICKLE_FORMAT
             assert not hasattr(pv, "PICKLE_FORMAT")
 
         def test_attribute_was_restored():
-            assert pv.PICKLE_FORMAT == "vtk"
+            assert pv.PICKLE_FORMAT == _original_pickle_format
         """
     )
     result = pytester.runpytest()
