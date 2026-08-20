@@ -173,6 +173,11 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
     pluginmanager.add_hookspecs(hooks)
 
 
+def _parse_bool(value: str) -> bool:
+    """Parse a CLI value the same way pytest parses a ``type="bool"`` ini value."""
+    return value.strip().lower() not in {"false", "0", "no"}
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     """Add new flag options to the pyvista plugin."""
 
@@ -286,6 +291,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
         )
 
+        option = "reset_global_state"
+        help_ = "Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test."
+        _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
+
     def _add_doc_cli_and_ini_options() -> None:
         """Add options specific to the documentation tests."""
         _add_doc_cli_option(
@@ -331,24 +341,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Maximum size allowed for vtksz interactive plot files.",
         )
 
-    def _add_vtk_cleanup_cli_and_ini_options() -> None:
-        """
-        Add options for the autouse ``_reset_pyvista_state`` fixture.
-
-        This fixture runs in both regular unit tests and doc mode, and
-        defaults to enabled; the CLI flag is a ``--no_*`` override so a
-        single invocation can disable it without editing the ini config.
-        """
-        option = "reset_global_state"
-        help_ = "Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test."
-        _add_common_cli_option(f"--no_{option}", action="store_false", dest=option, default=None, help=f"Disable: {help_}")
-        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
-
     group = parser.getgroup(PARSER_GROUP_NAME)
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()
     _add_doc_cli_and_ini_options()
-    _add_vtk_cleanup_cli_and_ini_options()
 
     # VTK resource cleanup options
     parser.addini(

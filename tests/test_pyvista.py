@@ -1437,7 +1437,10 @@ def test_cli_args_classified() -> None:
 @pytest.mark.parametrize("arg", sorted(_UNIT_TEST_CLI_ARGS - _DOC_MODE_CLI_ARGS))
 def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
     """Run pytest with --doc_mode and forbidden args."""
-    result = pytester.runpytest("--doc_mode", arg)
+    args = ["--doc_mode", arg]
+    if arg == "--reset_global_state":
+        args.append("true")
+    result = pytester.runpytest(*args)
     result.stderr.fnmatch_lines([f"ERROR: argument {arg} cannot be used with --doc_mode enabled"])
     assert result.ret == pytest.ExitCode.USAGE_ERROR
 

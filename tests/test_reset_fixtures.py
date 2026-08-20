@@ -5,27 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from pytest_pyvista import _reset_fixtures
-from pytest_pyvista._reset_fixtures import _bool_option_enabled
 from pytest_pyvista._reset_fixtures import _capture_default
 
 if TYPE_CHECKING:
     import pytest
-
-
-class _FakeConfig:
-    """Stand-in for `pytest.Config`, exposing only the two methods `_bool_option_enabled` calls."""
-
-    def __init__(self, *, cli_value: bool | None, ini_value: bool) -> None:
-        self._cli_value = cli_value
-        self._ini_value = ini_value
-
-    def getoption(self, name: str) -> bool | None:  # noqa: ARG002
-        """Return the CLI value configured for this fake."""
-        return self._cli_value
-
-    def getini(self, name: str) -> bool:  # noqa: ARG002
-        """Return the ini value configured for this fake."""
-        return self._ini_value
 
 
 def test_reset_pyvista_state_restores_defaults(pytester: pytest.Pytester) -> None:
@@ -70,8 +53,32 @@ def test_reset_pyvista_state_disabled_is_noop(pytester: pytest.Pytester) -> None
     result.assert_outcomes(passed=2)
 
 
+def test_reset_pyvista_state_enabled_via_cli(pytester: pytest.Pytester) -> None:
+    """Passing ``--reset_global_state=true`` resets state even though the ini default is disabled."""
+    pytester.makeini(
+        """
+        [pytest]
+        reset_global_state = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_mutates_state():
+            pv.vtk_verbosity("error")
+            assert pv.vtk_verbosity() == "error"
+
+        def test_b_sees_default():
+            assert pv.vtk_verbosity() == "info"
+        """
+    )
+    result = pytester.runpytest("--reset_global_state=true")
+    result.assert_outcomes(passed=2)
+
+
 def test_reset_pyvista_state_disabled_via_cli(pytester: pytest.Pytester) -> None:
-    """Passing ``--no_reset_global_state`` should skip the reset even though the ini default is enabled."""
+    """Passing ``--reset_global_state=false`` skips the reset even though the ini default is enabled."""
     pytester.makepyfile(
         """
         import pyvista as pv
@@ -84,7 +91,7 @@ def test_reset_pyvista_state_disabled_via_cli(pytester: pytest.Pytester) -> None
             assert pv.vtk_verbosity() == "error"
         """
     )
-    result = pytester.runpytest("--no_reset_global_state")
+    result = pytester.runpytest("--reset_global_state=false")
     result.assert_outcomes(passed=2)
 
 
@@ -133,18 +140,6 @@ def test_reset_pyvista_state_suppresses_attribute_error(pytester: pytest.Pyteste
     )
     result = pytester.runpytest_subprocess()
     result.assert_outcomes(passed=2)
-
-
-def test_bool_option_enabled_cli_overrides_ini() -> None:
-    """A CLI value, when set, wins over the ini value."""
-    assert _bool_option_enabled(_FakeConfig(cli_value=False, ini_value=True), "x") is False
-    assert _bool_option_enabled(_FakeConfig(cli_value=True, ini_value=False), "x") is True
-
-
-def test_bool_option_enabled_falls_back_to_ini() -> None:
-    """With no CLI value set, the ini value is used."""
-    assert _bool_option_enabled(_FakeConfig(cli_value=None, ini_value=True), "x") is True
-    assert _bool_option_enabled(_FakeConfig(cli_value=None, ini_value=False), "x") is False
 
 
 def test_capture_default_returns_none_on_attribute_error() -> None:
