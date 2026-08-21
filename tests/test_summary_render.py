@@ -220,6 +220,16 @@ def test_a_record_with_no_comparable_error_is_flagged_for_the_sort() -> None:
     assert 'data-missing-error="0"' in render_report([_record(error=812.4)], run_id="run-1", metadata=_metadata())
 
 
+def test_only_cards_awaiting_a_decision_float_to_the_top() -> None:
+    """A skipped comparison has no error either, but nothing is being asked of the reader, so it must not outrank the failures."""
+    skipped = render_report([_record(status="skipped", error=None)], run_id="run-1", metadata=_metadata())
+    assert 'data-missing-error="0"' in skipped
+
+    # Nor an image a policy flag already wrote to the cache: it carries a chip, not a checkbox.
+    pre_approved = _record(status="new", error=None, cache_written=True, cache_write_reason="add_missing_images")
+    assert 'data-missing-error="0"' in render_report([pre_approved], run_id="run-1", metadata=_metadata())
+
+
 def test_non_finite_errors_render_a_sortable_number() -> None:
     """NaN and infinite errors leave ``data-error`` finite so the client-side sort stays defined."""
     for error in (float("nan"), float("inf"), float("-inf")):

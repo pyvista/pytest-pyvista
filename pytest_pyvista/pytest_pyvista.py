@@ -1484,12 +1484,33 @@ def verify_image_cache(
         gen_dir = _summary_report_dir(pytestconfig) / "generated"
         try:
             gen_dir.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            # An unwritable report directory costs a warning at the end of the run, never the
-            # run itself - and that has to hold here too, where a raise would error the fixture
-            # and fail every test. Fall back to the pytest cache: that run's report cannot be
-            # written anyway, so there is nothing for its sources to outlive.
-            gen_dir = _make_config_cache_dir(pytestconfig, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
+        except OSError as error:
+            # Only this one subdirectory failed; the report directory around it may be perfectly
+            # healthy, in which case the run still writes a report that looks entirely normal
+            # while its manifest names sources in the pytest cache that `pytest_unconfigure`
+            # deletes on the way out. Nothing downstream can explain that to the reader - the
+            # approve CLI sees only a missing file, and `_ensure_dir_exists` cannot warn about a
+            # directory that does now exist - so the degrade has to be announced here. A raise
+            # would error this fixture and fail every test, which the report must never do.
+            fallback: Path | None = None
+            with contextlib.suppress(Exception):
+                # `config.cache` is None under `-p no:cacheprovider`, so even the fallback can
+                # fail. Losing the renders is a degraded report; raising is a broken run.
+                fallback = _make_config_cache_dir(pytestconfig, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
+            destination = (
+                f"They are being written to {fallback} instead, which is removed when the run finishes"
+                if fallback
+                else "They cannot be written at all"
+            )
+            warnings.warn(
+                f"pytest-pyvista could not create {gen_dir} for this run's generated images: {type(error).__name__}: {error}. "
+                f"{destination}, so the image summary report is still written but approvals exported from it cannot be "
+                f"applied. Set --generated_image_dir to a writable location to keep the renders the approvals need.",
+                # 1, not 2: the caller is pytest's fixture machinery, and naming
+                # `_pytest/fixtures.py` as the source of a pytest-pyvista warning helps nobody.
+                stacklevel=1,
+            )
+            gen_dir = fallback
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir", is_dir=True)
 
     verify_image_cache = VerifyImageCache(

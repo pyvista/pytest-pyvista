@@ -171,12 +171,23 @@ def _info(record: ImageRecord) -> str:
     return f'<dl class="info">{cells}</dl>'
 
 
+def _wants_approval(record: ImageRecord) -> bool:
+    """
+    Return True when this record is one the reader is being asked to approve.
+
+    Exactly the condition for a live checkbox: an image already written to the cache by a
+    policy flag is shown for reference, not for a decision. Shared with the card's sort flag
+    so that "offered for approval" and "floated to the top of the sort" cannot drift apart.
+    """
+    return not record.cache_written and record.status in APPROVABLE_STATUSES
+
+
 def _approval(record: ImageRecord) -> str:
     """Render the approval control: a live checkbox, a static chip, or nothing at all."""
     if record.cache_written:
         reason = html.escape(record.cache_write_reason or "policy")
         return f'<span class="chip">{_CHECK_MARK} In cache {_EM_DASH} --{reason}</span>'
-    if record.status in APPROVABLE_STATUSES:
+    if _wants_approval(record):
         return '<label class="approve"><input type="checkbox"> Approve this image</label>'
     return ""
 
@@ -192,8 +203,10 @@ def _card(record: ImageRecord, embed_dir: Path | None) -> str:
     error = f"{value:g}" if value is not None else "0"
     # A record with no comparable error is not a record with an error of zero. `new` cards are
     # the whole point of a first run and would otherwise sort beneath every passing test, so the
-    # flag below lets the default error-descending sort float them to the top instead.
-    missing_error = "0" if value is not None else "1"
+    # flag below lets the default error-descending sort float them to the top instead. Only
+    # cards awaiting a decision float: a skipped comparison also has no error, and is the least
+    # actionable card in the report - floating it would bury the failures it sorted above.
+    missing_error = "1" if value is None and _wants_approval(record) else "0"
     return (
         f'<article class="card" data-status="{status}" data-key="{key}" '
         f'data-name="{html.escape(record.test_name.lower())}" data-error="{error}" '

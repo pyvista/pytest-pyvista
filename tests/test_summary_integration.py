@@ -322,6 +322,29 @@ def test_a_report_that_cannot_be_written_warns_without_failing_the_run(pytester:
     result.stdout.fnmatch_lines(["*could not write the image summary report*"])
 
 
+def test_a_generated_directory_that_cannot_be_created_says_so_loudly(pytester: pytest.Pytester) -> None:
+    """
+    A report directory that is fine except for a plain file where ``generated/`` belongs.
+
+    The dangerous shape of this failure is how healthy it looks: the report is written, every
+    card is there, and the run says nothing - while the renders behind those cards go to the
+    pytest cache and are deleted on the way out, so an approvals.json exported from that
+    perfectly normal-looking page cannot be applied to anything. Nothing downstream can explain
+    that (the approve CLI sees only a missing file), so the run itself has to.
+    """
+    Path(pytester.path, REPORT_DIR).mkdir()
+    Path(pytester.path, REPORT_DIR, GENERATED_DIR).write_text("not a directory", encoding="utf-8")
+    pytester.makepyfile(TEST_FILE)
+
+    result = pytester.runpytest("--summary_html")
+
+    # The degrade is announced, not raised: the run reports exactly what it would have anyway.
+    result.assert_outcomes(failed=1)
+    assert 'data-status="new"' in _report(pytester)
+    result.stdout.fnmatch_lines(["*could not create*generated*"])
+    result.stdout.fnmatch_lines(["*approvals exported from it cannot be applied*"])
+
+
 def test_the_report_survives_the_unused_cache_image_abort(pytester: pytest.Pytester) -> None:
     """``--disallow_unused_cache`` exits from the terminal summary; the report is written anyway."""
     pytester.makepyfile(TEST_FILE)
