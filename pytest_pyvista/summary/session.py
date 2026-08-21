@@ -47,19 +47,19 @@ class SummarySession:
         baseline_source: Path | None,
         generated_source: Path | None,
         cache_destination: Path | None,
-        skipped: bool,
-        skip_reason: str | None,
         baseline_existed: bool,
         cache_write_reason: CacheWriteReason | None,
         error: float | None,
         error_threshold: float,
         warning_threshold: float,
         high_variance_test: bool,
-        matched_alternate: bool,
-        matched_baseline: str | None,
-        candidate_baselines: list[str],
         image_format: str,
         env_info: str,
+        skipped: bool = False,
+        skip_reason: str | None = None,
+        matched_alternate: bool = False,
+        matched_baseline: str | None = None,
+        candidate_baselines: list[str] | None = None,
     ) -> ImageRecord | None:
         """
         Record one generated image.
@@ -68,6 +68,13 @@ class SummarySession:
         preserved baseline, because the plugin's own comparison is image-against-itself
         whenever the cache was written before comparing. Returns ``None`` when the
         resulting status is excluded by ``--summary_html_include``.
+
+        The last five arguments describe a comparison that actually ran against one or more
+        cached baselines. They default to "no comparison happened", which is what a skipped
+        test and an image with no baseline at all both need, so that the call sites which do
+        have a comparison to describe are the only ones that mention them - the differences
+        between the call sites are then visible at a glance rather than buried in twenty
+        identical lines.
         """
         slug = slugify(f"{test_name}_{call_index}" if call_index else test_name)
 
@@ -132,7 +139,7 @@ class SummarySession:
             generated_image_full=generated_full,
             diff_image_full=diff_full,
             matched_baseline=matched_baseline,
-            candidate_baselines=candidate_baselines,
+            candidate_baselines=candidate_baselines if candidate_baselines is not None else [],
             cache_written=cache_write_reason is not None,
             cache_write_reason=cache_write_reason,
             skip_reason=skip_reason,

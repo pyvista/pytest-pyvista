@@ -417,7 +417,10 @@ def _summary_capture_failures_are_warnings() -> Generator[None, None, None]:
     try:
         yield
     except Exception as error:  # noqa: BLE001 - deliberately total: no reporting failure may reach the test
-        warnings.warn(f"pytest-pyvista could not record an image in the summary report: {error!r}", stacklevel=3)
+        # `str` rather than `repr` because an OSError names the offending path only in `str`,
+        # and that path is the one thing the reader needs. Matches _write_summary_report's
+        # equivalent warning.
+        warnings.warn(f"pytest-pyvista could not record an image in the summary report: {type(error).__name__}: {error}", stacklevel=3)
 
 
 class VerifyImageCache:
@@ -553,12 +556,7 @@ class VerifyImageCache:
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
-        if self.high_variance_test:
-            allowed_error = self.var_error_value
-            allowed_warning = self.var_warning_value
-        else:
-            allowed_error = self.error_value
-            allowed_warning = self.warning_value
+        allowed_error, allowed_warning = self._allowed_thresholds()
 
         # cached image name. We remove the first 5 characters of the function name
         # "test_" to get the name for the image.
@@ -594,9 +592,6 @@ class VerifyImageCache:
                         error_threshold=allowed_error,
                         warning_threshold=allowed_warning,
                         high_variance_test=self.high_variance_test,
-                        matched_alternate=False,
-                        matched_baseline=None,
-                        candidate_baselines=[],
                         image_format=self.image_format,
                         env_info=str(self.env_info),
                     )
@@ -623,6 +618,18 @@ class VerifyImageCache:
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
 
+            if summary is not None:
+                # Recorded here, after the render above is on disk and before the raise, because
+                # this is the *default* path for a suite that has no baselines yet: without it a
+                # bare `--summary_html` run on a fresh suite reports nothing at all, which is the
+                # most likely first experience of the feature.
+                self._capture_new_image(
+                    summary,
+                    test_name=test_name,
+                    image_name=image_name,
+                    cache_destination=current_cached_image,
+                )
+
             remove_plotter_close_callback()
             msg = f"{current_cached_image} does not exist in image cache"
             raise RegressionFileNotFoundError(msg)
@@ -638,36 +645,12 @@ class VerifyImageCache:
             # The generated image is considered unused, so exit safely before image
             # comparison to avoid a FileNotFoundError
             if summary is not None:
-                # The image is real and has no baseline: without this it would vanish from
-                # the report entirely, with nothing to say it was ever rendered. Recorded as
-                # `new`, so the reader can approve it into the cache.
-                with _summary_capture_failures_are_warnings():
-                    summary.capture(
-                        test_name=test_name,
-                        image_name=image_name,
-                        call_index=self.n_calls - 1,
-                        baseline_source=None,
-                        generated_source=_get_generated_image_path(
-                            parent=cast("Path", self.generated_image_dir),
-                            image_name=image_name,
-                            generate_subdirs=self.generate_subdirs,
-                            env_info=self.env_info,
-                        ),
-                        cache_destination=current_cached_image,
-                        skipped=False,
-                        skip_reason=None,
-                        baseline_existed=False,
-                        cache_write_reason=None,
-                        error=None,
-                        error_threshold=allowed_error,
-                        warning_threshold=allowed_warning,
-                        high_variance_test=self.high_variance_test,
-                        matched_alternate=False,
-                        matched_baseline=None,
-                        candidate_baselines=[],
-                        image_format=self.image_format,
-                        env_info=str(self.env_info),
-                    )
+                self._capture_new_image(
+                    summary,
+                    test_name=test_name,
+                    image_name=image_name,
+                    cache_destination=current_cached_image,
+                )
             return
 
         test_name_no_prefix = test_name.removeprefix("test_")
@@ -741,8 +724,6 @@ class VerifyImageCache:
                         env_info=self.env_info,
                     ),
                     cache_destination=current_cached_image,
-                    skipped=False,
-                    skip_reason=None,
                     baseline_existed=preserved_baseline is not None,
                     cache_write_reason=self._cache_write_reason(baseline_existed=preserved_baseline is not None, failed=bool(fail_msg)),
                     error=None,
@@ -759,6 +740,62 @@ class VerifyImageCache:
         if pending_error is not None:
             remove_plotter_close_callback()
             raise pending_error
+
+    def _allowed_thresholds(self) -> tuple[float, float]:
+        """
+        Return the ``(error, warning)`` thresholds this comparison is judged against.
+
+        A high-variance test is judged against its own, far looser pair. Resolved in one place
+        so that every caller - the comparison itself and the summary records describing it -
+        cannot disagree about which pair applies.
+        """
+        if self.high_variance_test:
+            return self.var_error_value, self.var_warning_value
+        return self.error_value, self.warning_value
+
+    def _capture_new_image(
+        self,
+        summary: SummarySession,
+        *,
+        test_name: str,
+        image_name: str,
+        cache_destination: Path,
+    ) -> None:
+        """
+        Record a rendered image that has no baseline in the cache, as a ``new`` card.
+
+        Both callers arrive here having just written the render to ``generated_image_dir`` and
+        with nothing to compare it against: the missing-baseline failure, and the
+        ``--allow_unused_generated`` early return. Without this the image would vanish from the
+        report entirely, with nothing to say it was ever rendered; recorded as ``new``, the
+        reader can approve it into the cache instead.
+
+        Reporting must never change a test's outcome nor skip the cleanup that follows, so any
+        failure raised while recording is downgraded to a warning.
+        """
+        error_threshold, warning_threshold = self._allowed_thresholds()
+        with _summary_capture_failures_are_warnings():
+            summary.capture(
+                test_name=test_name,
+                image_name=image_name,
+                call_index=self.n_calls - 1,
+                baseline_source=None,
+                generated_source=_get_generated_image_path(
+                    parent=cast("Path", self.generated_image_dir),
+                    image_name=image_name,
+                    generate_subdirs=self.generate_subdirs,
+                    env_info=self.env_info,
+                ),
+                cache_destination=cache_destination,
+                baseline_existed=False,
+                cache_write_reason=None,
+                error=None,
+                error_threshold=error_threshold,
+                warning_threshold=warning_threshold,
+                high_variance_test=self.high_variance_test,
+                image_format=self.image_format,
+                env_info=str(self.env_info),
+            )
 
     def _candidate_baselines(self, image_name: str) -> list[Path]:
         """
@@ -868,6 +905,14 @@ def _test_name_from_image_name(image_name: str) -> str:
 
 
 def _get_generated_image_path(parent: Path, image_name: Path | str, *, generate_subdirs: bool, env_info: str | _EnvInfo, vtksz: bool = False) -> Path:
+    """
+    Return the path a generated render is written to, creating its parent directory.
+
+    The ``mkdir`` below is intentional and load-bearing, not a stray side effect: callers pass a
+    path whose directory may not exist yet - under ``--generate_subdirs`` a per-image
+    subdirectory never does - and the summary report's auto-provisioned generated directory
+    relies on it too. Do not remove it as a "cleanup"; the writes that follow would fail.
+    """
     name = Path(image_name)
     name = name.with_stem(name.stem + "_vtksz") if vtksz else name
     generated_image_path = parent / name.with_suffix("") / f"{env_info}{name.suffix}" if generate_subdirs else parent / name
@@ -1429,8 +1474,22 @@ def verify_image_cache(
     cache_dir = cast("Path", _get_option_from_config_or_ini(pytestconfig, "image_cache_dir", is_dir=True))
     gen_dir = _get_option_from_config_or_ini(pytestconfig, "generated_image_dir", is_dir=True)
     if gen_dir is None and _summary_html_enabled(pytestconfig):
-        # The report needs a generated render to copy; nothing is persisted by default.
-        gen_dir = _make_config_cache_dir(pytestconfig, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
+        # The report needs a generated render to copy, and the copy must outlive the run: an
+        # approvals.json exported from this report names it as the source, and
+        # `pytest-pyvista-approve` reads it back afterwards. The pytest cache is wiped by
+        # `pytest_unconfigure`, so keep the renders beside the report instead - that directory
+        # is the artifact users keep, zip and upload from CI, so the sources belong with it.
+        # Created here rather than left to `_get_generated_image_path`'s first write, so that
+        # `VerifyImageCache.__init__` does not warn about a directory the plugin provisioned.
+        gen_dir = _summary_report_dir(pytestconfig) / "generated"
+        try:
+            gen_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # An unwritable report directory costs a warning at the end of the run, never the
+            # run itself - and that has to hold here too, where a raise would error the fixture
+            # and fail every test. Fall back to the pytest cache: that run's report cannot be
+            # written anyway, so there is nothing for its sources to outlive.
+            gen_dir = _make_config_cache_dir(pytestconfig, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME)
     failed_dir = _get_option_from_config_or_ini(pytestconfig, "failed_image_dir", is_dir=True)
 
     verify_image_cache = VerifyImageCache(

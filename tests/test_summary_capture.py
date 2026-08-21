@@ -261,7 +261,13 @@ def test_a_reporting_failure_does_not_replace_the_regression_error(pytester: pyt
     # re-enter the comparison and error against an image that was never rendered.
     result.assert_outcomes(failed=1)
     result.stdout.re_match_lines([r".*RegressionError: .*"])
-    result.stdout.no_re_match_line(r".*OSError: report store is unwritable.*")
+    # Anchored on pytest's "E " failure-line prefix: what must not happen is the OSError
+    # *replacing* the regression error, not the OSError being mentioned at all. It is
+    # mentioned - the downgraded warning names it, and since it is an OSError the warning
+    # deliberately spells it out in full so its path is readable - so an unanchored match
+    # here would be satisfied by the warnings summary rather than by the failure.
+    result.stdout.no_re_match_line(r"E\s+.*report store is unwritable.*")
+    result.stdout.fnmatch_lines(["*could not record an image in the summary report: OSError: report store is unwritable*"])
 
 
 def test_a_reporting_failure_in_the_skip_branch_does_not_fail_the_test(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:
