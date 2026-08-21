@@ -28,6 +28,7 @@ SCRIPT = resources.files("pytest_pyvista.summary.assets").joinpath("report.js").
         "data-key",
         "data-name",
         "data-error",
+        "data-missing-error",
     ],
 )
 def test_script_wires_up_each_documented_hook(hook: str) -> None:

@@ -226,6 +226,15 @@
         if (mode === "name") {
           return byName;
         }
+        // A card with no comparable error carries data-error="0", which would sink
+        // it beneath every passing test under the error-descending order below --
+        // and those cards (`new` above all) are the ones most likely to want
+        // approving. Float them to the top instead.
+        var aMissing = a.getAttribute("data-missing-error") === "1";
+        var bMissing = b.getAttribute("data-missing-error") === "1";
+        if (aMissing !== bMissing) {
+          return aMissing ? -1 : 1;
+        }
         // data-error is always a finite number, so this comparator is total; the
         // name breaks ties, which keeps the order the same on every browser.
         return (

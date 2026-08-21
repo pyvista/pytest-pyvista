@@ -190,9 +190,14 @@ def _card(record: ImageRecord, embed_dir: Path | None) -> str:
     # Always a finite number: the client-side sort comparator is undefined otherwise.
     value = _finite(record.error)
     error = f"{value:g}" if value is not None else "0"
+    # A record with no comparable error is not a record with an error of zero. `new` cards are
+    # the whole point of a first run and would otherwise sort beneath every passing test, so the
+    # flag below lets the default error-descending sort float them to the top instead.
+    missing_error = "0" if value is not None else "1"
     return (
         f'<article class="card" data-status="{status}" data-key="{key}" '
-        f'data-name="{html.escape(record.test_name.lower())}" data-error="{error}">'
+        f'data-name="{html.escape(record.test_name.lower())}" data-error="{error}" '
+        f'data-missing-error="{missing_error}">'
         f'<header><span class="badge {status}">{status}</span>'
         f'<span class="name">{name}</span>'
         f'<span class="env">{html.escape(record.env_info)}</span>'

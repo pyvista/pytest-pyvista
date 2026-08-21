@@ -214,6 +214,12 @@ def test_a_non_numeric_error_renders_as_no_error_at_all() -> None:
     assert "Image regression error" not in document
 
 
+def test_a_record_with_no_comparable_error_is_flagged_for_the_sort() -> None:
+    """A missing error is not an error of zero: the flag floats those cards to the top of the default sort."""
+    assert 'data-missing-error="1"' in render_report([_record(status="new", error=None)], run_id="run-1", metadata=_metadata())
+    assert 'data-missing-error="0"' in render_report([_record(error=812.4)], run_id="run-1", metadata=_metadata())
+
+
 def test_non_finite_errors_render_a_sortable_number() -> None:
     """NaN and infinite errors leave ``data-error`` finite so the client-side sort stays defined."""
     for error in (float("nan"), float("inf"), float("-inf")):
