@@ -350,7 +350,10 @@ Each image is given one of six statuses:
 * ``failed``: the error exceeded the error threshold, or no comparison could be
   computed at all (for example, a size mismatch between baseline and generated image).
 * ``skipped``: the comparison was skipped, so no render was generated.
-* ``new``: no baseline existed yet for this image.
+* ``new``: no baseline existed yet for this image. A missing baseline still fails the test
+  (that is unchanged by the report), so a first run against a suite with no cached images
+  fails every test *and* produces a report full of ``new`` cards, ready to be approved into
+  the cache.
 * ``reset``: a baseline existed and was overwritten during this run by
   ``--reset_image_cache`` or ``--reset_only_failed``. The report compares against the
   baseline as it stood *before* the overwrite.
@@ -382,14 +385,15 @@ the test run actually used, it silently checks the wrong location and every appr
 rejected.
 
 .. note::
-   A generated image only remains on disk after the run that produced it if
-   ``--generated_image_dir`` (or the ``generated_image_dir`` ini option) was set for that
-   run. Without it, the report still displays every render, but the file
-   ``pytest-pyvista-approve`` needs as its copy source lives in a temporary directory
-   that is removed as soon as the run finishes, so an ``approvals.json`` exported from
-   that report can no longer be applied; every entry fails with a "source image does not
-   exist" error. Set ``--generated_image_dir`` to a persistent location before the run if
-   you intend to approve images from its report afterwards.
+   ``pytest-pyvista-approve`` copies each approved image from the render the run produced,
+   so those renders have to still be on disk when it runs. Enabling the report keeps them:
+   unless ``--generated_image_dir`` (or the ``generated_image_dir`` ini option) says
+   otherwise, they are written to ``generated/`` inside the report directory and left
+   there, beside the report they belong to. That is also where the CLI looks for them by
+   default. If the run set ``--generated_image_dir``, or wrote its report somewhere other
+   than ``image_test_report``, pass the matching ``--generated_image_dir`` to
+   ``pytest-pyvista-approve``; otherwise every entry is rejected for resolving outside the
+   generated image directory.
 
 Other flags:
 
@@ -399,7 +403,11 @@ Other flags:
   ``cache`` writes straight into ``--image_cache_dir``.
 
 * ``--generated_image_dir <DIR>`` overrides the directory the manifest's source images
-  must resolve inside, if the generated images were moved after the run.
+  must resolve inside. Defaults to ``image_test_report/generated``, where a default
+  ``pytest --summary_html`` run leaves its renders. Pass it whenever the run used
+  ``--generated_image_dir`` or ``--summary_html_dir``, or the images were moved
+  afterwards. Sources are never read from outside this directory, so that an exported
+  manifest cannot name an unrelated file and have it copied into the image cache.
 
 * ``--force`` relaxes only the check that the manifest's recorded cache directory
   matches ``--image_cache_dir``; it does not relax anything else. In particular it does
@@ -448,6 +456,14 @@ Summary report flags
   test suites.
 
   .. note::
+     The *page* is self-contained, but the report directory around it is not empty: the
+     run's generated renders are still written to ``generated/`` beside it (unless
+     ``--generated_image_dir`` sends them elsewhere), because ``pytest-pyvista-approve``
+     copies from those files when an ``approvals.json`` exported from the page is applied.
+     Sharing ``index.html`` on its own is fine for reading the report; approving images
+     from it afterwards needs the ``generated/`` directory too.
+
+  .. note::
      ``--summary_html_embed`` combined with ``--summary_html_full_size all`` still
      writes full-resolution copies to disk, but they are not reachable from the page:
      embedding replaces both the inline image and its link with the same downscaled data
@@ -456,9 +472,13 @@ Summary report flags
      exists to respect.
 
 .. note::
-   If ``--generated_image_dir`` is not configured, enabling the report writes generated
-   images to a temporary directory so that they are available to the report while it
-   runs; see the note above about what that means for approving images afterwards.
+   If ``--generated_image_dir`` is not configured, enabling the report writes the run's
+   generated images to ``generated/`` inside the report directory, and leaves them there:
+   the report needs them while it runs, and ``pytest-pyvista-approve`` needs them
+   afterwards as the source of every copy it makes. Each run overwrites the renders it
+   produces; renders left behind by tests that no longer exist are not cleaned up, in the
+   same way as the report's own ``images/`` directory. Set ``--generated_image_dir`` to
+   keep them somewhere else.
 
 Customizing test cases
 ----------------------
