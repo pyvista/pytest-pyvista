@@ -13,12 +13,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+# Where a default `pytest --summary_html` run leaves its renders, and therefore where the
+# approve CLI looks for a manifest's sources unless --generated_image_dir says otherwise.
+GENERATED_SUBPATH = "image_test_report/generated"
+
+
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Build a project directory containing generated images, a cache dir, and an approvals.json."""
-    generated = tmp_path / "generated_images"
+    generated = tmp_path / GENERATED_SUBPATH
     cache = tmp_path / "image_cache_dir"
-    generated.mkdir()
+    generated.mkdir(parents=True)
     cache.mkdir()
     (generated / "sphere.png").write_bytes(b"generated-bytes")
 
@@ -228,7 +233,7 @@ def test_source_outside_default_generated_dir_is_rejected_without_the_override(
     project: Path,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
-    """Without --generated_image_dir, a source outside the cwd is rejected -- confirms the override in the test above is load-bearing."""
+    """Without --generated_image_dir, a source outside the default generated dir is rejected -- confirms the override above is load-bearing."""
     external = tmp_path_factory.mktemp("external_generated")
     (external / "sphere.png").write_bytes(b"external-bytes")
     payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
@@ -236,6 +241,28 @@ def test_source_outside_default_generated_dir_is_rejected_without_the_override(
     (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
 
     assert main(["approvals.json", "--target", "cache"]) == 1
+
+
+def test_a_source_elsewhere_in_the_working_tree_is_rejected(project: Path, capsys: pytest.CaptureFixture) -> None:
+    """
+    Containment is the run's generated directory, not the whole working tree.
+
+    A manifest round-trips through the reader's download directory, so it is untrusted: were
+    the default source root the cwd, an edited manifest could name any file below it -- here a
+    file that is not an image at all -- and have it copied into the cache under a baseline's
+    name. The rejection names --generated_image_dir, so a project whose renders genuinely live
+    elsewhere is told how to say so rather than being stuck.
+    """
+    secret = project / "secrets.env"
+    secret.write_bytes(b"API_TOKEN=hunter2")
+    payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
+    payload["approved"][0]["source"] = str(secret)
+    (project / "approvals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    assert main(["approvals.json", "--target", "cache"]) == 1
+
+    assert "--generated_image_dir" in capsys.readouterr().err
+    assert not (project / "image_cache_dir" / "sphere.png").exists()
 
 
 def test_overwriting_existing_baseline_replaces_its_content(project: Path) -> None:
@@ -251,7 +278,7 @@ def test_unreadable_source_fails_the_copy_without_destroying_an_existing_baselin
     """A source that cannot be read fails the copy with exit code 1 -- and a pre-existing baseline at the destination survives untouched."""
     destination = project / "image_cache_dir" / "sphere.png"
     destination.write_bytes(b"IRREPLACEABLE-BASELINE")
-    source = project / "generated_images" / "sphere.png"
+    source = project / GENERATED_SUBPATH / "sphere.png"
     source.chmod(0o000)
     try:
         assert main(["approvals.json", "--target", "cache"]) == 1
@@ -272,7 +299,7 @@ def test_long_destination_filename_does_not_prevent_the_copy(project: Path) -> N
     for exactly this length even though the destination name alone did not.
     """
     long_name = "a" * 246 + ".png"
-    generated = project / "generated_images"
+    generated = project / GENERATED_SUBPATH
     (generated / long_name).write_bytes(b"long-name-bytes")
     payload = json.loads((project / "approvals.json").read_text(encoding="utf-8"))
     payload["approved"].append(
@@ -294,7 +321,7 @@ def test_long_destination_filename_does_not_prevent_the_copy(project: Path) -> N
 
 def test_partial_failure_reports_every_completed_copy_before_stopping(project: Path, capsys: pytest.CaptureFixture) -> None:
     """When one copy in a batch fails, every copy that succeeded before it is still printed, and the batch stops there."""
-    generated = project / "generated_images"
+    generated = project / GENERATED_SUBPATH
     cache = project / "image_cache_dir"
     (generated / "cube.png").write_bytes(b"cube-bytes")
     blocked = cache / "blocked"

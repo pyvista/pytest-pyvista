@@ -16,6 +16,13 @@ from pytest_pyvista.summary.record import SCHEMA_VERSION
 
 _REQUIRED_KEYS = ("test_name", "image_name", "call_index", "status", "source", "destination")
 
+# Where a default `--summary_html` run leaves the renders an approvals.json names as its
+# sources: `<rootdir>/image_test_report/generated`, beside the report itself. Spelled out
+# here rather than imported so the console script stays independent of the plugin module
+# (and of importing pyvista to run); it mirrors DEFAULT_SUMMARY_HTML_DIR in
+# pytest_pyvista.py, exactly as --image_cache_dir's default mirrors the plugin's.
+DEFAULT_GENERATED_IMAGE_DIR = "image_test_report/generated"
+
 
 class ManifestError(Exception):
     """Raised when an approvals manifest is malformed or unsafe to apply."""
@@ -131,7 +138,10 @@ def _validate_entry(entry: object, index: int, *, source_root: Path, target_root
     # Task 11) copied.
     source = _resolve_within(Path(entry["source"]), source_root)
     if source is None:
-        msg = f"Approval {label}: source {entry['source']} resolves outside the generated image directory {source_root}."
+        msg = (
+            f"Approval {label}: source {entry['source']} resolves outside the generated image directory {source_root}. "
+            f"Pass --generated_image_dir if this report's generated images live elsewhere."
+        )
         raise ManifestError(msg)
     destination = _resolve_within(Path(entry["destination"]), target_root)
     if destination is None:
@@ -323,7 +333,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--generated_image_dir",
         default=None,
-        help="Override the generated image directory the manifest's sources must resolve inside.",
+        help=(
+            "Override the generated image directory the manifest's sources must resolve inside. "
+            f"Defaults to '{DEFAULT_GENERATED_IMAGE_DIR}', where a default `pytest --summary_html` run leaves them. "
+            "Needed whenever the run used --generated_image_dir or --summary_html_dir."
+        ),
     )
     parser.add_argument(
         "--image_cache_dir",
@@ -422,6 +436,15 @@ def _resolve_roots(args: argparse.Namespace) -> tuple[Path, Path, Path] | None:
     root this run will write into -- reopen the outcome the manifest-side ``cache_dir`` guard in
     ``_check_cache_dir`` exists to prevent.
 
+    ``source_root`` -- the root every manifest source must resolve inside -- defaults to
+    ``DEFAULT_GENERATED_IMAGE_DIR``, which is where a default ``--summary_html`` run leaves the
+    renders it names as sources. That is deliberately the run's generated directory and not the
+    whole working tree: an untrusted manifest must not be able to name *any* file under the cwd
+    and have it copied into the image cache under a baseline's name. A run that used
+    ``--generated_image_dir`` or ``--summary_html_dir`` puts its renders elsewhere, and says so
+    with ``--generated_image_dir`` here; ``_validate_entry``'s rejection message names that flag.
+    It is not checked by ``_reject_unsafe_root`` below: nothing is ever written into it.
+
     ``--image_cache_dir`` is always checked: it grounds the manifest's own ``cache_dir`` claim
     regardless of ``--target``, via ``load_manifest``. ``target_root`` -- the root this
     invocation will actually copy into -- is checked too, but *which flag* supplied it is never
@@ -438,7 +461,7 @@ def _resolve_roots(args: argparse.Namespace) -> tuple[Path, Path, Path] | None:
         # never comes from the manifest's own (untrusted) 'cache_dir' claim. The manifest's
         # claim is only ever *compared* against it (in load_manifest, via _check_cache_dir).
         image_cache_dir = Path(args.image_cache_dir).resolve()
-        source_root = Path(args.generated_image_dir).resolve() if args.generated_image_dir else Path.cwd()
+        source_root = Path(args.generated_image_dir or DEFAULT_GENERATED_IMAGE_DIR).resolve()
 
         if args.target == "cache":
             target_root_flag, target_root_raw = "--image_cache_dir", args.image_cache_dir
