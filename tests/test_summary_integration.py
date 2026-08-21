@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+from importlib import resources
+import json
 from pathlib import Path
+import re
 import shutil
 from typing import TYPE_CHECKING
 
 from PIL import Image
+
+from pytest_pyvista.summary.approve import main as approve_main
 
 if TYPE_CHECKING:
     import pytest
 
 CACHE_DIR = "image_cache_dir"
 REPORT_DIR = "image_test_report"
+GENERATED_DIR = "generated"
 
 TEST_FILE = """
     import pyvista as pv
@@ -36,9 +42,65 @@ SKIPPED_TEST_FILE = """
 """
 
 
+WARNING_TEST_FILE = """
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+
+    def test_sphere(verify_image_cache):
+        # Far above any difference this test can produce, so the comparison lands between the
+        # warning threshold (200 by default) and the error threshold: a warning, not a failure.
+        verify_image_cache.error_value = 1e9
+        pl = pv.Plotter()
+        pl.add_mesh(pv.Sphere(), color="blue")
+        pl.show()
+"""
+
+
 def _report(pytester: pytest.Pytester) -> str:
     """Read the rendered report page."""
     return Path(pytester.path, REPORT_DIR, "index.html").read_text(encoding="utf-8")
+
+
+def _embedded_manifest(pytester: pytest.Pytester) -> dict:
+    """Read back the approval manifest the page carries, the way the browser does."""
+    match = re.search(r'<script id="manifest" type="application/json">(.*?)</script>', _report(pytester), re.DOTALL)
+    assert match is not None, "the report page carries no embedded manifest"
+    return json.loads(match.group(1))
+
+
+def _exported_entry_keys() -> list[tuple[str, str]]:
+    """
+    Read the ``(payload key, record key)`` pairs ``exportApprovals`` writes, out of report.js itself.
+
+    The manifest contract is spelled out in four places in two languages - ImageRecord's fields,
+    render.py's ``_manifest``, this mapping in report.js, and approve.py's ``_REQUIRED_KEYS`` -
+    and only SCHEMA_VERSION is genuinely single-sourced. Deriving the export shape from the
+    script rather than restating it here is what makes the round-trip test below fail when
+    either side's key names drift, instead of silently testing a third, hand-written copy.
+    """
+    script = resources.files("pytest_pyvista.summary.assets").joinpath("report.js").read_text(encoding="utf-8")
+    block = re.search(r"approved: selectedKeys\(\)\.map\((.*?)\}\),", script, re.DOTALL)
+    assert block is not None, "exportApprovals no longer builds its entries in a recognisable shape"
+    pairs = re.findall(r"(\w+): record\.(\w+),", block.group(1))
+    assert pairs, "exportApprovals no longer copies any field off the manifest record"
+    return pairs
+
+
+def _export_approvals(pytester: pytest.Pytester) -> Path:
+    """Write the approvals.json the report's Export button would download, and return its path."""
+    manifest = _embedded_manifest(pytester)
+    keys = _exported_entry_keys()
+    payload = {
+        "schema_version": manifest["schema_version"],
+        "run_id": manifest["run_id"],
+        "exported_at": "2026-08-12T14:05:00Z",
+        "cache_dir": manifest["cache_dir"],
+        "image_format": manifest["image_format"],
+        "approved": [{payload_key: record[record_key] for payload_key, record_key in keys} for record in manifest["records"]],
+    }
+    path = Path(pytester.path, "approvals.json")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
 
 
 def test_report_is_generated_with_no_other_directories_configured(pytester: pytest.Pytester) -> None:
@@ -69,6 +131,64 @@ def test_new_image_is_reported_as_new(pytester: pytest.Pytester) -> None:
 
     assert 'data-status="new"' in _report(pytester)
     assert "add_missing_images" in _report(pytester)
+
+
+def test_a_bare_run_with_no_baselines_at_all_reports_every_render_as_new(pytester: pytest.Pytester) -> None:
+    """
+    The report's first-run case: no baselines, no other flags, and every test fails.
+
+    The failure is the point - a missing baseline is a hard error and must stay one - but the
+    reader still needs to see what was rendered, and the renders that back those cards have to
+    survive the run so an exported approvals.json can name them as its sources.
+    """
+    pytester.makepyfile(TEST_FILE)
+
+    result = pytester.runpytest("--summary_html")
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*does not exist in image cache*"])
+    html = _report(pytester)
+    assert 'data-status="new"' in html
+    assert "No image tests were recorded" not in html
+    assert Path(pytester.path, REPORT_DIR, GENERATED_DIR, "sphere.png").is_file()
+
+
+def test_the_exported_manifest_round_trips_into_the_image_cache(pytester: pytest.Pytester) -> None:
+    """
+    Render, export, apply: the whole approval loop, across the report's Python and JavaScript halves.
+
+    The export payload is assembled from the key names report.js actually uses, so a rename on
+    either side of the manifest contract - the renderer's or the CLI's - fails here rather than
+    shipping as an approvals.json the CLI silently rejects. Applying it and re-running the suite
+    is what proves the sources outlive the run that wrote them.
+    """
+    pytester.makepyfile(TEST_FILE)
+    pytester.runpytest("--summary_html")
+
+    manifest_path = _export_approvals(pytester)
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["approved"], "nothing was offered for approval"
+
+    assert approve_main([str(manifest_path), "--target", "cache"]) == 0
+
+    assert Path(pytester.path, CACHE_DIR, "sphere.png").is_file()
+    result = pytester.runpytest("--summary_html")
+    result.assert_outcomes(passed=1)
+    assert 'data-status="passed"' in _report(pytester)
+
+
+def test_a_warning_level_difference_is_reported_as_warned(pytester: pytest.Pytester) -> None:
+    """A difference above the warning threshold but below the error one is reported as warned."""
+    pytester.makepyfile(TEST_FILE)
+    pytester.runpytest("--add_missing_images")
+    pytester.makepyfile(WARNING_TEST_FILE)
+
+    result = pytester.runpytest("--summary_html")
+
+    result.assert_outcomes(passed=1)
+    html = _report(pytester)
+    assert 'data-status="warned"' in html
+    # A warned card is approvable: the whole point of showing it is to let the reader decide.
+    assert "Approve this image" in html
 
 
 def test_matching_image_is_reported_as_passed(pytester: pytest.Pytester) -> None:
