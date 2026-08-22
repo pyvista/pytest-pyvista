@@ -274,6 +274,18 @@ These flags are specific to the unit tests. They cannot be used with
   by default. Set this CLI flag to allow this globally, or use the test-specific flag
   by the same name below to configure this on a per-test basis.
 
+* ``--reset_global_state`` controls whether PyVista global state is reset to
+  its defaults after each test. Enabled by default; pass
+  ``--reset_global_state=false`` to disable it for a single invocation, or
+  set ``reset_global_state = false`` in your pytest configuration to disable
+  it by default. See `Automatic state reset`_ for details.
+
+* ``--close_all`` controls whether all plotters are automatically closed and
+  ``gc.collect()`` is run after each test. Enabled by default; pass
+  ``--close_all=false`` to disable it for a single invocation, or set
+  ``close_all = false`` in your pytest configuration to disable it by
+  default. See `Automatic state reset`_ for details.
+
 Documentation testing flags
 ===========================
 These flags are specific to documentation tests. They cannot be used with regular unit
@@ -322,6 +334,70 @@ tests.
 
      This option is completely independent from the ``--include_vtksz`` option. File
      sizes may be tested without any additional installation.
+
+Conditional skip markers
+------------------------
+The plugin registers five reusable markers so downstream PyVista projects do not
+have to reinvent platform and VTK version skips. They are evaluated automatically
+during test setup.
+
+* ``@pytest.mark.skip_egl(reason=...)`` skips the test when running with a headless
+  OSMesa/EGL VTK build.
+
+* ``@pytest.mark.skip_windows(reason=...)`` skips the test on Windows.
+
+* ``@pytest.mark.skip_mac(machine=None, reason=...)`` skips the test on macOS. If
+  ``machine`` is given (e.g. ``'arm64'``), the test is only skipped when
+  ``platform.machine()`` matches.
+
+* ``@pytest.mark.skip_linux(machine=None, reason=...)`` skips the test on Linux. If
+  ``machine`` is given (e.g. ``'aarch64'``), the test is only skipped when
+  ``platform.machine()`` matches.
+
+* ``@pytest.mark.needs_vtk_version(*version, at_least=None, less_than=None, reason=...)``
+  skips the test unless the running VTK version satisfies the given bound. The
+  positional form ``needs_vtk_version(9, 3)`` means ``at_least=(9, 3)``. Version
+  tuples are padded with zeros so ``(9, 3)`` compares correctly against
+  ``(9, 3, 0)``.
+
+  By default, a bound at or below pyvista's own supported VTK floor errors instead of
+  silently skipping or running forever: such a check is guaranteed to always (or never)
+  be satisfied, so it is stale and safe to delete. Control this with
+  ``needs_vtk_version_floor``:
+
+  * unset, or ``true`` (the default) -- use pyvista's own supported VTK floor
+    (``pyvista._MIN_SUPPORTED_VTK_VERSION``).
+  * ``false`` -- disable the check entirely, e.g. for a project that pins an older
+    bound deliberately (to keep supporting an older pyvista whose floor hasn't caught
+    up yet).
+  * a dotted VTK version (e.g. ``"9.3"`` or ``"9.3.1"``) -- use that as the floor
+    instead of pyvista's own, e.g. to match the actual minimum VTK the project itself
+    still supports.
+
+  .. code-block:: toml
+
+      [tool.pytest.ini_options]
+      needs_vtk_version_floor = false
+
+.. code-block:: python
+
+   import pytest
+
+
+   @pytest.mark.skip_egl(reason="Interactive widget unsupported on EGL")
+   def test_widget(): ...
+
+
+   @pytest.mark.skip_mac(machine="arm64")
+   def test_flaky_on_apple_silicon(): ...
+
+
+   @pytest.mark.needs_vtk_version(9, 3)
+   def test_needs_recent_vtk(): ...
+
+
+   @pytest.mark.needs_vtk_version(at_least=(9, 1), less_than=(9, 4))
+   def test_vtk_range(): ...
 
 Customizing test cases
 ----------------------
@@ -415,9 +491,33 @@ allowed file size to ``50`` for the ``foo.vtksz`` file:
             test_case.max_vtksz_file_size = 50
         return test_case
 
+Automatic state reset
+----------------------
+An ``autouse`` fixture, ``_reset_pyvista_state``, resets PyVista global state to
+its defaults after each test: ``pyvista.vtk_snake_case("error")``,
+``pyvista.vtk_verbosity("info")``, ``pyvista.allow_new_attributes("private")``,
+and ``pyvista.PICKLE_FORMAT``. Each reset is individually guarded so the
+fixture degrades gracefully on older pyvista where some of these APIs do not
+exist. This is controlled by the ``--reset_global_state`` flag and
+``reset_global_state`` ini option (default: ``True``); see `Unit testing flags`_
+above.
+
+Similarly, another ``autouse`` fixture, ``_close_plotters_clear_trame_servers``,
+closes all plotters, clears the trame servers registry, and runs
+``gc.collect()`` after each test. This is controlled by the ``--close_all``
+flag and ``close_all`` ini option (default: ``True``); see `Unit testing flags`_
+above.
+
+Separately, the ``verify_image_cache`` fixture itself renders under PyVista's
+testing theme, restoring whatever theme was active before the test once it
+finishes. There is no flag or ini option for this, since ``verify_image_cache``
+needs a deterministic theme to produce comparable images; a test that needs a
+different theme can still construct its own plotter with ``pv.Plotter(theme=...)``
+to override it on a per-test basis.
+
 Configuration
 -------------
-If using ``pyproject.toml`` or any other 
+If using ``pyproject.toml`` or any other
 `pytest configuration <https://docs.pytest.org/en/latest/reference/customize.html>`_
 section, consider configuring your test directory location to
 avoid passing command line arguments when calling ``pytest``, for example in

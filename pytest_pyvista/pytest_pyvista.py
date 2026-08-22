@@ -31,6 +31,12 @@ from pyvista import Plotter
 import vtkmodules
 
 from pytest_pyvista import hooks
+from pytest_pyvista._markers import FLOOR_CONFIG_ATTR
+from pytest_pyvista._markers import FLOOR_INI_OPTION
+from pytest_pyvista._markers import pytest_runtest_setup  # noqa: F401
+from pytest_pyvista._markers import register_markers
+from pytest_pyvista._markers import resolve_needs_vtk_version_floor
+from pytest_pyvista._reset_fixtures import _reset_pyvista_state  # noqa: F401
 
 if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
@@ -172,6 +178,11 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
     pluginmanager.add_hookspecs(hooks)
 
 
+def _parse_bool(value: str) -> bool:
+    """Parse a CLI value the same way pytest parses a ``type="bool"`` ini value."""
+    return value.strip().lower() not in {"false", "0", "no"}
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     """Add new flag options to the pyvista plugin."""
 
@@ -285,6 +296,26 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
         )
 
+        parser.addini(
+            FLOOR_INI_OPTION,
+            default="",
+            help=(
+                "Minimum VTK version used to flag `needs_vtk_version` bounds as obsolete "
+                "and error, e.g. '9.3' or '9.3.1'. `true` (the default) uses pyvista's own "
+                "supported VTK floor; `false` disables the check entirely."
+            ),
+        )
+
+        option = "reset_global_state"
+        help_ = "Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test."
+        _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
+
+        option = "close_all"
+        help_ = "Automatically close all plotters and run gc.collect() after each test."
+        _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
+
     def _add_doc_cli_and_ini_options() -> None:
         """Add options specific to the documentation tests."""
         _add_doc_cli_option(
@@ -334,14 +365,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()
     _add_doc_cli_and_ini_options()
-
-    # VTK resource cleanup options
-    parser.addini(
-        "pyvista_close_all",
-        type="bool",
-        default=True,
-        help="Automatically close all plotters and run gc.collect() after each test (default: True).",
-    )
 
 
 class VerifyImageCache:
@@ -957,6 +980,10 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
+    # Register markers unconditionally so they are available even if the
+    # doc-mode CLI validation below raises pytest.UsageError.
+    register_markers(config)
+
     # Validate CLI args
     doc_mode = config.getoption("doc_mode")
 
@@ -970,6 +997,9 @@ def pytest_configure(config: pytest.Config) -> None:
             if not doc_mode and arg not in _UNIT_TEST_CLI_ARGS:
                 msg = f"argument {arg} can only be used with --doc_mode enabled"
                 raise pytest.UsageError(msg)
+
+    # Validate ini options
+    setattr(config, FLOOR_CONFIG_ATTR, resolve_needs_vtk_version_floor(config.getini(FLOOR_INI_OPTION)))
 
     is_master = _is_master(config)
     disallow_unused_cache = config.getoption("disallow_unused_cache")
@@ -1050,6 +1080,12 @@ def verify_image_cache(
         generated_image_dir=gen_dir,
         failed_image_dir=failed_dir,
     )
+
+    # Render under the testing theme; `_TestingTheme` is absent on older pyvista.
+    with contextlib.suppress(ImportError):
+        from pyvista.plotting.themes import _TestingTheme  # noqa: PLC0415
+
+        monkeypatch.setattr(pyvista, "global_theme", _TestingTheme())
 
     # Wrapping call to `Plotter.show` to inject the image cache callback
     def func_show(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
@@ -1157,7 +1193,9 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
             helper._vtk_core = None  # noqa: SLF001
         HELPERS_PER_SERVER.clear()
 
-    if pytestconfig.getini("pyvista_close_all"):
+    cli_value = pytestconfig.getoption("close_all")
+    enabled = cli_value if cli_value is not None else pytestconfig.getini("close_all")
+    if enabled:
         pyvista.close_all()
         gc.collect()
 
