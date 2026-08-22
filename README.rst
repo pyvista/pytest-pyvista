@@ -280,6 +280,12 @@ These flags are specific to the unit tests. They cannot be used with
   set ``reset_global_state = false`` in your pytest configuration to disable
   it by default. See `Automatic state reset`_ for details.
 
+* ``--close_all`` controls whether all plotters are automatically closed and
+  ``gc.collect()`` is run after each test. Enabled by default; pass
+  ``--close_all=false`` to disable it for a single invocation, or set
+  ``close_all = false`` in your pytest configuration to disable it by
+  default. See `Automatic state reset`_ for details.
+
 Documentation testing flags
 ===========================
 These flags are specific to documentation tests. They cannot be used with regular unit
@@ -494,6 +500,12 @@ and ``pyvista.PICKLE_FORMAT``. Each reset is individually guarded so the
 fixture degrades gracefully on older pyvista where some of these APIs do not
 exist. This is controlled by the ``--reset_global_state`` flag and
 ``reset_global_state`` ini option (default: ``True``); see `Unit testing flags`_
+above.
+
+Similarly, another ``autouse`` fixture, ``_close_plotters_clear_trame_servers``,
+closes all plotters, clears the trame servers registry, and runs
+``gc.collect()`` after each test. This is controlled by the ``--close_all``
+flag and ``close_all`` ini option (default: ``True``); see `Unit testing flags`_
 above.
 
 Separately, the ``verify_image_cache`` fixture itself renders under PyVista's

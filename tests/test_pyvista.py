@@ -1438,7 +1438,7 @@ def test_cli_args_classified() -> None:
 def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
     """Run pytest with --doc_mode and forbidden args."""
     args = ["--doc_mode", arg]
-    if arg == "--reset_global_state":
+    if arg in {"--reset_global_state", "--close_all"}:
         args.append("true")
     result = pytester.runpytest(*args)
     result.stderr.fnmatch_lines([f"ERROR: argument {arg} cannot be used with --doc_mode enabled"])
@@ -1545,11 +1545,11 @@ def test_clear_trame_servers(pytester: pytest.Pytester) -> None:
 
 
 def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
-    """Setting pyvista_close_all = false should skip cleanup."""
+    """Setting close_all = false should skip cleanup."""
     pytester.makeini(
         """
         [pytest]
-        pyvista_close_all = false
+        close_all = false
         """
     )
     pytester.makepyfile(
@@ -1571,6 +1571,56 @@ def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
         """
     )
     result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)
+
+
+def test_close_all_enabled_via_cli(pytester: pytest.Pytester) -> None:
+    """Passing ``--close_all=true`` runs cleanup even though the ini default is disabled."""
+    pytester.makeini(
+        """
+        [pytest]
+        close_all = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_was_cleaned_up():
+            assert len(_ALL_PLOTTERS) == 0
+        """
+    )
+    result = pytester.runpytest("-v", "--close_all=true")
+    result.assert_outcomes(passed=2)
+
+
+def test_close_all_disabled_via_cli(pytester: pytest.Pytester) -> None:
+    """Passing ``--close_all=false`` skips cleanup even though the ini default is enabled."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_still_open():
+            assert len(_ALL_PLOTTERS) > 0
+        """
+    )
+    result = pytester.runpytest("-v", "--close_all=false")
     result.assert_outcomes(passed=2)
 
 

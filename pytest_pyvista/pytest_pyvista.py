@@ -311,6 +311,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
         _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
         parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
 
+        option = "close_all"
+        help_ = "Automatically close all plotters and run gc.collect() after each test."
+        _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
+
     def _add_doc_cli_and_ini_options() -> None:
         """Add options specific to the documentation tests."""
         _add_doc_cli_option(
@@ -360,14 +365,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()
     _add_doc_cli_and_ini_options()
-
-    # VTK resource cleanup options
-    parser.addini(
-        "pyvista_close_all",
-        type="bool",
-        default=True,
-        help="Automatically close all plotters and run gc.collect() after each test (default: True).",
-    )
 
 
 class VerifyImageCache:
@@ -1196,7 +1193,9 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
             helper._vtk_core = None  # noqa: SLF001
         HELPERS_PER_SERVER.clear()
 
-    if pytestconfig.getini("pyvista_close_all"):
+    cli_value = pytestconfig.getoption("close_all")
+    enabled = cli_value if cli_value is not None else pytestconfig.getini("close_all")
+    if enabled:
         pyvista.close_all()
         gc.collect()
 
