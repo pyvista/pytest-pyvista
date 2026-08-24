@@ -33,6 +33,12 @@ from pyvista import Plotter
 import vtkmodules
 
 from pytest_pyvista import hooks
+from pytest_pyvista._markers import FLOOR_CONFIG_ATTR
+from pytest_pyvista._markers import FLOOR_INI_OPTION
+from pytest_pyvista._markers import pytest_runtest_setup  # noqa: F401
+from pytest_pyvista._markers import register_markers
+from pytest_pyvista._markers import resolve_needs_vtk_version_floor
+from pytest_pyvista._reset_fixtures import _reset_pyvista_state  # noqa: F401
 from pytest_pyvista.summary.record import ALL_STATUSES
 from pytest_pyvista.summary.record import read_records
 from pytest_pyvista.summary.render import write_report
@@ -42,6 +48,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Generator
 
     from _pytest.terminal import TerminalReporter
+    from trame_server.core import Server
     import xdist.workermanage
 
     from pytest_pyvista.summary.record import CacheWriteReason
@@ -181,6 +188,11 @@ def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
     pluginmanager.add_hookspecs(hooks)
 
 
+def _parse_bool(value: str) -> bool:
+    """Parse a CLI value the same way pytest parses a ``type="bool"`` ini value."""
+    return value.strip().lower() not in {"false", "0", "no"}
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     """Add new flag options to the pyvista plugin."""
 
@@ -294,6 +306,26 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Prevent test failure if the `verify_image_cache` fixture is used but no images are generated.",
         )
 
+        parser.addini(
+            FLOOR_INI_OPTION,
+            default="",
+            help=(
+                "Minimum VTK version used to flag `needs_vtk_version` bounds as obsolete "
+                "and error, e.g. '9.3' or '9.3.1'. `true` (the default) uses pyvista's own "
+                "supported VTK floor; `false` disables the check entirely."
+            ),
+        )
+
+        option = "reset_global_state"
+        help_ = "Reset PyVista global state (snake case, verbosity, attributes, pickle format) to defaults after each test."
+        _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
+
+        option = "close_all"
+        help_ = "Automatically close all plotters and run gc.collect() after each test."
+        _add_unit_test_cli_option(f"--{option}", action="store", type=_parse_bool, default=None, help=f"{help_} (e.g. --{option}=false)")
+        parser.addini(option, type="bool", default=True, help=f"{help_} (default: True)")
+
         _add_unit_test_cli_option(
             "--summary_html",
             action="store_const",
@@ -394,14 +426,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()
     _add_doc_cli_and_ini_options()
-
-    # VTK resource cleanup options
-    parser.addini(
-        "pyvista_close_all",
-        type="bool",
-        default=True,
-        help="Automatically close all plotters and run gc.collect() after each test (default: True).",
-    )
 
 
 @contextlib.contextmanager
@@ -535,7 +559,7 @@ class VerifyImageCache:
         skip_macos = platform.system() == "Darwin" and macos_skip_image_cache
         return skip or ignore_image_cache or skip_windows or skip_macos
 
-    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912, PLR0915
+    def __call__(self, plotter: Plotter) -> None:  # noqa: C901, PLR0912
         """
         Either store or validate an image.
 
@@ -569,32 +593,7 @@ class VerifyImageCache:
             ignore_image_cache=self.ignore_image_cache,
         ):
             SKIPPED_CACHED_IMAGE_NAMES.add(image_name)
-            skip_summary = VerifyImageCache.summary_session
-            if skip_summary is not None:
-                # The comparison never runs, but the card should still name the baseline it
-                # skipped over, so resolve the one the comparison would have used.
-                skipped_baseline = self._candidate_baselines(image_name)[0]
-                # Reporting must never change a test's outcome, so any failure here is
-                # downgraded to a warning (see the identical guard on the main capture).
-                with _summary_capture_failures_are_warnings():
-                    skip_summary.capture(
-                        test_name=test_name,
-                        image_name=image_name,
-                        call_index=self.n_calls - 1,
-                        baseline_source=skipped_baseline if skipped_baseline.is_file() else None,
-                        generated_source=None,
-                        cache_destination=skipped_baseline,
-                        skipped=True,
-                        skip_reason=self._skip_reason(),
-                        baseline_existed=skipped_baseline.is_file(),
-                        cache_write_reason=None,
-                        error=None,
-                        error_threshold=allowed_error,
-                        warning_threshold=allowed_warning,
-                        high_variance_test=self.high_variance_test,
-                        image_format=self.image_format,
-                        env_info=str(self.env_info),
-                    )
+            self._capture_skipped(VerifyImageCache.summary_session, test_name=test_name, image_name=image_name)
             return
 
         VISITED_CACHED_IMAGE_NAMES.add(image_name)
@@ -612,24 +611,9 @@ class VerifyImageCache:
         if not current_cached_image.is_file() and not (self.allow_unused_generated or self.add_missing_images or self.reset_image_cache):
             # Raise error since the cached image does not exist and will not be added later
 
-            # Save images as needed before error
-            if self.generated_image_dir is not None:
-                self._save_generated_image(plotter, image_name=image_name)
-            if self.failed_image_dir is not None:
-                self._save_failed_test_images("error", plotter, image_name)
-
-            if summary is not None:
-                # Recorded here, after the render above is on disk and before the raise, because
-                # this is the *default* path for a suite that has no baselines yet: without it a
-                # bare `--summary_html` run on a fresh suite reports nothing at all, which is the
-                # most likely first experience of the feature.
-                self._capture_new_image(
-                    summary,
-                    test_name=test_name,
-                    image_name=image_name,
-                    cache_destination=current_cached_image,
-                )
-
+            self._save_and_record_missing_baseline(
+                plotter, summary, test_name=test_name, image_name=image_name, cache_destination=current_cached_image
+            )
             remove_plotter_close_callback()
             msg = f"{current_cached_image} does not exist in image cache"
             raise RegressionFileNotFoundError(msg)
@@ -644,47 +628,24 @@ class VerifyImageCache:
             # Test image has been generated, but cached image does not exist
             # The generated image is considered unused, so exit safely before image
             # comparison to avoid a FileNotFoundError
-            if summary is not None:
-                self._capture_new_image(
-                    summary,
-                    test_name=test_name,
-                    image_name=image_name,
-                    cache_destination=current_cached_image,
-                )
+            self._capture_new_image(summary, test_name=test_name, image_name=image_name, cache_destination=current_cached_image)
             return
 
-        test_name_no_prefix = test_name.removeprefix("test_")
-        warn_msg, fail_msg = _test_compare_images(
-            test_name=test_name_no_prefix,
+        warn_msg, fail_msg, current_cached_image = _test_compare_images(
+            test_name=test_name.removeprefix("test_"),
             test_image=plotter,
-            cached_image=current_cached_image,
+            cached_image_paths=cached_image_paths,
             allowed_error=allowed_error,
             allowed_warning=allowed_warning,
         )
 
-        # Try again and compare with other cached images
-        matched_alternate = False
-        if fail_msg and len(cached_image_paths) > 1:
-            # Compare test image to other known valid versions
-            msg_start = "This test has multiple cached images. It initially failed (as above)"
-            for path in cached_image_paths[1:]:
-                error = _compare_images(plotter, path)
-                if _check_compare_fail(test_name, error, allowed_error=allowed_error) is None:
-                    # Convert failure into a warning
-                    warn_msg = fail_msg + (f"\n{msg_start} but passed when compared to:\n\t{path}")
-                    fail_msg = None
-                    current_cached_image = path
-                    matched_alternate = True
-                    break
-            else:  # Loop completed - test still fails
-                fail_msg += f"\n{msg_start} and failed again for all images in:\n\t{Path(self.cache_dir, test_name_no_prefix)!s}"
-
-        if matched_alternate and summary is not None:
-            # The record must describe the baseline that actually matched: its error, its diff
-            # and the report's baseline panel are all relative to `current_cached_image`, not to
-            # candidate 0. Preserving it this late is safe because the only cache write that
-            # could overwrite it below (`reset_only_failed`) is unreachable once `fail_msg` is
-            # None, which it always is here.
+        if summary is not None and current_cached_image != cached_image_paths[0] and current_cached_image.is_file():
+            # `_test_compare_images` grades against the closest cached image, so the baseline
+            # that actually matched need not be candidate 0, which is what was preserved above.
+            # The record must describe the matched baseline: its error, its diff and the
+            # report's baseline panel are all relative to `current_cached_image`. Re-preserving
+            # here is safe because it runs before the only cache write that could overwrite it
+            # (`reset_only_failed`, below).
             preserved_baseline = summary.preserve_baseline(current_cached_image, test_name, self.n_calls - 1)
 
         if fail_msg:
@@ -708,38 +669,116 @@ class VerifyImageCache:
                 self._save_failed_test_images(parent_dir, plotter, image_name, cache_image_path=current_cached_image)
             warnings.warn(warn_msg, stacklevel=2)
 
-        if summary is not None:
-            # Reporting must never change a test's outcome nor skip the cleanup below, so any
-            # failure raised while recording is downgraded to a warning.
-            with _summary_capture_failures_are_warnings():
-                summary.capture(
-                    test_name=test_name,
-                    image_name=image_name,
-                    call_index=self.n_calls - 1,
-                    baseline_source=preserved_baseline,
-                    generated_source=_get_generated_image_path(
-                        parent=cast("Path", self.generated_image_dir),
-                        image_name=image_name,
-                        generate_subdirs=self.generate_subdirs,
-                        env_info=self.env_info,
-                    ),
-                    cache_destination=current_cached_image,
-                    baseline_existed=preserved_baseline is not None,
-                    cache_write_reason=self._cache_write_reason(baseline_existed=preserved_baseline is not None, failed=bool(fail_msg)),
-                    error=None,
-                    error_threshold=allowed_error,
-                    warning_threshold=allowed_warning,
-                    high_variance_test=self.high_variance_test,
-                    matched_alternate=matched_alternate,
-                    matched_baseline=str(current_cached_image),
-                    candidate_baselines=[str(path) for path in cached_image_paths],
-                    image_format=self.image_format,
-                    env_info=str(self.env_info),
-                )
+        self._capture_comparison(
+            summary,
+            test_name=test_name,
+            image_name=image_name,
+            baseline_source=preserved_baseline,
+            cache_destination=current_cached_image,
+            candidate_baselines=cached_image_paths,
+            failed=bool(fail_msg),
+        )
 
         if pending_error is not None:
             remove_plotter_close_callback()
             raise pending_error
+
+    def _save_and_record_missing_baseline(
+        self,
+        plotter: Plotter,
+        summary: SummarySession | None,
+        *,
+        test_name: str,
+        image_name: str,
+        cache_destination: Path,
+    ) -> None:
+        """
+        Save the render and record a ``new`` card before the missing-baseline error is raised.
+
+        The render is written first so the report's card, and any approval exported from it,
+        both name a file that exists on disk once the run is over.
+        """
+        if self.generated_image_dir is not None:
+            self._save_generated_image(plotter, image_name=image_name)
+        if self.failed_image_dir is not None:
+            self._save_failed_test_images("error", plotter, image_name)
+        self._capture_new_image(summary, test_name=test_name, image_name=image_name, cache_destination=cache_destination)
+
+    def _capture_skipped(self, summary: SummarySession | None, *, test_name: str, image_name: str) -> None:
+        """Record an image whose comparison was skipped, so the card still names its baseline."""
+        if summary is None:
+            return
+        allowed_error, allowed_warning = self._allowed_thresholds()
+        # The comparison never runs, but the card should still name the baseline it skipped
+        # over, so resolve the one the comparison would have used.
+        skipped_baseline = self._candidate_baselines(image_name)[0]
+        # Reporting must never change a test's outcome, so any failure here is downgraded to a
+        # warning (see the identical guard on the other captures).
+        with _summary_capture_failures_are_warnings():
+            summary.capture(
+                test_name=test_name,
+                image_name=image_name,
+                call_index=self.n_calls - 1,
+                baseline_source=skipped_baseline if skipped_baseline.is_file() else None,
+                generated_source=None,
+                cache_destination=skipped_baseline,
+                skipped=True,
+                skip_reason=self._skip_reason(),
+                baseline_existed=skipped_baseline.is_file(),
+                cache_write_reason=None,
+                error=None,
+                error_threshold=allowed_error,
+                warning_threshold=allowed_warning,
+                high_variance_test=self.high_variance_test,
+                image_format=self.image_format,
+                env_info=str(self.env_info),
+            )
+
+    def _capture_comparison(  # noqa: PLR0913
+        self,
+        summary: SummarySession | None,
+        *,
+        test_name: str,
+        image_name: str,
+        baseline_source: Path | None,
+        cache_destination: Path,
+        candidate_baselines: list[Path],
+        failed: bool,
+    ) -> None:
+        """Record the outcome of a completed image comparison in the summary report."""
+        if summary is None:
+            return
+        allowed_error, allowed_warning = self._allowed_thresholds()
+        # Reporting must never change a test's outcome nor skip the caller's cleanup, so any
+        # failure raised while recording is downgraded to a warning.
+        with _summary_capture_failures_are_warnings():
+            summary.capture(
+                test_name=test_name,
+                image_name=image_name,
+                call_index=self.n_calls - 1,
+                baseline_source=baseline_source,
+                generated_source=_get_generated_image_path(
+                    parent=cast("Path", self.generated_image_dir),
+                    image_name=image_name,
+                    generate_subdirs=self.generate_subdirs,
+                    env_info=self.env_info,
+                ),
+                cache_destination=cache_destination,
+                baseline_existed=baseline_source is not None,
+                cache_write_reason=self._cache_write_reason(baseline_existed=baseline_source is not None, failed=failed),
+                error=None,
+                error_threshold=allowed_error,
+                warning_threshold=allowed_warning,
+                high_variance_test=self.high_variance_test,
+                # `matched_alternate` is left at its default: it existed to mark a failure the
+                # plugin downgraded because a non-primary baseline passed, and grading on the
+                # closest image no longer does that. The report recomputes its error against
+                # the preserved matched baseline, so the status follows from the thresholds.
+                matched_baseline=str(cache_destination),
+                candidate_baselines=[str(path) for path in candidate_baselines],
+                image_format=self.image_format,
+                env_info=str(self.env_info),
+            )
 
     def _allowed_thresholds(self) -> tuple[float, float]:
         """
@@ -755,7 +794,7 @@ class VerifyImageCache:
 
     def _capture_new_image(
         self,
-        summary: SummarySession,
+        summary: SummarySession | None,
         *,
         test_name: str,
         image_name: str,
@@ -773,6 +812,8 @@ class VerifyImageCache:
         Reporting must never change a test's outcome nor skip the cleanup that follows, so any
         failure raised while recording is downgraded to a warning.
         """
+        if summary is None:
+            return
         error_threshold, warning_threshold = self._allowed_thresholds()
         with _summary_capture_failures_are_warnings():
             summary.capture(
@@ -968,17 +1009,49 @@ def _screenshot(plotter: Plotter, *args, max_image_size: int | None, **kwargs) -
 
 
 def _test_compare_images(
-    test_name: str, test_image: Path | str | pyvista.Plotter, cached_image: Path | str, allowed_error: float, allowed_warning: float
-) -> tuple[str | None, str | None]:
-    try:
-        # Check if test should fail or warn
-        error = _compare_images(test_image, cached_image)
-        fail_msg = _check_compare_fail(test_name, error, allowed_error)
-        warn_msg = _check_compare_warn(test_name, error, allowed_warning)
-    except RuntimeError as e:
-        warn_msg = None
-        fail_msg = repr(e)
-    return warn_msg, fail_msg
+    test_name: str, test_image: Path | str | pyvista.Plotter, cached_image_paths: list[Path], allowed_error: float, allowed_warning: float
+) -> tuple[str | None, str | None, Path]:
+    """
+    Compare a test image to all of its cached images and grade it on the closest match.
+
+    Only warn if all of the cached images are above the warning threshold, and only
+    fail if none of them are below the error threshold. The closest matching cached
+    image is returned along with the messages.
+    """
+    closest_image = cached_image_paths[0]
+    best_error: float | None = None
+    fail_msg: str | None = None
+
+    for path in cached_image_paths:
+        try:
+            error = _compare_images(test_image, path)
+        except RuntimeError as e:
+            if best_error is None and fail_msg is None:
+                # Only report this if no image can be compared successfully
+                fail_msg = repr(e)
+            continue
+
+        if best_error is None or error < best_error:
+            best_error, closest_image = error, path
+
+        if error <= allowed_warning:
+            # A clean match, no other image can improve on this outcome
+            break
+
+    if best_error is None:
+        return None, fail_msg, closest_image
+
+    fail_msg = _check_compare_fail(test_name, best_error, allowed_error)
+    warn_msg = _check_compare_warn(test_name, best_error, allowed_warning)
+
+    if (fail_msg or warn_msg) and len(cached_image_paths) > 1:
+        msg_closest = f"\nThis test has multiple cached images. The closest match was:\n\t{closest_image}"
+        if fail_msg:
+            fail_msg += msg_closest
+        else:
+            warn_msg = cast("str", warn_msg) + msg_closest
+
+    return warn_msg, fail_msg, closest_image
 
 
 def _check_compare_fail(test_name: str, error_: float, allowed_error: float) -> str | None:
@@ -1375,6 +1448,10 @@ def _paths_from_strings(strings: list[str]) -> list[Path]:
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest session."""
+    # Register markers unconditionally so they are available even if the
+    # doc-mode CLI validation below raises pytest.UsageError.
+    register_markers(config)
+
     # Validate CLI args
     doc_mode = config.getoption("doc_mode")
 
@@ -1388,6 +1465,9 @@ def pytest_configure(config: pytest.Config) -> None:
             if not doc_mode and arg not in _UNIT_TEST_CLI_ARGS:
                 msg = f"argument {arg} can only be used with --doc_mode enabled"
                 raise pytest.UsageError(msg)
+
+    # Validate ini options
+    setattr(config, FLOOR_CONFIG_ATTR, resolve_needs_vtk_version_floor(config.getini(FLOOR_INI_OPTION)))
 
     is_master = _is_master(config)
     disallow_unused_cache = config.getoption("disallow_unused_cache")
@@ -1520,6 +1600,12 @@ def verify_image_cache(
         failed_image_dir=failed_dir,
     )
 
+    # Render under the testing theme; `_TestingTheme` is absent on older pyvista.
+    with contextlib.suppress(ImportError):
+        from pyvista.plotting.themes import _TestingTheme  # noqa: PLC0415
+
+        monkeypatch.setattr(pyvista, "global_theme", _TestingTheme())
+
     # Wrapping call to `Plotter.show` to inject the image cache callback
     def func_show(*args, **kwargs) -> None:  # noqa: ANN002, ANN003
         key = "before_close_callback"
@@ -1568,14 +1654,39 @@ def verify_image_cache(
             )
 
 
+def _dispose_trame_server(server: Server) -> None:
+    """
+    Stop a trame server and drop the reference that pins its ``vtkWebApplication``.
+
+    Forgetting a running server does not stop it, and a stopped one still holds its
+    ``vtkWebApplication``: one reference lives in ``CoreServer.sharedObjects``, which the
+    whole protocol graph cross-references, and another in the per-server ``Helper``, which
+    its own bound method keeps alive. Dropping both is what lets the collector take it
+    during the test that made it, rather than when the next server replaces it. See
+    pyvista/pyvista#8929.
+
+    TODO: upstream should do this on stop -- ``trame_server`` releases the transport but
+    nothing in its API dismantles the protocol graph.
+    """
+    import asyncio  # noqa: PLC0415
+
+    if getattr(server, "running", False):
+        with contextlib.suppress(Exception):
+            asyncio.run(server.stop())
+    shared = getattr(getattr(server, "_root_protocol", None), "sharedObjects", None)
+    if shared is not None:
+        shared["app"] = None
+
+
 @pytest.fixture(autouse=True)
 def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generator[None, None, None]:
     """
     Cleanup fixture.
 
     This teardown fixture serves mutltiple purposes:
-    - closing all plotters,
+    - stopping and disposing of trame servers,
     - clearing trame servers registry (to prevent test collision),
+    - closing all plotters,
     - forcing garbage collection.
     """
     yield
@@ -1585,9 +1696,25 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
     except ImportError:
         ...
     else:
+        for server in list(AVAILABLE_SERVERS.values()):
+            _dispose_trame_server(server)
         AVAILABLE_SERVERS.clear()
 
-    if pytestconfig.getini("pyvista_close_all"):
+    try:
+        from trame_vtk.modules.vtk import HELPERS_PER_SERVER  # noqa: PLC0415
+    except ImportError:
+        ...
+    else:
+        # The other half of the disposal above: the helper holds the vtkWebApplication
+        # too, and is keyed by server name, so a stale one would also be handed to the
+        # next server of that name.
+        for helper in list(HELPERS_PER_SERVER.values()):
+            helper._vtk_core = None  # noqa: SLF001
+        HELPERS_PER_SERVER.clear()
+
+    cli_value = pytestconfig.getoption("close_all")
+    enabled = cli_value if cli_value is not None else pytestconfig.getini("close_all")
+    if enabled:
         pyvista.close_all()
         gc.collect()
 

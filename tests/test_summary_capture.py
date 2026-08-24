@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from PIL import Image
 import pyvista as pv
+from pyvista.plotting.themes import _TestingTheme
 
 from pytest_pyvista.pytest_pyvista import VerifyImageCache
 from pytest_pyvista.summary.record import ALL_STATUSES
@@ -186,9 +187,15 @@ SPHERE_TEST = """
 
 
 def _render_sphere(path: Path, color: str | list[int]) -> Path:
-    """Render a sphere of ``color`` to ``path`` to serve as a cached baseline."""
+    """
+    Render a sphere of ``color`` to ``path`` to serve as a cached baseline.
+
+    Rendered with PyVista's ``_TestingTheme`` so the baseline matches what the plugin's
+    autouse ``_set_default_theme`` fixture imposes on the inner ``verify_image_cache``
+    runs these tests drive; without it the two differ in size and never compare.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    plotter = pv.Plotter(off_screen=True)
+    plotter = pv.Plotter(off_screen=True, theme=_TestingTheme())
     plotter.add_mesh(pv.Sphere(), color=color)
     plotter.screenshot(path)
     return path
@@ -224,18 +231,27 @@ def _explode(self: SummarySession, **kwargs: object) -> None:  # noqa: ARG001
 
 
 def test_an_alternate_baseline_match_is_recorded_against_the_baseline_that_matched(pytester: pytest.Pytester) -> None:
-    """A test that fails its primary baseline but matches another records the one that matched."""
+    """
+    A test graded against a non-primary baseline records the one that actually matched.
+
+    The plugin grades a multi-baseline test against its *closest* cached image, so matching
+    a candidate other than the first is an ordinary pass rather than a downgraded failure.
+    What matters to the report is that the record describes the baseline that won: its error,
+    its threshold and its stored baseline image must all be that file, not candidate 0.
+    """
     cache = pytester.path / "image_cache_dir" / "imcache"
     _render_sphere(cache / "im1.png", "red")
     blue = _render_sphere(cache / "im2.png", "blue")
     pytester.makeconftest(SAVE_RECORDS_CONFTEST)
     pytester.makepyfile(SPHERE_TEST.format(color=[0, 0, 254]))
 
-    result = pytester.runpytest("--summary_html")
+    # `--summary_html_full_size all` because the assertions below compare the stored baseline
+    # against the original file: a passing record keeps no full-resolution copy by default.
+    result = pytester.runpytest("--summary_html", "--summary_html_full_size", "all")
 
     result.assert_outcomes(passed=1)
     (record,) = _records_of(pytester)
-    assert record.status == "warned"
+    assert record.status == "passed"
     assert record.matched_baseline is not None
     assert Path(record.matched_baseline).name == "im2.png"
     assert [Path(candidate).name for candidate in record.candidate_baselines] == ["im1.png", "im2.png"]

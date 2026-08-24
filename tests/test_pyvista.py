@@ -15,6 +15,7 @@ from unittest import mock
 import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
+from pyvista.plotting.themes import _TestingTheme
 import vtkmodules
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
@@ -49,15 +50,31 @@ def test_arguments(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-def make_cached_images(  # noqa: PLR0913
-    test_path, path="image_cache_dir", name="imcache.png", color="red", window_size=None, mesh: pv.DataSet | None = None
+def make_cached_images(  # noqa: PLR0913, PLR0917
+    test_path,
+    path="image_cache_dir",
+    name="imcache.png",
+    color="red",
+    window_size=None,
+    mesh: pv.DataSet | None = None,
+    *,
+    use_testing_theme: bool = True,
 ) -> Path:
-    """Make image cache in `test_path/path`."""
+    """
+    Make image cache in `test_path/path`.
+
+    By default the baseline is rendered with PyVista's ``_TestingTheme`` so it
+    matches what the plugin's autouse ``_set_default_theme`` fixture imposes on
+    inner ``verify_image_cache`` tests. Pass ``use_testing_theme=False`` for
+    tests (e.g. ``--doc_mode``) that render under the default theme instead.
+    """
     d = Path(test_path, path)
     d.mkdir(exist_ok=True, parents=True)
     if mesh is None:
         mesh = pv.Sphere()
     kwargs = {"window_size": window_size} if window_size else {}
+    if use_testing_theme:
+        kwargs["theme"] = _TestingTheme()
     plotter = pv.Plotter(**kwargs)
     plotter.add_mesh(mesh, color=color)
     filename = d / name
@@ -68,8 +85,14 @@ def make_cached_images(  # noqa: PLR0913
     return filename
 
 
-def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int = 10, name: str = "imcache{index}.png") -> list[Path]:
-    """Make image cache in `test_path/path` consisting of several images."""
+def make_multiple_cached_images(
+    test_path, path="image_cache_dir", n_images: int = 10, name: str = "imcache{index}.png", *, use_testing_theme: bool = True
+) -> list[Path]:
+    """
+    Make image cache in `test_path/path` consisting of several images.
+
+    See :func:`make_cached_images` for the meaning of ``use_testing_theme``.
+    """
     colors = list(plt.rcParams["axes.prop_cycle"].by_key()["color"])
 
     d = Path(test_path, path)
@@ -87,7 +110,8 @@ def make_multiple_cached_images(test_path, path="image_cache_dir", n_images: int
             # don't regenerate images when that color already exists
             shutil.copy(color_to_file[color], filename)
         else:
-            plotter = pv.Plotter(off_screen=True)
+            kwargs = {"theme": _TestingTheme()} if use_testing_theme else {}
+            plotter = pv.Plotter(off_screen=True, **kwargs)
             plotter.add_mesh(mesh, color=color)
             if filename.suffix == ".vtksz":
                 plotter.export_vtksz(filename)
@@ -160,6 +184,54 @@ def test_verify_image_cache(pytester: pytest.Pytester, plot_property: bool) -> N
     assert (pytester.path / "image_cache_dir").is_dir()
     assert not (pytester.path / "generated_image_dir").is_dir()
     assert not (pytester.path / "failed_image_dir").is_dir()
+
+
+def test_verify_image_cache_restores_prior_theme(pytester: pytest.Pytester) -> None:
+    """`verify_image_cache` restores the theme that was active before the test, not the testing theme."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a_sets_ambient_theme():
+            pv.global_theme.background = "purple"
+
+        def test_b_uses_testing_theme(verify_image_cache):
+            assert pv.global_theme.background != pv.Color("purple")
+            verify_image_cache.allow_useless_fixture = True
+
+        def test_c_ambient_theme_restored():
+            assert pv.global_theme.background == pv.Color("purple")
+        """
+    )
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=3)
+
+
+def test_verify_image_cache_survives_testing_theme_import_error(pytester: pytest.Pytester) -> None:
+    """`verify_image_cache` degrades gracefully when `_TestingTheme` import fails."""
+    pytester.makeconftest(
+        """
+        import pyvista.plotting.themes as themes
+
+        del themes._TestingTheme
+        assert not hasattr(themes, "_TestingTheme")
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+
+        def test_a(verify_image_cache):
+            verify_image_cache.allow_useless_fixture = True
+            pv.global_theme.background = "purple"
+
+        def test_b_mutation_persists(verify_image_cache):
+            verify_image_cache.allow_useless_fixture = True
+            assert pv.global_theme.background == pv.Color("purple")
+        """
+    )
+    result = pytester.runpytest_subprocess()
+    result.assert_outcomes(passed=2)
 
 
 def test_verify_image_cache_fail_regression(pytester: pytest.Pytester) -> None:
@@ -300,8 +372,12 @@ def test_image_cache_dir_ini(pytester: pytest.Pytester) -> None:
 
 def test_high_variance_test(pytester: pytest.Pytester) -> None:
     """Test `skip` flag of `verify_image_cache`."""
-    make_cached_images(pytester.path)
-    make_cached_images(pytester.path, name="imcache_var.png")
+    # Pin a window size on both the baseline and the inner render so the
+    # regression-error magnitude stays above the threshold. The testing theme
+    # imposed by the `_set_default_theme` fixture defaults to a small 400x400
+    # window where the near-red color delta no longer trips the error.
+    make_cached_images(pytester.path, window_size=(1024, 768))
+    make_cached_images(pytester.path, name="imcache_var.png", window_size=(1024, 768))
 
     # First make sure test fails with image regression error
     pytester.makepyfile(
@@ -312,7 +388,7 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
 
         def test_imcache(verify_image_cache):
             sphere = pv.Sphere()
-            plotter = pv.Plotter()
+            plotter = pv.Plotter(window_size=(1024, 768))
             plotter.add_mesh(sphere, color=[255, 5, 5])
             plotter.show()
         """
@@ -327,7 +403,7 @@ def test_high_variance_test(pytester: pytest.Pytester) -> None:
         def test_imcache_var(verify_image_cache):
             verify_image_cache.high_variance_test = True
             sphere = pv.Sphere()
-            plotter = pv.Plotter()
+            plotter = pv.Plotter(window_size=(1024, 768))
             plotter.add_mesh(sphere, color=[255, 5, 5])
             plotter.show()
         """
@@ -464,8 +540,8 @@ def test_add_missing_images_commandline(tmp_path, pytester: pytest.Pytester, res
         result.assert_outcomes(passed=2 if add_second_test else 1)
         assert result.ret == pytest.ExitCode.OK
 
-        # Make sure the final image in the cache matches the generated test image
-        pl = pv.Plotter()
+        # Match the testing theme the inner test rendered under via `verify_image_cache`.
+        pl = pv.Plotter(theme=_TestingTheme())
         pl.add_mesh(pv.Sphere(), color=color)
         assert pv.compare_images(pl, str(expected_file)) == 0.0
 
@@ -624,7 +700,9 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache, image_
     """Test usage of the `failed_image_dir` option."""
     cached_image_name = f"imcache.{image_format}"
     if make_cache:
-        make_cached_images(pytester.path, name=cached_image_name)
+        # Pin a window size so the near-red color delta stays above the
+        # warning threshold despite the testing theme's small 400x400 window.
+        make_cached_images(pytester.path, name=cached_image_name, window_size=(1024, 768))
 
     red = [255, 0, 0]
     almost_red = [250, 0, 0]
@@ -636,7 +714,7 @@ def test_failed_image_dir(pytester: pytest.Pytester, outcome, make_cache, image_
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
             sphere = pv.Sphere()
-            plotter = pv.Plotter()
+            plotter = pv.Plotter(window_size=(1024, 768))
             plotter.add_mesh(sphere, color={color})
             plotter.show()
         """
@@ -784,7 +862,7 @@ def _unused_cache_lines(image_name: str) -> list[str]:
         (PytestMark.NONE, SkipVerify.NONE, MeshColor.FAIL, [*_unused_cache_lines("imcache.png")], pytest.ExitCode.TESTS_FAILED, HasUnusedCache.TRUE),
     ],
 )
-def test_disallow_unused_cache(pytester: pytest.Pytester, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913
+def test_disallow_unused_cache(pytester: pytest.Pytester, marker, skip_verify, color, stdout_lines, exit_code, has_unused_cache) -> None:  # noqa: PLR0913, PLR0917
     """Ensure unused cached images are detected correctly."""
     test_name = "foo"
     image_name = test_name + ".png"
@@ -976,7 +1054,7 @@ ALMOST_RED = [254, 0, 0]
     ("build_color", "return_code"), [(ALMOST_RED, pytest.ExitCode.OK), (ALMOST_BLUE, pytest.ExitCode.OK), ("'green'", pytest.ExitCode.TESTS_FAILED)]
 )
 @pytest.mark.parametrize("image_format", ["png", "jpg"])
-def test_multiple_cache_images(  # noqa: PLR0913
+def test_multiple_cache_images(  # noqa: PLR0913, PLR0917
     pytester: pytest.Pytester, build_color, return_code, nested_subdir, failed_image_dir, image_format
 ) -> None:
     """Test when cache is a subdir with multiple images."""
@@ -988,10 +1066,15 @@ def test_multiple_cache_images(  # noqa: PLR0913
     red_filename = make_cached_images(cache_parent, subdir, name=f"im1.{image_format}", color="red")
     blue_filename = make_cached_images(cache_parent, subdir, name=f"im2.{image_format}", color="blue")
 
+    # For the ALMOST_BLUE case, lower the warning threshold so that the matching
+    # second image is not a clean match and a warning is emitted for it instead
+    warning_value = -1.0 if build_color == ALMOST_BLUE else 200.0
+
     pyfile = f"""
         import pyvista as pv
         pv.OFF_SCREEN = True
         def test_imcache(verify_image_cache):
+            verify_image_cache.warning_value = {warning_value}
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color={build_color})
@@ -1012,17 +1095,18 @@ def test_multiple_cache_images(  # noqa: PLR0913
     if build_color == ALMOST_RED:
         # Comparison with first image succeeds without issue
         result.stdout.no_re_match_line(rf".*UserWarning: {partial_match}")
+        result.stdout.no_re_match_line(r".*This test has multiple cached images.*")
 
         # Test no images are saved
         assert not Path(failed).is_dir()
 
     elif build_color == ALMOST_BLUE:
-        # Comparison with first image fails
-        # Expect error was converted to a warning
+        # Comparison with first image errors, but the second image is the closest
+        # match and is only above the warning threshold
         result.stdout.re_match_lines(
             [
-                rf".*UserWarning: {partial_match}",
-                r".*This test has multiple cached images. It initially failed \(as above\) but passed when compared to:",
+                r".*UserWarning: imcache Exceeded image regression warning of -1\.0 with an image error of [0-9]+\.[0-9]+",
+                r".*This test has multiple cached images. The closest match was:",
                 f".*im2.{image_format}",
             ]
         )
@@ -1042,7 +1126,7 @@ def test_multiple_cache_images(  # noqa: PLR0913
         result.stdout.re_match_lines(
             [
                 rf".*RegressionError: {partial_match}",
-                r".*This test has multiple cached images. It initially failed \(as above\) and failed again for all images in:",
+                r".*This test has multiple cached images. The closest match was:",
                 f".*{re.escape(str(Path('cache/imcache')))}",
             ]
         )
@@ -1059,6 +1143,47 @@ def test_multiple_cache_images(  # noqa: PLR0913
         assert from_test.is_file() == failed_image_dir
         if failed_image_dir:
             assert file_has_changed(str(from_test), str(from_cache))
+
+
+@pytest.mark.parametrize("error_value", [500.0, 100000.0], ids=["initially_errors", "initially_warns"])
+def test_multiple_cache_images_clean_match(pytester: pytest.Pytester, error_value: float) -> None:
+    """
+    Test that a clean match with any cached image passes silently.
+
+    The first cached image is always compared first and does not match here. Whether
+    that mismatch initially exceeds the error threshold or only the warning threshold,
+    the second cached image is a clean match and so the test must pass without
+    emitting a warning.
+    """
+    cache = "cache"
+    name = "imcache.png"
+    subdir = Path(name).stem
+    cache_parent = pytester.path / cache
+    make_cached_images(cache_parent, subdir, name="im1.png", color="red")
+    make_cached_images(cache_parent, subdir, name="im2.png", color="blue")
+
+    pytester.makepyfile(
+        f"""
+        import pyvista as pv
+        pv.OFF_SCREEN = True
+        def test_imcache(verify_image_cache):
+            verify_image_cache.error_value = {error_value}
+            sphere = pv.Sphere()
+            plotter = pv.Plotter()
+            plotter.add_mesh(sphere, color={ALMOST_BLUE})
+            plotter.show()
+        """
+    )
+
+    failed = "failed"
+    result = pytester.runpytest("--image_cache_dir", cache, "--failed_image_dir", failed)
+
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.no_re_match_line(r".*imcache Exceeded image regression.*")
+    result.stdout.no_re_match_line(r".*This test has multiple cached images.*")
+
+    # Test no images are saved
+    assert not Path(failed).is_dir()
 
 
 @pytest.mark.parametrize("on_ci", [True, False], ids=["on_ci", "not_on_ci"])
@@ -1317,6 +1442,8 @@ def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
         args.append("failing")
     elif arg in {"--summary_html_dir", "--summary_html_include", "--summary_html_max_image_size"}:
         args.append("foo")
+    elif arg in {"--reset_global_state", "--close_all"}:
+        args.append("true")
     result = pytester.runpytest(*args)
     result.stderr.fnmatch_lines([f"ERROR: argument {arg} cannot be used with --doc_mode enabled"])
     assert result.ret == pytest.ExitCode.USAGE_ERROR
@@ -1355,11 +1482,13 @@ def test_max_image_size(pytester: pytest.Pytester, doc_mode, original_size, max_
             f"""
             import pytest
             import pyvista as pv
-            pv.global_theme.window_size = {original_size}
             pv.OFF_SCREEN = True
             def test_{test_name}(verify_image_cache):
                 sphere = pv.Sphere()
-                plotter = pv.Plotter()
+                # Set window size on the plotter directly so it is not
+                # overridden by the testing theme that the autouse
+                # `_set_default_theme` fixture loads for this test.
+                plotter = pv.Plotter(window_size={original_size})
                 plotter.add_mesh(sphere, color="red")
                 plotter.show()
             """
@@ -1420,11 +1549,11 @@ def test_clear_trame_servers(pytester: pytest.Pytester) -> None:
 
 
 def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
-    """Setting pyvista_close_all = false should skip cleanup."""
+    """Setting close_all = false should skip cleanup."""
     pytester.makeini(
         """
         [pytest]
-        pyvista_close_all = false
+        close_all = false
         """
     )
     pytester.makepyfile(
@@ -1446,6 +1575,56 @@ def test_close_all_can_be_disabled(pytester: pytest.Pytester) -> None:
         """
     )
     result = pytester.runpytest("-v")
+    result.assert_outcomes(passed=2)
+
+
+def test_close_all_enabled_via_cli(pytester: pytest.Pytester) -> None:
+    """Passing ``--close_all=true`` runs cleanup even though the ini default is disabled."""
+    pytester.makeini(
+        """
+        [pytest]
+        close_all = false
+        """
+    )
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_was_cleaned_up():
+            assert len(_ALL_PLOTTERS) == 0
+        """
+    )
+    result = pytester.runpytest("-v", "--close_all=true")
+    result.assert_outcomes(passed=2)
+
+
+def test_close_all_disabled_via_cli(pytester: pytest.Pytester) -> None:
+    """Passing ``--close_all=false`` skips cleanup even though the ini default is enabled."""
+    pytester.makepyfile(
+        """
+        import pyvista as pv
+        from pyvista.plotting.plotter import _ALL_PLOTTERS
+
+        pv.OFF_SCREEN = True
+
+        def test_plotter_is_open():
+            pl = pv.Plotter()
+            pl.add_mesh(pv.Sphere())
+            assert len(_ALL_PLOTTERS) > 0
+
+        def test_plotter_still_open():
+            assert len(_ALL_PLOTTERS) > 0
+        """
+    )
+    result = pytester.runpytest("-v", "--close_all=false")
     result.assert_outcomes(passed=2)
 
 

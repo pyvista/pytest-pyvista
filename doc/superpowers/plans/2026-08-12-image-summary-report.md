@@ -1845,7 +1845,7 @@ def _card(record: ImageRecord, embed_dir: Path | None) -> str:
     key = html.escape(f"{record.test_name}::{record.call_index}")
     name = html.escape(record.test_name if not record.call_index else f"{record.test_name} [{record.call_index}]")
     panels = "".join(_panel(record, role, label, embed_dir) for role, label in _PANELS)
-    error = "" if record.error is None else f'{record.error:g}'
+    error = "" if record.error is None else f"{record.error:g}"
     return (
         f'<article class="card" data-status="{record.status}" data-key="{key}" '
         f'data-name="{html.escape(record.test_name.lower())}" data-error="{error or 0}">'
