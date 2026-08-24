@@ -408,7 +408,16 @@ def test_symlinked_destination_directory_escaping_root_is_rejected(workspace: di
 
 
 def test_symlink_loop_in_source_is_rejected(workspace: dict[str, Path]) -> None:
-    """A symlink loop reachable from source is rejected rather than crashing with RuntimeError."""
+    """
+    A symlink loop reachable from source is rejected rather than crashing with RuntimeError.
+
+    Which guard rejects it is version-dependent and both are correct, so the message is only
+    pinned to the two acceptable forms. Up to Python 3.12 ``Path.resolve()`` raises on a loop,
+    so containment catches it and reports the source as resolving outside its root. From 3.13
+    ``resolve()`` returns the unresolved path instead, containment passes, and the existence
+    check rejects it. What must never happen -- and what this test actually guards -- is the
+    ``RuntimeError`` escaping as an unhandled crash.
+    """
     loop_a = workspace["source_root"] / "loop_a.png"
     loop_b = workspace["source_root"] / "loop_b.png"
     loop_a.symlink_to(loop_b)
@@ -422,7 +431,7 @@ def test_symlink_loop_in_source_is_rejected(workspace: dict[str, Path]) -> None:
         "destination": str(workspace["cache_dir"] / "loop.png"),
     }
 
-    with pytest.raises(ManifestError, match="outside"):
+    with pytest.raises(ManifestError, match=r"resolves outside|does not exist"):
         _load(workspace, _manifest(workspace, approved=[entry]))
 
 

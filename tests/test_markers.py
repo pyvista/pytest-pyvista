@@ -3,10 +3,34 @@
 from __future__ import annotations
 
 import platform
+from typing import TYPE_CHECKING
 
 import pytest
 import pyvista
 from pyvista.plotting.utilities import gl_checks
+
+from pytest_pyvista import _markers
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
+@pytest.fixture(autouse=True)
+def _restore_plugin_module_references() -> Generator[None, None, None]:
+    """
+    Put back the module references the generated test files replace.
+
+    Several tests below patch ``_markers.os`` or ``_markers.platform`` from inside the file
+    they hand to ``pytester``. ``runpytest`` runs in-process, so those assignments mutate the
+    very module object this session imported and outlive the inner run: every later test in
+    the session then evaluates its platform markers against the fake, and any
+    ``skip_windows`` / ``skip_mac`` / ``skip_linux`` marker elsewhere in the suite is silently
+    skipped on every platform.
+    """
+    saved = {name: getattr(_markers, name) for name in ("os", "platform")}
+    yield
+    for name, value in saved.items():
+        setattr(_markers, name, value)
 
 
 def test_needs_vtk_version_skips_when_higher_required(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch) -> None:

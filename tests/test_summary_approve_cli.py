@@ -274,6 +274,7 @@ def test_overwriting_existing_baseline_replaces_its_content(project: Path) -> No
     assert (project / "image_cache_dir" / "sphere.png").read_bytes() == b"generated-bytes"
 
 
+@pytest.mark.skip_windows(reason="chmod cannot revoke read permission on Windows, so the copy succeeds")
 def test_unreadable_source_fails_the_copy_without_destroying_an_existing_baseline(project: Path, capsys: pytest.CaptureFixture) -> None:
     """A source that cannot be read fails the copy with exit code 1 -- and a pre-existing baseline at the destination survives untouched."""
     destination = project / "image_cache_dir" / "sphere.png"
@@ -319,6 +320,7 @@ def test_long_destination_filename_does_not_prevent_the_copy(project: Path) -> N
     assert (project / "image_cache_dir" / long_name).read_bytes() == b"long-name-bytes"
 
 
+@pytest.mark.skip_windows(reason="a read-only directory does not prevent file creation on Windows")
 def test_partial_failure_reports_every_completed_copy_before_stopping(project: Path, capsys: pytest.CaptureFixture) -> None:
     """When one copy in a batch fails, every copy that succeeded before it is still printed, and the batch stops there."""
     generated = project / GENERATED_SUBPATH
