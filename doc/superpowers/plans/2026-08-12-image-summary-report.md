@@ -4,7 +4,7 @@
 
 **Goal:** Add an opt-in HTML report, generated at the end of a normal `pytest` run, that shows every image test as a card with baseline, generated render and pixel difference, and lets the reader selectively approve images for the cache.
 
-**Architecture:** Records are captured *inside* `VerifyImageCache.__call__` at comparison time — never reconstructed by scanning directories afterwards, because nothing is persisted by default and the cache-writing policies destroy the prior baseline. Each worker appends `ImageRecord` JSONL to a temp directory; the master combines them in `pytest_terminal_summary` and renders a report directory. A separate console script applies exported approvals.
+**Architecture:** Records are captured _inside_ `VerifyImageCache.__call__` at comparison time — never reconstructed by scanning directories afterwards, because nothing is persisted by default and the cache-writing policies destroy the prior baseline. Each worker appends `ImageRecord` JSONL to a temp directory; the master combines them in `pytest_terminal_summary` and renders a report directory. A separate console script applies exported approvals.
 
 **Tech Stack:** Python ≥3.10, pytest, PIL (via pyvista), NumPy (via pyvista), stdlib `json`/`dataclasses`/`importlib.resources`. No new runtime dependencies. Vanilla JS and CSS in the report — no frameworks, no CDN.
 
@@ -21,11 +21,14 @@
   3. **Type-only imports go in a `TYPE_CHECKING` block** (`TC003`), e.g. `pathlib.Path` when used only in annotations.
 
   Adding these is required and is not a deviation from the brief. Never silence a rule with `noqa` to pass; fix the code. Run both:
+
   ```
   ./.superpowers/sdd/2026-08-12-image-summary-report/pt <test paths>
   ./.superpowers/sdd/2026-08-12-image-summary-report/lint <changed paths>
   ```
+
   Ruff is pinned to 0.15.12 to match `.pre-commit-config.yaml`. The pre-existing repo is lint-clean, so every reported violation is yours.
+
 - **`report.css` and `report.js` are formatted by prettier** in pre-commit (it runs on `css` and `javascript`). Use 2-space indent and double quotes so the committed files are already prettier-clean.
 - **Type annotations on everything**, including `-> None`. `mypy` runs with `ignore_missing_imports = true`.
 - **Flag naming is snake_case** to match every existing plugin flag: `--summary_html`, not `--summary-html`.
@@ -38,32 +41,34 @@
 
 The existing package is flat, but `pytest_pyvista/pytest_pyvista.py` is already ~1180 lines. Rather than grow it further, the report lives in a focused subpackage; only the wiring (options, capture call, terminal summary) is added to the existing module.
 
-| File | Responsibility |
-|---|---|
-| `pytest_pyvista/summary/__init__.py` | Public re-exports for the subpackage |
-| `pytest_pyvista/summary/record.py` | `ImageRecord` dataclass, status type, JSONL write/read/combine |
-| `pytest_pyvista/summary/diff.py` | Pixel-difference image, size-mismatch detection |
-| `pytest_pyvista/summary/store.py` | Report image store: slugging, downscaling, full-size retention |
-| `pytest_pyvista/summary/collect.py` | Status determination, capture entry point called from `VerifyImageCache` |
-| `pytest_pyvista/summary/render.py` | Records → `index.html` |
-| `pytest_pyvista/summary/assets/report.css` | Report stylesheet |
-| `pytest_pyvista/summary/assets/report.js` | Filters, approval state, export |
-| `pytest_pyvista/summary/approve.py` | `pytest-pyvista-approve` console script |
-| `pytest_pyvista/pytest_pyvista.py` | Modified: options, `pytest_configure`, capture calls, `pytest_terminal_summary` |
-| `pyproject.toml` | Modified: `[project.scripts]` |
-| `README.rst` | Modified: docs |
-| `tests/test_summary_*.py` | One test module per source module |
+| File                                       | Responsibility                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------- |
+| `pytest_pyvista/summary/__init__.py`       | Public re-exports for the subpackage                                            |
+| `pytest_pyvista/summary/record.py`         | `ImageRecord` dataclass, status type, JSONL write/read/combine                  |
+| `pytest_pyvista/summary/diff.py`           | Pixel-difference image, size-mismatch detection                                 |
+| `pytest_pyvista/summary/store.py`          | Report image store: slugging, downscaling, full-size retention                  |
+| `pytest_pyvista/summary/collect.py`        | Status determination, capture entry point called from `VerifyImageCache`        |
+| `pytest_pyvista/summary/render.py`         | Records → `index.html`                                                          |
+| `pytest_pyvista/summary/assets/report.css` | Report stylesheet                                                               |
+| `pytest_pyvista/summary/assets/report.js`  | Filters, approval state, export                                                 |
+| `pytest_pyvista/summary/approve.py`        | `pytest-pyvista-approve` console script                                         |
+| `pytest_pyvista/pytest_pyvista.py`         | Modified: options, `pytest_configure`, capture calls, `pytest_terminal_summary` |
+| `pyproject.toml`                           | Modified: `[project.scripts]`                                                   |
+| `README.rst`                               | Modified: docs                                                                  |
+| `tests/test_summary_*.py`                  | One test module per source module                                               |
 
 ---
 
 ### Task 1: Image record and JSONL transport
 
 **Files:**
+
 - Create: `pytest_pyvista/summary/__init__.py`
 - Create: `pytest_pyvista/summary/record.py`
 - Test: `tests/test_summary_record.py`
 
 **Interfaces:**
+
 - Consumes: nothing
 - Produces: `SCHEMA_VERSION: int`, `ImageStatus` (Literal alias), `ALL_STATUSES: tuple[str, ...]`, `CacheWriteReason` (Literal alias), `ImageRecord` (dataclass), `write_record(records_dir: Path, worker_id: str, record: ImageRecord) -> None`, `read_records(records_dir: Path) -> list[ImageRecord]`
 
@@ -273,10 +278,12 @@ git commit -m "feat: add ImageRecord and JSONL transport for the summary report"
 ### Task 2: Difference image
 
 **Files:**
+
 - Create: `pytest_pyvista/summary/diff.py`
 - Test: `tests/test_summary_diff.py`
 
 **Interfaces:**
+
 - Consumes: nothing
 - Produces: `DIFF_PIXEL_THRESHOLD: int`, `DIFF_COLOR: tuple[int, int, int]`, `compute_diff_image(baseline_path: Path, generated_path: Path) -> tuple[Image.Image | None, bool]` returning `(diff, size_mismatch)` — `diff` is `None` exactly when `size_mismatch` is `True`
 
@@ -419,10 +426,12 @@ git commit -m "feat: add difference image generation for the summary report"
 ### Task 3: Report image store
 
 **Files:**
+
 - Create: `pytest_pyvista/summary/store.py`
 - Test: `tests/test_summary_store.py`
 
 **Interfaces:**
+
 - Consumes: nothing
 - Produces: `FullSizeMode` (Literal alias `"none" | "failing" | "all"`), `slugify(name: str) -> str`, `ReportImageStore` with `__init__(self, report_dir: Path, *, max_image_size: int = 400, full_size: FullSizeMode = "failing")`, `save_file(self, source: Path, slug: str, role: str, *, status: str) -> tuple[str, str | None]`, `save_image(self, image: Image.Image, slug: str, role: str, *, status: str) -> tuple[str, str | None]`. Both `save_*` return `(thumbnail_relpath, full_relpath_or_None)`, POSIX-style relative to `report_dir`.
 
@@ -618,10 +627,12 @@ git commit -m "feat: add report image store with downscaling and full-size reten
 ### Task 4: Status determination
 
 **Files:**
+
 - Create: `pytest_pyvista/summary/collect.py`
 - Test: `tests/test_summary_collect.py`
 
 **Interfaces:**
+
 - Consumes: `ImageStatus`, `CacheWriteReason` from Task 1
 - Produces: `determine_status(*, skipped: bool, baseline_existed: bool, cache_write_reason: CacheWriteReason | None, error: float | None, error_threshold: float, warning_threshold: float, matched_alternate: bool) -> ImageStatus`
 
@@ -771,14 +782,16 @@ git commit -m "feat: add status determination for summary report records"
 ### Task 5: Plugin options
 
 **Files:**
+
 - Modify: `pytest_pyvista/pytest_pyvista.py` (option registration inside `pytest_addoption`; constant near line 45; validation in `pytest_configure` near line 956)
 - Test: `tests/test_summary_options.py`
 
 **Interfaces:**
+
 - Consumes: `ALL_STATUSES` from Task 1, `FullSizeMode` from Task 3
 - Produces: CLI flags `--summary_html`, `--summary_html_dir`, `--summary_html_include`, `--summary_html_max_image_size`, `--summary_html_full_size`, `--summary_html_embed`; matching ini options; module constant `PYVISTA_SUMMARY_RECORDS_DIRNAME = "pyvista_summary_records_dir"`; helper `_summary_html_enabled(config: pytest.Config) -> bool`
 
-Note the existing helper names: `_add_unit_test_cli_option` registers a flag *and* adds it to `_UNIT_TEST_CLI_ARGS`, which `pytest_configure` uses to reject unit-test flags under `--doc_mode` ([`pytest_pyvista.py:942-954`](../../../pytest_pyvista/pytest_pyvista.py#L942-L954)). Registering the summary flags through it gives the doc-mode rejection for free.
+Note the existing helper names: `_add_unit_test_cli_option` registers a flag _and_ adds it to `_UNIT_TEST_CLI_ARGS`, which `pytest_configure` uses to reject unit-test flags under `--doc_mode` ([`pytest_pyvista.py:942-954`](../../../pytest_pyvista/pytest_pyvista.py#L942-L954)). Registering the summary flags through it gives the doc-mode rejection for free.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1019,11 +1032,13 @@ git commit -m "feat: add summary report options and doc-mode rejection"
 ### Task 6: Capture records during comparison
 
 **Files:**
+
 - Create: `pytest_pyvista/summary/session.py`
 - Modify: `pytest_pyvista/pytest_pyvista.py` (`VerifyImageCache.__init__` and `__call__`; `verify_image_cache` fixture near line 1016)
 - Test: `tests/test_summary_capture.py`
 
 **Interfaces:**
+
 - Consumes: `ImageRecord`, `write_record` (Task 1), `compute_diff_image` (Task 2), `ReportImageStore` (Task 3), `determine_status` (Task 4), options (Task 5)
 - Produces: `SummarySession` with `__init__(self, *, run_id: str, records_dir: Path, store: ReportImageStore, worker_id: str, statuses: tuple[str, ...], cache_dir: Path)` and `capture(self, *, test_name, image_name, call_index, baseline_source, generated_source, cache_destination, skipped, skip_reason, baseline_existed, cache_write_reason, error, error_threshold, warning_threshold, high_variance_test, matched_alternate, matched_baseline, candidate_baselines, image_format, env_info) -> ImageRecord | None`
 
@@ -1556,11 +1571,13 @@ git commit -m "feat: capture summary records during image comparison"
 ### Task 7: HTML rendering
 
 **Files:**
+
 - Create: `pytest_pyvista/summary/render.py`
 - Create: `pytest_pyvista/summary/assets/report.css`
 - Test: `tests/test_summary_render.py`
 
 **Interfaces:**
+
 - Consumes: `ImageRecord`, `ALL_STATUSES` (Task 1)
 - Produces: `render_report(records: list[ImageRecord], *, run_id: str, metadata: dict[str, str], embed_dir: Path | None = None) -> str`, `write_report(records: list[ImageRecord], report_dir: Path, *, run_id: str, metadata: dict[str, str], embed: bool = False) -> Path`
 
@@ -1696,61 +1713,249 @@ Create `pytest_pyvista/summary/assets/report.css`:
 
 ```css
 :root {
-  --bg: #ffffff; --fg: #1b1f24; --muted: #5b6570; --line: #d8dee4; --card: #f6f8fa;
-  --passed: #1a7f37; --warned: #bc4c00; --failed: #cf222e; --skipped: #6e7781; --new: #0969da; --reset: #8250df;
+  --bg: #ffffff;
+  --fg: #1b1f24;
+  --muted: #5b6570;
+  --line: #d8dee4;
+  --card: #f6f8fa;
+  --passed: #1a7f37;
+  --warned: #bc4c00;
+  --failed: #cf222e;
+  --skipped: #6e7781;
+  --new: #0969da;
+  --reset: #8250df;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #30363d; --card: #161b22;
-    --passed: #3fb950; --warned: #d29922; --failed: #f85149; --skipped: #8b949e; --new: #58a6ff; --reset: #bc8cff;
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --line: #30363d;
+    --card: #161b22;
+    --passed: #3fb950;
+    --warned: #d29922;
+    --failed: #f85149;
+    --skipped: #8b949e;
+    --new: #58a6ff;
+    --reset: #bc8cff;
   }
 }
-* { box-sizing: border-box; }
-body { margin: 0; padding: 1.5rem; background: var(--bg); color: var(--fg);
-       font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
-h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
-.meta { color: var(--muted); font-size: .85rem; margin-bottom: 1rem; }
-.meta dl { display: grid; grid-template-columns: max-content 1fr; gap: .1rem .75rem; margin: 0; }
-.meta dt { font-weight: 600; }
-.meta dd { margin: 0; }
-.controls { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line);
-            padding: .75rem 0; margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
-.controls label { display: inline-flex; align-items: center; gap: .3rem; }
-.controls input[type="search"], .controls select { padding: .3rem .5rem; border: 1px solid var(--line);
-            border-radius: 6px; background: var(--bg); color: var(--fg); }
-.badge { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem;
-         font-weight: 600; color: #fff; text-transform: uppercase; letter-spacing: .03em; }
-.badge.passed { background: var(--passed); } .badge.warned { background: var(--warned); }
-.badge.failed { background: var(--failed); } .badge.skipped { background: var(--skipped); }
-.badge.new { background: var(--new); } .badge.reset { background: var(--reset); }
-.card { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 1rem; overflow: hidden; }
-.card.hidden { display: none; }
-.card > header { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
-                 padding: .6rem .8rem; background: var(--card); border-bottom: 1px solid var(--line); }
-.card > header .name { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.card > header .env { color: var(--muted); font-size: .78rem; }
-.panels { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; padding: .8rem; overflow-x: auto; }
-.panel { min-width: 0; }
-.panel h3 { font-size: .78rem; margin: 0 0 .3rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.panel img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
-.panel .placeholder { border: 1px dashed var(--line); border-radius: 4px; padding: 1.5rem .5rem;
-                      text-align: center; color: var(--muted); font-size: .8rem; }
-.info { display: grid; grid-template-columns: max-content 1fr; gap: .15rem .75rem;
-        padding: 0 .8rem .8rem; font-size: .85rem; }
-.info dt { color: var(--muted); }
-.info dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.chip { display: inline-block; padding: .1rem .5rem; border-radius: 6px; background: var(--card);
-        border: 1px solid var(--line); font-size: .8rem; }
-.approve { display: inline-flex; align-items: center; gap: .35rem; }
-footer { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line);
-         padding: .75rem 0; display: flex; gap: .75rem; align-items: center; }
-button { padding: .4rem .8rem; border: 1px solid var(--line); border-radius: 6px;
-         background: var(--card); color: var(--fg); cursor: pointer; font: inherit; }
-button:hover { border-color: var(--muted); }
-.notice { padding: .5rem .75rem; border: 1px solid var(--line); border-left: 3px solid var(--new);
-          border-radius: 4px; margin-bottom: 1rem; }
-.empty { color: var(--muted); padding: 2rem 0; text-align: center; }
-@media (max-width: 720px) { .panels { grid-template-columns: 1fr; } }
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: 1.5rem;
+  background: var(--bg);
+  color: var(--fg);
+  font:
+    14px/1.5 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 0.5rem;
+}
+.meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+.meta dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.1rem 0.75rem;
+  margin: 0;
+}
+.meta dt {
+  font-weight: 600;
+}
+.meta dd {
+  margin: 0;
+}
+.controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  padding: 0.75rem 0;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.controls input[type="search"],
+.controls select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.badge.passed {
+  background: var(--passed);
+}
+.badge.warned {
+  background: var(--warned);
+}
+.badge.failed {
+  background: var(--failed);
+}
+.badge.skipped {
+  background: var(--skipped);
+}
+.badge.new {
+  background: var(--new);
+}
+.badge.reset {
+  background: var(--reset);
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+.card.hidden {
+  display: none;
+}
+.card > header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.card > header .name {
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.card > header .env {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.panels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  padding: 0.8rem;
+  overflow-x: auto;
+}
+.panel {
+  min-width: 0;
+}
+.panel h3 {
+  font-size: 0.78rem;
+  margin: 0 0 0.3rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.panel img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.panel .placeholder {
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.info {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+  padding: 0 0.8rem 0.8rem;
+  font-size: 0.85rem;
+}
+.info dt {
+  color: var(--muted);
+}
+.info dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.chip {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-size: 0.8rem;
+}
+.approve {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  padding: 0.75rem 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+button {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+}
+button:hover {
+  border-color: var(--muted);
+}
+.notice {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--new);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.empty {
+  color: var(--muted);
+  padding: 2rem 0;
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .panels {
+    grid-template-columns: 1fr;
+  }
+}
 ```
 
 Create `pytest_pyvista/summary/render.py`:
@@ -1965,10 +2170,12 @@ git commit -m "feat: render summary report records to HTML"
 ### Task 8: Interactive filters and approval export
 
 **Files:**
+
 - Modify: `pytest_pyvista/summary/assets/report.js` (replace the placeholder)
 - Test: `tests/test_summary_interactive.py`
 
 **Interfaces:**
+
 - Consumes: the DOM contract from Task 7 — `data-run-id` on `<html>`, `.status-filter`, `#search`, `#sort`, `#accept-new`, `#export`, `#count`, `#notice`, `#manifest`, `article.card[data-status][data-key][data-name][data-error]`, `input[type=checkbox]` inside `label.approve`
 - Produces: no Python interface; the exported manifest shape defined in Task 10
 
@@ -2037,10 +2244,16 @@ Replace `pytest_pyvista/summary/assets/report.js`:
   var storeKey = "pytest-pyvista:approvals:" + runId;
   var manifest = JSON.parse(document.getElementById("manifest").textContent);
   var byKey = {};
-  manifest.records.forEach(function (record) { byKey[record.key] = record; });
+  manifest.records.forEach(function (record) {
+    byKey[record.key] = record;
+  });
 
-  var cards = Array.prototype.slice.call(document.querySelectorAll("article.card"));
-  var filters = Array.prototype.slice.call(document.querySelectorAll(".status-filter"));
+  var cards = Array.prototype.slice.call(
+    document.querySelectorAll("article.card"),
+  );
+  var filters = Array.prototype.slice.call(
+    document.querySelectorAll(".status-filter"),
+  );
   var search = document.getElementById("search");
   var sort = document.getElementById("sort");
   var count = document.getElementById("count");
@@ -2050,30 +2263,49 @@ Replace `pytest_pyvista/summary/assets/report.js`:
   function pruneOldKeys() {
     var cutoff = Date.now() - PRUNE_AFTER_DAYS * 86400000;
     Object.keys(localStorage).forEach(function (key) {
-      if (key.indexOf("pytest-pyvista:approvals:") !== 0) { return; }
+      if (key.indexOf("pytest-pyvista:approvals:") !== 0) {
+        return;
+      }
       try {
         var saved = JSON.parse(localStorage.getItem(key));
-        if (!saved.saved_at || saved.saved_at < cutoff) { localStorage.removeItem(key); }
-      } catch (err) { localStorage.removeItem(key); }
+        if (!saved.saved_at || saved.saved_at < cutoff) {
+          localStorage.removeItem(key);
+        }
+      } catch (err) {
+        localStorage.removeItem(key);
+      }
     });
   }
 
   function load() {
     try {
       var saved = JSON.parse(localStorage.getItem(storeKey));
-      if (!saved || saved.run_id !== runId) { return {}; }
+      if (!saved || saved.run_id !== runId) {
+        return {};
+      }
       return saved.approved || {};
-    } catch (err) { return {}; }
+    } catch (err) {
+      return {};
+    }
   }
 
   function save(approved) {
-    localStorage.setItem(storeKey, JSON.stringify({ run_id: runId, saved_at: Date.now(), approved: approved }));
+    localStorage.setItem(
+      storeKey,
+      JSON.stringify({
+        run_id: runId,
+        saved_at: Date.now(),
+        approved: approved,
+      }),
+    );
   }
 
   function staleKeysWereDiscarded() {
     var found = false;
     Object.keys(localStorage).forEach(function (key) {
-      if (key.indexOf("pytest-pyvista:approvals:") === 0 && key !== storeKey) { found = true; }
+      if (key.indexOf("pytest-pyvista:approvals:") === 0 && key !== storeKey) {
+        found = true;
+      }
     });
     return found;
   }
@@ -2081,21 +2313,30 @@ Replace `pytest_pyvista/summary/assets/report.js`:
   var approved = load();
 
   if (staleKeysWereDiscarded()) {
-    notice.textContent = "Approvals from an earlier run were not restored: this report describes different images.";
+    notice.textContent =
+      "Approvals from an earlier run were not restored: this report describes different images.";
     notice.hidden = false;
   }
 
   function refreshCount() {
-    var total = Object.keys(approved).filter(function (key) { return approved[key]; }).length;
-    count.textContent = total + (total === 1 ? " image" : " images") + " selected for approval";
+    var total = Object.keys(approved).filter(function (key) {
+      return approved[key];
+    }).length;
+    count.textContent =
+      total + (total === 1 ? " image" : " images") + " selected for approval";
   }
 
   function applyFilters() {
     var wanted = {};
-    filters.forEach(function (box) { if (box.checked) { wanted[box.value] = true; } });
+    filters.forEach(function (box) {
+      if (box.checked) {
+        wanted[box.value] = true;
+      }
+    });
     var term = search.value.trim().toLowerCase();
     cards.forEach(function (card) {
-      var visible = wanted[card.getAttribute("data-status")] === true &&
+      var visible =
+        wanted[card.getAttribute("data-status")] === true &&
         (term === "" || card.getAttribute("data-name").indexOf(term) !== -1);
       card.classList.toggle("hidden", !visible);
     });
@@ -2104,40 +2345,66 @@ Replace `pytest_pyvista/summary/assets/report.js`:
   function applySort() {
     var mode = sort.value;
     var main = document.getElementById("cards");
-    cards.slice().sort(function (a, b) {
-      if (mode === "name") {
-        return a.getAttribute("data-name").localeCompare(b.getAttribute("data-name"));
-      }
-      return parseFloat(b.getAttribute("data-error")) - parseFloat(a.getAttribute("data-error"));
-    }).forEach(function (card) { main.appendChild(card); });
+    cards
+      .slice()
+      .sort(function (a, b) {
+        if (mode === "name") {
+          return a
+            .getAttribute("data-name")
+            .localeCompare(b.getAttribute("data-name"));
+        }
+        return (
+          parseFloat(b.getAttribute("data-error")) -
+          parseFloat(a.getAttribute("data-error"))
+        );
+      })
+      .forEach(function (card) {
+        main.appendChild(card);
+      });
   }
 
   cards.forEach(function (card) {
     var box = card.querySelector("label.approve input[type=checkbox]");
-    if (!box) { return; }
+    if (!box) {
+      return;
+    }
     var key = card.getAttribute("data-key");
     box.checked = approved[key] === true;
     box.addEventListener("change", function () {
-      if (box.checked) { approved[key] = true; } else { delete approved[key]; }
+      if (box.checked) {
+        approved[key] = true;
+      } else {
+        delete approved[key];
+      }
       save(approved);
       refreshCount();
     });
   });
 
   var newCards = cards.filter(function (card) {
-    return card.getAttribute("data-status") === "new" && card.querySelector("label.approve input[type=checkbox]");
+    return (
+      card.getAttribute("data-status") === "new" &&
+      card.querySelector("label.approve input[type=checkbox]")
+    );
   });
-  if (newCards.length) { acceptNew.hidden = false; }
+  if (newCards.length) {
+    acceptNew.hidden = false;
+  }
 
   acceptNew.addEventListener("click", function () {
     newCards.forEach(function (card) {
       var box = card.querySelector("label.approve input[type=checkbox]");
-      if (!box.checked) { box.checked = true; box.dispatchEvent(new Event("change")); }
+      if (!box.checked) {
+        box.checked = true;
+        box.dispatchEvent(new Event("change"));
+      }
     });
   });
 
   document.getElementById("export").addEventListener("click", function () {
-    var selected = Object.keys(approved).filter(function (key) { return approved[key] && byKey[key]; });
+    var selected = Object.keys(approved).filter(function (key) {
+      return approved[key] && byKey[key];
+    });
     var payload = {
       schema_version: 1,
       run_id: runId,
@@ -2152,11 +2419,13 @@ Replace `pytest_pyvista/summary/assets/report.js`:
           call_index: record.call_index,
           status: record.status,
           source: record.source,
-          destination: record.destination
+          destination: record.destination,
         };
-      })
+      }),
     };
-    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    var blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
     var link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = "approvals.json";
@@ -2164,7 +2433,9 @@ Replace `pytest_pyvista/summary/assets/report.js`:
     URL.revokeObjectURL(link.href);
   });
 
-  filters.forEach(function (box) { box.addEventListener("change", applyFilters); });
+  filters.forEach(function (box) {
+    box.addEventListener("change", applyFilters);
+  });
   search.addEventListener("input", applyFilters);
   sort.addEventListener("change", applySort);
 
@@ -2183,6 +2454,7 @@ Expected: PASS (9 passed)
 - [ ] **Step 5: Verify the interaction by hand**
 
 Generate a report against this repo's own test images, open it, and confirm each of:
+
 - unchecking a status hides those cards; the search box narrows further
 - switching sort reorders cards
 - ticking an approval box updates the footer count; reloading the page preserves it
@@ -2203,10 +2475,12 @@ git commit -m "feat: add interactive filtering and approval export to the report
 ### Task 9: Generate the report at end of run
 
 **Files:**
+
 - Modify: `pytest_pyvista/pytest_pyvista.py` (`pytest_terminal_summary`, line 724)
 - Test: `tests/test_summary_integration.py`
 
 **Interfaces:**
+
 - Consumes: `read_records` (Task 1), `write_report` (Task 7), options (Task 5), records written by Task 6
 - Produces: an `index.html` at the configured report directory, and a terminal line naming it
 
@@ -2460,10 +2734,12 @@ git commit -m "feat: write the image summary report at end of run"
 ### Task 10: Manifest validation
 
 **Files:**
+
 - Create: `pytest_pyvista/summary/approve.py`
 - Test: `tests/test_summary_approve.py`
 
 **Interfaces:**
+
 - Consumes: `SCHEMA_VERSION` (Task 1)
 - Produces: `ManifestError` (Exception), `ApprovedImage` (dataclass with `test_name: str`, `image_name: str`, `call_index: int`, `status: str`, `source: Path`, `destination: Path`), `load_manifest(path: Path, *, cache_dir: Path, target_root: Path, source_root: Path, force: bool = False) -> list[ApprovedImage]`
 
@@ -2745,11 +3021,13 @@ git commit -m "feat: validate exported approval manifests"
 ### Task 11: The `pytest-pyvista-approve` console script
 
 **Files:**
+
 - Modify: `pytest_pyvista/summary/approve.py` (add `apply_approvals` and `main`)
 - Modify: `pyproject.toml` (add `[project.scripts]`)
 - Test: `tests/test_summary_approve_cli.py`
 
 **Interfaces:**
+
 - Consumes: `load_manifest`, `ApprovedImage`, `ManifestError` (Task 10)
 - Produces: `apply_approvals(approved: list[ApprovedImage], *, dry_run: bool = False) -> list[tuple[Path, Path]]`, `main(argv: list[str] | None = None) -> int`
 
@@ -2966,10 +3244,12 @@ git commit -m "feat: add pytest-pyvista-approve console script"
 ### Task 12: Documentation
 
 **Files:**
+
 - Modify: `README.rst` (new section after "Documentation testing flags", plus entries in "Configuration")
 - Test: manual — `python -m sphinx -b html doc doc/_build/html` must not warn on the new content
 
 **Interfaces:**
+
 - Consumes: every flag from Tasks 5 and 11
 - Produces: no code interface
 

@@ -10,7 +10,7 @@
 
 An opt-in HTML report, generated at the end of a normal `pytest` run, that presents every
 image test as a card: baseline, generated render, and pixel difference side by side, with
-the metadata needed to judge whether a difference matters. The report is a *catalogue* of
+the metadata needed to judge whether a difference matters. The report is a _catalogue_ of
 the image test suite, not a failure log — passing, warning, skipped and new images are all
 included, and an interactive filter narrows the view.
 
@@ -61,10 +61,10 @@ happens, not reconstructed from disk afterwards.** Three facts force this.
    run finds nothing.
 
 2. **Cache-writing policies destroy the baseline before or after comparison.**
-   `--add_missing_images` and `--reset_image_cache` screenshot into the cache path *before*
+   `--add_missing_images` and `--reset_image_cache` screenshot into the cache path _before_
    comparing ([`pytest_pyvista.py:520-521`](../../../pytest_pyvista/pytest_pyvista.py#L520-L521)),
    so the plugin's own comparison is image-against-itself and reports zero error.
-   `--reset_only_failed` overwrites the baseline *after* a real comparison
+   `--reset_only_failed` overwrites the baseline _after_ a real comparison
    ([`pytest_pyvista.py:559-564`](../../../pytest_pyvista/pytest_pyvista.py#L559-L564)).
    In both cases the prior baseline no longer exists at session end — which is precisely
    the review a reader wants after a mass reset.
@@ -196,14 +196,14 @@ Computed by the report, not by the plugin, against the preserved prior baseline:
 
 ## Image Status Definitions
 
-| Status | Meaning | Badge |
-|---|---|---|
-| **Passed** | Error at or below the warning threshold. | 🟢 green |
-| **Warned** | Error above the warning threshold but at or below the error threshold — passing, but drifting. Also covers `errors_as_warnings`: a multi-baseline test that failed its primary baseline but matched an alternate. | 🟠 amber |
-| **Failed** | Error above the error threshold. | 🔴 red |
-| **Skipped** | Comparison skipped via `skip`, `windows_skip_image_cache`, `macos_skip_image_cache`, or `--ignore_image_cache`. | ⚪ grey |
-| **New** | No baseline existed for this image. | 🔵 blue |
-| **Reset** | A baseline existed and was overwritten this run by a cache-writing policy. | 🟣 purple |
+| Status      | Meaning                                                                                                                                                                                                           | Badge     |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| **Passed**  | Error at or below the warning threshold.                                                                                                                                                                          | 🟢 green  |
+| **Warned**  | Error above the warning threshold but at or below the error threshold — passing, but drifting. Also covers `errors_as_warnings`: a multi-baseline test that failed its primary baseline but matched an alternate. | 🟠 amber  |
+| **Failed**  | Error above the error threshold.                                                                                                                                                                                  | 🔴 red    |
+| **Skipped** | Comparison skipped via `skip`, `windows_skip_image_cache`, `macos_skip_image_cache`, or `--ignore_image_cache`.                                                                                                   | ⚪ grey   |
+| **New**     | No baseline existed for this image.                                                                                                                                                                               | 🔵 blue   |
+| **Reset**   | A baseline existed and was overwritten this run by a cache-writing policy.                                                                                                                                        | 🟣 purple |
 
 Two notes on this taxonomy, both departures from the first draft:
 
@@ -216,7 +216,7 @@ Passed would hide exactly what a reviewer is looking for.
 
 **Reset is distinguished from New.** Both are "the cache was written this run", but they
 warrant different reading: New has nothing to compare against, while Reset has a prior
-baseline that the report preserved and *can* diff against. Without the distinction, a
+baseline that the report preserved and _can_ diff against. Without the distinction, a
 `--reset_image_cache` run renders as a wall of identical-looking green cards with empty diff
 panels.
 
@@ -224,12 +224,12 @@ panels.
 
 Not every card can show three panels, and the layout must degrade rather than fail:
 
-| Status | Baseline | Generated | Diff |
-|---|---|---|---|
-| Passed / Warned / Failed | ✓ | ✓ | ✓ |
-| Reset | ✓ (preserved prior) | ✓ | ✓ |
-| New | — (placeholder) | ✓ | — (placeholder) |
-| Skipped | ✓ if one exists | — | — |
+| Status                   | Baseline            | Generated | Diff            |
+| ------------------------ | ------------------- | --------- | --------------- |
+| Passed / Warned / Failed | ✓                   | ✓         | ✓               |
+| Reset                    | ✓ (preserved prior) | ✓         | ✓               |
+| New                      | — (placeholder)     | ✓         | — (placeholder) |
+| Skipped                  | ✓ if one exists     | —         | —               |
 
 Skipped tests return before any screenshot is taken
 ([`pytest_pyvista.py:487-494`](../../../pytest_pyvista/pytest_pyvista.py#L487-L494)), so no
@@ -251,14 +251,14 @@ Flags follow the plugin's existing snake_case convention, and resolve through
 
 ### CLI flags
 
-| Flag | Effect |
-|---|---|
-| `--summary_html` | Opt in to report generation. |
-| `--summary_html_dir <DIR>` | Report output directory, relative to pytest rootpath. Default `image_test_report`. Setting it implies `--summary_html`. |
-| `--summary_html_include <list>` | Comma-separated statuses to include. Default: all. Filters what is *written*; the in-report filter narrows further at read time. |
-| `--summary_html_max_image_size <N>` | Longest-edge pixel limit for the images shown inline on each card. Default 400. |
-| `--summary_html_full_size <MODE>` | Which records also retain a full-resolution copy: `none`, `failing` (default), or `all`. |
-| `--summary_html_embed` | Produce a single self-contained `index.html` with images as data URIs. |
+| Flag                                | Effect                                                                                                                           |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `--summary_html`                    | Opt in to report generation.                                                                                                     |
+| `--summary_html_dir <DIR>`          | Report output directory, relative to pytest rootpath. Default `image_test_report`. Setting it implies `--summary_html`.          |
+| `--summary_html_include <list>`     | Comma-separated statuses to include. Default: all. Filters what is _written_; the in-report filter narrows further at read time. |
+| `--summary_html_max_image_size <N>` | Longest-edge pixel limit for the images shown inline on each card. Default 400.                                                  |
+| `--summary_html_full_size <MODE>`   | Which records also retain a full-resolution copy: `none`, `failing` (default), or `all`.                                         |
+| `--summary_html_embed`              | Produce a single self-contained `index.html` with images as data URIs.                                                           |
 
 ### ini options
 
@@ -323,16 +323,18 @@ the table above. Clicking a panel opens its full-resolution image where one was 
 (see `summary_html_full_size`), and the downscaled image at full width otherwise.
 
 **Metadata panel**
+
 - Image regression error, and the threshold in force (noting `high_variance_test` when set)
 - Status, and skip reason for Skipped
-- **Approval Reason** — e.g. *Already in cache — written by `--add_missing_images`* — or
+- **Approval Reason** — e.g. _Already in cache — written by `--add_missing_images`_ — or
   blank when the image awaits approval
 - Matched baseline and other candidates, when there are several
 - Environment details
 
 **Approval control**
+
 - Records awaiting approval — **New, Failed and Warned**, where the cache was not written
-  this run — get a live checkbox: *Approve this image*. Toggling is free and reversible.
+  this run — get a live checkbox: _Approve this image_. Toggling is free and reversible.
 - Warned records are approvable even though they pass. A drifting image that stays green is
   the case most likely to go unexamined for months, and accepting the drift into the
   baseline deliberately is the point of reviewing it. Nothing forces the update; the
@@ -355,7 +357,7 @@ the table above. Clicking a panel opens its full-resolution image where one was 
 ### Footer
 
 - **Export approvals** — downloads `approvals.json`
-- Live count: *N images selected for approval*
+- Live count: _N images selected for approval_
 
 ---
 
@@ -365,7 +367,7 @@ the table above. Clicking a panel opens its full-resolution image where one was 
 
 1. Open `image_test_report/index.html`.
 2. Filter and review.
-3. Tick *Approve this image* on New, Failed or Warned cards; untick freely.
+3. Tick _Approve this image_ on New, Failed or Warned cards; untick freely.
 4. Optionally **Accept all new**.
 5. **Export approvals** → `approvals.json` downloads.
 
@@ -438,6 +440,7 @@ untrusted input:
 ## Testing Strategy
 
 **Unit**
+
 - `ImageRecord` construction for each status, including `high_variance_test` thresholds
 - JSONL combine helper: multiple workers, partial/truncated final line
 - Diff image generation: identical images, differing images, mismatched sizes
@@ -445,10 +448,11 @@ untrusted input:
 - Applier copy resolution with and without `generate_subdirs`, single and multi-baseline
 
 **Integration** (pytest's `pytester` fixture, as the existing suite uses)
+
 - Bare `--summary_html` with no other directories configured produces a populated report —
   the case that fails under a session-end-scan design
 - A run with each of `--add_missing_images`, `--reset_image_cache`, `--reset_only_failed`
-  yields correct statuses and a diff against the *preserved prior* baseline
+  yields correct statuses and a diff against the _preserved prior_ baseline
 - `-n 2` under xdist produces exactly one report containing every worker's records
 - `--summary_html` with `--doc_mode` raises `UsageError`
 - `--summary_html_include` restricts what is written
@@ -457,6 +461,7 @@ untrusted input:
 - Report renders with zero image tests without crashing
 
 **Manual**
+
 - Open in a browser: filters, search, approve/unapprove, accept-all-new, export
 - Confirm a several-hundred-test report opens and scrolls acceptably
 
