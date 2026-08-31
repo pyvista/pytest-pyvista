@@ -255,6 +255,102 @@ def test_verify_image_cache_fail_regression(pytester: pytest.Pytester) -> None:
     result.stdout.fnmatch_lines("*Exceeded image regression error*")
     result.stdout.fnmatch_lines("*pytest_pyvista.pytest_pyvista.RegressionError:*")
     result.stdout.fnmatch_lines("*Exceeded image regression error of*")
+    # A single failure is reported on its own, not as a numbered list
+    result.stdout.no_fnmatch_line("*images failed image regression*")
+
+
+def test_verify_image_cache_fail_regression_multiple_images(pytester: pytest.Pytester) -> None:
+    """Test every image of a failing test is checked, saved and reported."""
+    image_names = ["imcache.png", "imcache_1.png", "imcache_2.png"]
+    for name in image_names:
+        make_cached_images(pytester.path, name=name)
+
+    pytester.makepyfile(
+        """
+       import pyvista as pv
+       pv.OFF_SCREEN = True
+       def test_imcache(verify_image_cache):
+           for color in ["blue", "green", "black"]:
+               plotter = pv.Plotter()
+               plotter.add_mesh(pv.Sphere(), color=color)
+               plotter.show()
+       """
+    )
+
+    result = pytester.runpytest("--generated_image_dir", "gen_dir", "--failed_image_dir", "failed_dir")
+
+    # The test fails once, in its call phase, with all three images named
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*pytest_pyvista.pytest_pyvista.RegressionError: 3 images failed image regression:*",
+            "*(1) imcache Exceeded image regression error of*",
+            "*(2) imcache_1 Exceeded image regression error of*",
+            "*(3) imcache_2 Exceeded image regression error of*",
+        ]
+    )
+
+    # Every image is rendered and saved, so a single run can refresh every baseline
+    assert sorted(path.name for path in (pytester.path / "gen_dir").iterdir()) == image_names
+    assert sorted(path.name for path in (pytester.path / "failed_dir" / "errors" / "from_test").iterdir()) == image_names
+
+
+def test_verify_image_cache_fail_regression_multiple_images_not_found(pytester: pytest.Pytester) -> None:
+    """Test missing cached images are collected the same way as failed comparisons."""
+    pytester.makepyfile(
+        """
+       import pyvista as pv
+       pv.OFF_SCREEN = True
+       def test_imcache(verify_image_cache):
+           for _ in range(3):
+               plotter = pv.Plotter()
+               plotter.add_mesh(pv.Sphere(), color="blue")
+               plotter.show()
+       """
+    )
+
+    result = pytester.runpytest("--generated_image_dir", "gen_dir")
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*pytest_pyvista.pytest_pyvista.RegressionFileNotFoundError: 3 images failed image regression:*",
+            "*(1) *imcache.png does not exist in image cache*",
+            "*(2) *imcache_1.png does not exist in image cache*",
+            "*(3) *imcache_2.png does not exist in image cache*",
+        ]
+    )
+    assert sorted(path.name for path in (pytester.path / "gen_dir").iterdir()) == ["imcache.png", "imcache_1.png", "imcache_2.png"]
+
+
+def test_verify_image_cache_fail_regression_mixed_errors(pytester: pytest.Pytester) -> None:
+    """Test a mix of failed comparisons and missing images is reported as a RegressionError."""
+    # Only the first image is cached, so the second one cannot be compared at all
+    make_cached_images(pytester.path)
+
+    pytester.makepyfile(
+        """
+       import pyvista as pv
+       pv.OFF_SCREEN = True
+       def test_imcache(verify_image_cache):
+           for _ in range(2):
+               plotter = pv.Plotter()
+               plotter.add_mesh(pv.Sphere(), color="blue")
+               plotter.show()
+       """
+    )
+
+    result = pytester.runpytest("--generated_image_dir", "gen_dir")
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "*pytest_pyvista.pytest_pyvista.RegressionError: 2 images failed image regression:*",
+            "*(1) imcache Exceeded image regression error of*",
+            "*(2) *imcache_1.png does not exist in image cache*",
+        ]
+    )
+    assert sorted(path.name for path in (pytester.path / "gen_dir").iterdir()) == ["imcache.png", "imcache_1.png"]
 
 
 @pytest.mark.parametrize("use_generated_image_dir", [True, False])
@@ -586,11 +682,12 @@ def test_reset_image_cache(pytester: pytest.Pytester, allow_unused_generated, ma
     result.assert_outcomes(passed=1)
 
 
-def test_cleanup(pytester: pytest.Pytester) -> None:
-    """Test cleanup of the `verify_image_cache` fixture."""
+@pytest.mark.parametrize("defer_errors", [True, False])
+def test_cleanup(pytester: pytest.Pytester, defer_errors) -> None:
+    """Test cleanup of the `verify_image_cache` fixture, whether or not errors are deferred."""
     make_cached_images(pytester.path)
     pytester.makepyfile(
-        """
+        f"""
        import pytest
        import pyvista as pv
        pv.OFF_SCREEN = True
@@ -601,6 +698,7 @@ def test_cleanup(pytester: pytest.Pytester) -> None:
            assert pv.global_theme.before_close_callback is None
 
        def test_imcache(cleanup_tester, verify_image_cache):
+           verify_image_cache.defer_errors = {defer_errors}
            sphere = pv.Sphere()
            plotter = pv.Plotter()
            plotter.add_mesh(sphere, color="blue")
@@ -613,7 +711,10 @@ def test_cleanup(pytester: pytest.Pytester) -> None:
     )
 
     result = pytester.runpytest()
-    result.assert_outcomes(passed=1)
+    # Deferring reports the regression after the test body, so the `except` above no
+    # longer swallows it; raising immediately keeps failing inside `show` as before.
+    # The theme callback is restored either way, otherwise `cleanup_tester` errors.
+    result.assert_outcomes(**({"failed": 1} if defer_errors else {"passed": 1}))
 
 
 @pytest.mark.parametrize("add_missing_images", [True, False])
@@ -997,7 +1098,6 @@ def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
         """
         import pyvista as pv
         import pytest
-        from pytest_pyvista.pytest_pyvista import RegressionError
 
         pv.OFF_SCREEN = True
         import contextlib
@@ -1007,7 +1107,9 @@ def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
             sphere = pv.Sphere()
             plotter = pv.Plotter()
             plotter.add_mesh(sphere, color="blue")
-            with contextlib.chdir(tmp_path), contextlib.suppress(RegressionError):
+            # The regression is reported after the test body, so `show` does not raise
+            # here and the path below is asserted while the test is still running
+            with contextlib.chdir(tmp_path):
                 plotter.show()
 
             assert (pytestconfig.rootpath / "failed/errors/from_test/imcache.png").exists()
@@ -1015,7 +1117,9 @@ def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
     )
     args = ["--image_cache_dir", new_dir, "--failed_image_dir", "failed"]
     result = pytester.runpytest(*args)
-    result.assert_outcomes(passed=1)
+    # Only the deferred image regression fails the test; the assertion above passed
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines("*RegressionError: imcache Exceeded image regression error of*")
 
 
 def test_auto_close(pytester: pytest.Pytester) -> None:

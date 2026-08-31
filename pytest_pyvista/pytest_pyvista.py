@@ -50,6 +50,7 @@ SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
 PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME = "pyvista_generated_image_dir"
 PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
+DEFERRED_ERRORS_ITEM_ATTR = "_pytest_pyvista_deferred_errors"
 
 PARSER_GROUP_NAME = "pyvista"
 DEFAULT_ERROR_THRESHOLD: float = 500.0
@@ -408,6 +409,14 @@ class VerifyImageCache:
         Directory to save failed images.  If not specified, no generated
         images are saved.
 
+    defer_errors : bool, default: False
+        Collect regression errors instead of raising them on the first failure.
+        The errors are stored in ``deferred_errors`` for the caller to report
+        once every image has been checked. This lets a test render all of its
+        images in a single run instead of stopping at the first mismatch. The
+        ``verify_image_cache`` fixture enables this and reports the collected
+        errors as a single test failure.
+
     Examples
     --------
     Create an image cache directory named image_cache and check a simple
@@ -444,6 +453,7 @@ class VerifyImageCache:
         var_warning_value: float = 1000.0,
         generated_image_dir: Path | None = None,
         failed_image_dir: Path | None = None,
+        defer_errors: bool = False,
     ) -> None:
         """Initialize VerifyImageCache."""
         self.test_name = test_name
@@ -472,6 +482,9 @@ class VerifyImageCache:
         self.skip = False
         self.n_calls = 0
 
+        self.defer_errors = defer_errors
+        self.deferred_errors: list[RegressionError | RegressionFileNotFoundError] = []
+
     @staticmethod
     def _is_skipped(*, skip: bool, windows_skip_image_cache: bool, macos_skip_image_cache: bool, ignore_image_cache: bool) -> bool:
         skip_windows = os.name == "nt" and windows_skip_image_cache
@@ -488,12 +501,6 @@ class VerifyImageCache:
             The Plotter object that is being closed.
 
         """
-
-        def remove_plotter_close_callback() -> None:
-            # Make sure this doesn't get called again if this plotter doesn't close properly
-            # This is typically needed if an error is raised by this function
-            plotter._before_close_callback = None  # noqa: SLF001
-
         test_name = f"{self.test_name}_{self.n_calls}" if self.n_calls > 0 else self.test_name
         self.n_calls += 1
 
@@ -537,9 +544,9 @@ class VerifyImageCache:
             if self.failed_image_dir is not None:
                 self._save_failed_test_images("error", plotter, image_name)
 
-            remove_plotter_close_callback()
             msg = f"{current_cached_image} does not exist in image cache"
-            raise RegressionFileNotFoundError(msg)
+            self._report_failure(RegressionFileNotFoundError(msg), plotter)
+            return
 
         if (self.add_missing_images and not current_cached_image.is_file()) or (self.reset_image_cache and not self.reset_only_failed):
             _screenshot(plotter, current_cached_image, max_image_size=VerifyImageCache.max_image_size)
@@ -572,14 +579,33 @@ class VerifyImageCache:
                 )
                 _screenshot(plotter, current_cached_image, max_image_size=VerifyImageCache.max_image_size)
             else:
-                remove_plotter_close_callback()
-                raise RegressionError(fail_msg)
+                self._report_failure(RegressionError(fail_msg), plotter)
+                # The image already failed, so don't also warn about it
+                return
 
         if warn_msg:
             parent_dir: Literal["errors_as_warning", "warning"] = "errors_as_warning" if image_dirname.is_dir() else "warning"
             if self.failed_image_dir is not None:
                 self._save_failed_test_images(parent_dir, plotter, image_name, cache_image_path=current_cached_image)
             warnings.warn(warn_msg, stacklevel=2)
+
+    def _report_failure(self, error: RegressionError | RegressionFileNotFoundError, plotter: Plotter) -> None:
+        """
+        Collect a regression error when deferring, otherwise raise it immediately.
+
+        Deferring lets the test keep rendering, and saving, the images that follow this
+        one so that a single run can refresh all of its cached images. The collected
+        errors are reported together once the test has finished. Raising instead aborts
+        the test at this image.
+        """
+        if self.defer_errors:
+            self.deferred_errors.append(error)
+            return
+
+        # Make sure this doesn't get called again if this plotter doesn't close properly
+        # This is typically needed if an error is raised by this function
+        plotter._before_close_callback = None  # noqa: SLF001
+        raise error
 
     def _save_generated_image(self, plotter: pyvista.Plotter, image_name: str, parent_dir: Path | None = None) -> None:
         parent = cast("Path", self.generated_image_dir) if parent_dir is None else parent_dir
@@ -866,6 +892,44 @@ def _get_option_from_config_or_ini(pytestconfig: pytest.Config, option: str, *, 
     return None
 
 
+def _collected_regression_error(errors: list[RegressionError | RegressionFileNotFoundError]) -> RegressionError | RegressionFileNotFoundError:
+    """
+    Combine the regression errors collected from a test into a single error.
+
+    A test that failed on a single image raises exactly the error it raised before
+    deferring was introduced. Several errors are joined into one numbered message so
+    that every image is reported at once, keeping the type when they all share one.
+    """
+    if len(errors) == 1:
+        return errors[0]
+
+    error_types = {type(error) for error in errors}
+    error_type = error_types.pop() if len(error_types) == 1 else RegressionError
+
+    header = f"{len(errors)} images failed image regression:"
+    msg = "\n\n".join([header, *(f"({i}) {error}" for i, error in enumerate(errors, start=1))])
+    return error_type(msg)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item: pytest.Item) -> Generator:
+    """
+    Fail a test that collected regression errors while it was running.
+
+    The errors are reported here rather than from the fixture's teardown so that the
+    failure is attributed to the test call, exactly as an immediately raised error is.
+    A test that failed on its own is left alone; its images have still been saved.
+    """
+    __tracebackhide__ = True
+    outcome = yield
+    errors = getattr(item, DEFERRED_ERRORS_ITEM_ATTR, None)
+    if errors and outcome.excinfo is None:
+        try:
+            raise _collected_regression_error(errors)
+        except (RegressionError, RegressionFileNotFoundError) as error:
+            outcome.force_exception(error)
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call) -> Generator:  # noqa: ANN001, ARG001
     """Store test results for inspection."""
@@ -1079,7 +1143,11 @@ def verify_image_cache(
         cache_dir=cache_dir,
         generated_image_dir=gen_dir,
         failed_image_dir=failed_dir,
+        # Let the test render and save every one of its images, then report all of
+        # the failures together from `pytest_runtest_call`
+        defer_errors=True,
     )
+    setattr(request.node, DEFERRED_ERRORS_ITEM_ATTR, verify_image_cache.deferred_errors)
 
     # Render under the testing theme; `_TestingTheme` is absent on older pyvista.
     with contextlib.suppress(ImportError):

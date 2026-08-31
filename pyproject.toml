@@ -16,6 +16,8 @@ classifiers = [
   "Topic :: Software Development :: Testing",
 ]
 dependencies = [
+  # `pluggy.Result.force_exception`, used to report deferred regression errors
+  "pluggy>=1.1.0",
   "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
   "pytest>=6.2.0",
 ]

@@ -157,6 +157,14 @@ If you need to use any flag inside the tests, you can modify the
         pl.show()
 
 
+A test may call ``pl.show()`` more than once, in which case the images are cached as
+``<test_name>``, ``<test_name>_1``, ``<test_name>_2`` and so on. Every one of these
+images is compared, even when an earlier one fails, and all of the failures are
+reported together as a single test failure. This way a test that renders several
+images writes all of them to ``--generated_image_dir`` and ``--failed_image_dir`` in
+one run, so every cached image can be reviewed, or refreshed, at once.
+
+
 Documentation image tests
 -------------------------
 Unlike the unit tests, which use the ``verify_image_cache`` fixture to evaluate test
