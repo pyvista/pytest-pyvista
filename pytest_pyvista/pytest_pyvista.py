@@ -17,6 +17,7 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 from typing import Literal
+from typing import NoReturn
 from typing import cast
 from typing import get_args
 from typing import overload
@@ -50,6 +51,7 @@ SKIPPED_CACHED_IMAGE_NAMES: set[str] = set()
 PYVISTA_IMAGE_NAMES_CACHE_DIRNAME = "pyvista_image_names_dir"
 PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME = "pyvista_generated_image_dir"
 PYVISTA_FAILED_IMAGE_CACHE_DIRNAME = "pyvista_failed_image_dir"
+INVALID_CACHE_CONFIG_ATTR = "_pytest_pyvista_invalid_cache_error"
 
 PARSER_GROUP_NAME = "pyvista"
 DEFAULT_ERROR_THRESHOLD: float = 500.0
@@ -892,14 +894,40 @@ class _ChainedCallbacks:
             f(plotter)
 
 
-@pytest.fixture(scope="session")
-def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
+def _store_image_cache_dir_error(pytestconfig: pytest.Config) -> pytest.ExceptionInfo[InvalidCacheError] | None:
     """
-    Validate the contents of the image cache directory.
+    Validate the image cache directory and store any error on the config.
 
-    A session scope fixture is used since we only need to evaluate this once, and we want
-    the error raised during test setup.
+    The cache belongs to the run as a whole, not to any single test, so it is only
+    validated once. The error is stored instead of raised because pytest reports an
+    exception raised from ``pytest_configure`` as an internal error; it is reported
+    as a single collection error by :func:`pytest_collection` instead.
     """
+    excinfo = None
+    try:
+        _validate_image_cache_dir(pytestconfig)
+    except InvalidCacheError:
+        excinfo = cast("pytest.ExceptionInfo[InvalidCacheError]", pytest.ExceptionInfo.from_current())
+    setattr(pytestconfig, INVALID_CACHE_CONFIG_ATTR, excinfo)
+    return excinfo
+
+
+def _fail_collection(session: pytest.Session, excinfo: pytest.ExceptionInfo[InvalidCacheError]) -> NoReturn:
+    """
+    Report an invalid cache as a single collection error and stop the session.
+
+    The run is always interrupted, even with ``--continue-on-collection-errors``,
+    since no test can give a meaningful result with an invalid cache. Only the xdist
+    master reports the error; interrupting a worker is reported as a worker crash.
+    """
+    report = pytest.CollectReport(nodeid=session.nodeid, outcome="failed", longrepr=session.repr_failure(excinfo), result=[])
+    session.ihook.pytest_collectreport(report=report)
+    msg = "1 error during collection"
+    raise session.Interrupted(msg)
+
+
+def _validate_image_cache_dir(pytestconfig: pytest.Config) -> None:
+    """Validate the contents of the image cache directory configured for the session."""
     if pytestconfig.getoption("doc_mode"):
         from pytest_pyvista.doc_mode import _DocVerifyImageCache  # noqa: PLC0415
 
@@ -1015,6 +1043,10 @@ def pytest_configure(config: pytest.Config) -> None:
         _VtkszFileSizeTestCase.init_from_config(config)
         _DocVerifyImageCache.init_from_config(config)
 
+        # Validate the cache before the expensive preprocessing below
+        if _store_image_cache_dir_error(config):
+            return
+
         if is_master:
             # Clear any cached test files
             _make_config_cache_dir(config, PYVISTA_GENERATED_IMAGE_CACHE_DIRNAME, clean=True)
@@ -1038,6 +1070,8 @@ def pytest_configure(config: pytest.Config) -> None:
                 "vtksz_input_paths": _strings_from_paths(vtksz_input_paths),
                 "vtksz_test_image_paths": _strings_from_paths(vtksz_test_image_paths),
             }
+    else:
+        _store_image_cache_dir_error(config)
 
 
 try:
@@ -1057,7 +1091,6 @@ def verify_image_cache(
     request: pytest.FixtureRequest,
     pytestconfig: pytest.Config,
     monkeypatch: pytest.MonkeyPatch,
-    _validate_image_cache_dir: None,
 ) -> Generator[VerifyImageCache, None, None]:
     """Check cached images against test images for PyVista."""
     # Set CMD options in class attributes
@@ -1255,6 +1288,14 @@ def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool 
     if config.getoption("doc_mode"):
         return True
     return None
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection(session: pytest.Session) -> None:
+    """Report an invalid image cache as a single collection error before any test is collected."""
+    config = session.config
+    if _is_master(config) and (excinfo := getattr(config, INVALID_CACHE_CONFIG_ATTR, None)):
+        _fail_collection(session, excinfo)
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
