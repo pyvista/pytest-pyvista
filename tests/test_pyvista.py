@@ -1348,14 +1348,13 @@ def test_validate_cache_image_format(*, pytester: pytest.Pytester, valid_format,
         )
 
     result = pytester.runpytest(*args)
-    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    assert result.ret == pytest.ExitCode.INTERRUPTED
+    result.assert_outcomes(errors=1)
 
-    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format required by")
-    result.stdout.fnmatch_lines(f"E           the image cache directory is {valid_format!r}, but {invalid_format!r} images exist in the cache.")
-    result.stdout.fnmatch_lines("E           Cache directory: *")
-    result.stdout.fnmatch_lines(
-        f"E           Invalid images: ['{re.escape(str(Path('imcache/imcache')))}.{invalid_format}', 'imcache.{invalid_format}']"
-    )
+    result.stdout.fnmatch_lines("E   pytest_pyvista.pytest_pyvista.InvalidCacheError: The image format required by")
+    result.stdout.fnmatch_lines(f"E   the image cache directory is {valid_format!r}, but {invalid_format!r} images exist in the cache.")
+    result.stdout.fnmatch_lines("E   Cache directory: *")
+    result.stdout.fnmatch_lines(f"E   Invalid images: ['{re.escape(str(Path('imcache/imcache')))}.{invalid_format}', 'imcache.{invalid_format}']")
 
 
 @pytest.mark.parametrize("ignore_image_cache", [True, False])
@@ -1379,8 +1378,8 @@ def test_validate_cache_unique_names_ignore_image_cache(*, pytester: pytest.Pyte
     if ignore_image_cache:
         result.assert_outcomes(passed=1)
     else:
-        assert result.ret == pytest.ExitCode.TESTS_FAILED
-        result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
+        assert result.ret == pytest.ExitCode.INTERRUPTED
+        result.stdout.fnmatch_lines("E   pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
 
 
 @pytest.mark.parametrize("doc_mode", [True, False])
@@ -1405,12 +1404,37 @@ def test_validate_cache_unique_names(*, pytester: pytest.Pytester, doc_mode: boo
         )
 
     result = pytester.runpytest(*args)
-    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    assert result.ret == pytest.ExitCode.INTERRUPTED
+    result.assert_outcomes(errors=1)
 
-    result.stdout.fnmatch_lines("E           pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
-    result.stdout.fnmatch_lines("E           An image's name must not share the same name as a subdirectory. Either the image")
-    result.stdout.fnmatch_lines("E           or the subdirectory should be removed for the following test cases:")
-    result.stdout.fnmatch_lines(f"E           {{{test_name!r}}}")
+    result.stdout.fnmatch_lines("E   pytest_pyvista.pytest_pyvista.InvalidCacheError: Non-unique image test names detected in the cache.")
+    result.stdout.fnmatch_lines("E   An image's name must not share the same name as a subdirectory. Either the image")
+    result.stdout.fnmatch_lines("E   or the subdirectory should be removed for the following test cases:")
+    result.stdout.fnmatch_lines(f"E   {{{test_name!r}}}")
+
+
+def test_validate_cache_error_reported_once(pytester: pytest.Pytester) -> None:
+    """Test the cache is only validated once per run, and not once per test."""
+    test_name = "imcache"
+    name = f"{test_name}.png"
+    cache = "image_cache_dir"
+    make_cached_images(pytester.path, path=cache, name=name)
+    make_cached_images(pytester.path / cache, path=test_name, name=name)
+
+    num_tests = 3
+    pytester.makepyfile(
+        "\n".join(f"def test_{i}(verify_image_cache):\n    ...\n" for i in range(num_tests)),
+    )
+
+    result = pytester.runpytest()
+    assert result.ret == pytest.ExitCode.INTERRUPTED
+
+    # The cache belongs to the run, so the error is reported once regardless of the number of tests
+    result.assert_outcomes(errors=1)
+    # Only match the error report itself; the short test summary repeats its first line
+    report_lines = [line for line in result.stdout.lines if line.startswith("E   ")]
+    assert sum("Non-unique image test names detected in the cache." in line for line in report_lines) == 1
+    assert sum(line == f"E   {{{test_name!r}}}" for line in report_lines) == 1
 
 
 def test_cli_args_classified() -> None:
