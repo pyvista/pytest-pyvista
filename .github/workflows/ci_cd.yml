@@ -62,13 +62,11 @@ jobs:
 
       matrix:
         include:
-          - python-version: "3.10"
-            vtk-version: "9.2.2"
           - python-version: "3.11"
             vtk-version: "latest"
           - python-version: "3.12"
             vtk-version: "latest"
-          - python-version: "3.13"
+          - python-version: "3.14"
             vtk-version: "latest"
     steps:
       - uses: actions/checkout@v7
@@ -104,11 +102,11 @@ jobs:
         run: xvfb-run tox run -e ${{env.TOX_FACTOR}}-cov-no_xdist
 
       - name: Combine coverage reports
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         run: tox run -e coverage
 
       - uses: codecov/codecov-action@v7
-        if: matrix.python-version == '3.10'
+        if: matrix.python-version == '3.11'
         name: "Upload coverage to CodeCov"
         with:
           fail_ci_if_error: true
@@ -136,13 +134,11 @@ jobs:
 
       matrix:
         include:
-          - python-version: "3.10"
-            vtk-version: "9.2.2"
           - python-version: "3.11"
             vtk-version: "latest"
           - python-version: "3.12"
             vtk-version: "latest"
-          - python-version: "3.13"
+          - python-version: "3.14"
             vtk-version: "latest"
     steps:
       - uses: actions/checkout@v7
@@ -179,7 +175,7 @@ jobs:
       matrix:
         include:
           - python-version: "3.12"
-          - python-version: "3.13"
+          - python-version: "3.14"
     steps:
       - uses: actions/checkout@v7
 
