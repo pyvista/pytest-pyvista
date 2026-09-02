@@ -42,6 +42,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from collections.abc import Callable
     from collections.abc import Generator
 
+    from pluggy import Result
     from trame_server.core import Server
     import xdist.workermanage
 
@@ -912,7 +913,7 @@ def _collected_regression_error(errors: list[RegressionError | RegressionFileNot
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_call(item: pytest.Item) -> Generator:
+def pytest_runtest_call(item: pytest.Item) -> Generator[None, Result, None]:
     """
     Fail a test that collected regression errors while it was running.
 
