@@ -33,7 +33,6 @@ from .pytest_pyvista import _is_master
 from .pytest_pyvista import _make_config_cache_dir
 from .pytest_pyvista import _paths_from_strings
 from .pytest_pyvista import _test_compare_images
-from .pytest_pyvista import _validate_image_cache_dir  # noqa: F401
 
 TEST_CASE_NAME = "_pytest_pyvista_test_case"
 TEST_CASE_NAME_VTKSZ_FILE_SIZE = "_pytest_pyvista_test_case_vtksz"
@@ -518,7 +517,6 @@ def max_vtksz_file_size(request: pytest.FixtureRequest) -> _VtkszFileSizeTestCas
     return test_case
 
 
-@pytest.mark.usefixtures("_validate_image_cache_dir")
 def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_image_cache: _DocVerifyImageCache) -> None:  # noqa: PT019, ARG001
     """Compare generated image with cached image."""
     test_case = _pytest_pyvista_test_case

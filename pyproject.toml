@@ -19,7 +19,7 @@ dependencies = [
   # `pluggy.Result.force_exception`, used to report deferred regression errors
   "pluggy>=1.1.0",
   "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
-  "pytest>=6.2.0",
+  "pytest>=7.0.0",
 ]
 dynamic = ["description", "version"]
 license = "MIT"
@@ -49,7 +49,7 @@ tests = [
   "pytest-cov==7.1.0",
   "pytest-pyvista[vtksz]",
   "pytest-xdist==3.8.0",
-  "pytest>=6.2.0",
+  "pytest>=7.0.0",
   "pytest_mock<3.16",
   "pyvista[jupyter]>=0.37",
 ]
