@@ -671,6 +671,71 @@ def test_include_vtksz(pytester: pytest.Pytester, include_vtksz, max_image_size)
     assert expected_file.is_file()
 
 
+@pytest.mark.parametrize("cli", [True, False])
+def test_doc_mode_thresholds(pytester: pytest.Pytester, *, cli: bool) -> None:
+    """Test the error and warning thresholds may be customized."""
+    cache = "cache"
+    images = "images"
+    name = "imcache.png"
+    make_cached_images(pytester.path, cache, name=name, color="red")
+    make_cached_images(pytester.path, images, name=name, color="red", mesh=pv.Sphere(theta_resolution=12))
+
+    error = pv.compare_images(str(pytester.path / cache / name), str(pytester.path / images / name))
+    assert error > 0
+
+    def run(error_value: float, warning_value: float) -> pytest.RunResult:
+        args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache]
+        if cli:
+            args.extend(["--doc_error_value", str(error_value), "--doc_warning_value", str(warning_value)])
+        else:
+            pytester.makeini(
+                f"""
+                [pytest]
+                doc_error_value = {error_value}
+                doc_warning_value = {warning_value}
+                """
+            )
+        return pytester.runpytest(*args)
+
+    # Both thresholds above the error: a clean pass
+    result = run(error * 2, error * 2)
+    assert result.ret == pytest.ExitCode.OK
+
+    # Only the warning threshold below the error: a warning, not a failure
+    result = run(error * 2, error / 2)
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.fnmatch_lines([f"*Exceeded image regression warning of {error / 2}*"])
+
+    # Both thresholds below the error: a failure
+    result = run(error / 2, error / 2)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.stdout.fnmatch_lines([f"*Exceeded image regression error of {error / 2}*"])
+
+
+def test_doc_mode_thresholds_invalid(pytester: pytest.Pytester) -> None:
+    """Test a warning threshold above the error threshold is rejected."""
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path, cache)
+    make_cached_images(pytester.path, images)
+
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--doc_error_value", "10", "--doc_warning_value", "20"]
+    result = pytester.runpytest(*args)
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_warning_value' (20.0) cannot be greater than 'doc_error_value' (10.0)."])
+
+
+def test_doc_mode_thresholds_not_a_number(pytester: pytest.Pytester) -> None:
+    """Test a non-numeric threshold is rejected."""
+    cache = "cache"
+    images = "images"
+    make_cached_images(pytester.path, cache)
+    make_cached_images(pytester.path, images)
+
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--doc_error_value", "abc"]
+    result = pytester.runpytest(*args)
+    result.stdout.fnmatch_lines(["*ValueError: 'doc_error_value' must be a number. Got:", "*abc."])
+
+
 @pytest.mark.parametrize("max_size", [1, None, "custom"])
 def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) -> None:
     """Test --max_vtksz_file_size option."""

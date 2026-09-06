@@ -1577,10 +1577,9 @@ def test_unit_test_args_invalid_in_doc_mode(pytester, arg) -> None:
 def test_doc_mode_args_invalid_in_unit_test_mode(pytester, arg) -> None:
     """Run pytest unit tests with forbidden args."""
     args = [arg]
-    if arg == "--max_vtksz_file_size":
-        args.append("0")
-    elif arg == "--doc_images_dir":
-        args.append("foo")
+    values = {"--max_vtksz_file_size": "0", "--doc_images_dir": "foo", "--doc_error_value": "500", "--doc_warning_value": "200"}
+    if (value := values.get(arg)) is not None:
+        args.append(value)
     result = pytester.runpytest(*args)
 
     result.stderr.fnmatch_lines([f"ERROR: argument {arg} can only be used with --doc_mode enabled"])
