@@ -365,6 +365,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Maximum size allowed for vtksz interactive plot files.",
         )
 
+        option = "doc_error_value"
+        help_ = f"Image comparison error above which a documentation image test fails (default: {DEFAULT_ERROR_THRESHOLD})."
+        _add_doc_cli_option(f"--{option}", action="store", default=None, help=help_)
+        parser.addini(option, default=None, help=help_)
+
+        option = "doc_warning_value"
+        help_ = f"Image comparison error above which a documentation image test warns (default: {DEFAULT_WARNING_THRESHOLD})."
+        _add_doc_cli_option(f"--{option}", action="store", default=None, help=help_)
+        parser.addini(option, default=None, help=help_)
+
     group = parser.getgroup(PARSER_GROUP_NAME)
     _add_common_cli_and_ini_options()
     _add_unit_test_cli_and_ini_options()

@@ -66,6 +66,8 @@ class _DocVerifyImageCache:
     image_format: _AllowedImageFormats
     max_image_size: int | None = None
     include_vtksz: bool
+    error_value: float = DEFAULT_ERROR_THRESHOLD
+    warning_value: float = DEFAULT_WARNING_THRESHOLD
     _verbose: bool = False
     _terminalreporter: pytest.TerminalReporter = None
 
@@ -102,6 +104,12 @@ class _DocVerifyImageCache:
         cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
+
+        cls.error_value = _threshold_from_config(config, "doc_error_value", DEFAULT_ERROR_THRESHOLD)
+        cls.warning_value = _threshold_from_config(config, "doc_warning_value", DEFAULT_WARNING_THRESHOLD)
+        if cls.warning_value > cls.error_value:
+            msg = f"'doc_warning_value' ({cls.warning_value}) cannot be greater than 'doc_error_value' ({cls.error_value})."
+            raise ValueError(msg)
 
         cls._verbose = config.option.verbose
         cls._terminalreporter = config.pluginmanager.get_plugin("terminalreporter")
@@ -237,6 +245,18 @@ def _preprocess_build_images(  # noqa: PLR0913
     input_paths = input_png + input_gif + input_jpg
     output_paths = _preprocess_input_paths(input_paths, relative_to=build_images_dir)
     return _get_output(input_paths, output_paths)
+
+
+def _threshold_from_config(config: pytest.Config, option: str, default: float) -> float:
+    """Fetch an image comparison threshold, falling back to its default."""
+    value = _get_option_from_config_or_ini(config, option)
+    if value is None or value == "":
+        return default
+    try:
+        return float(cast("str | int", value))
+    except ValueError:
+        msg = f"{option!r} must be a number. Got:\n{value}."
+        raise ValueError(msg) from None
 
 
 def _get_max_image_size() -> int:
@@ -546,8 +566,8 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
         test_name=test_case.test_name,
         test_image=test_image_path,
         cached_image_paths=cached_image_paths,
-        allowed_error=DEFAULT_ERROR_THRESHOLD,
-        allowed_warning=DEFAULT_WARNING_THRESHOLD,
+        allowed_error=_DocVerifyImageCache.error_value,
+        allowed_warning=_DocVerifyImageCache.warning_value,
     )
 
     if fail_msg:
