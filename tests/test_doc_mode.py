@@ -15,7 +15,6 @@ import pytest
 import pyvista as pv
 
 from pytest_pyvista import doc_mode
-from pytest_pyvista.doc_mode import _default_window_size
 from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _parse_window_size
@@ -394,7 +393,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
         # The vtksz files have no static image to take a size from
-        args.extend(["--include_vtksz", "--window_size", "1024,768"])
+        args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
@@ -728,7 +727,6 @@ def gallery_vtksz(tmp_path, monkeypatch) -> tuple[Path, Path]:
     (images / "sub").mkdir(parents=True)
     vtksz_file = make_cached_images(images, path="sub", name="im.vtksz")
     monkeypatch.setattr(_DocVerifyImageCache, "doc_images_dir", images, raising=False)
-    monkeypatch.setattr(_DocVerifyImageCache, "window_size", None)
     return images, vtksz_file
 
 
@@ -750,55 +748,16 @@ def test_vtksz_window_size_without_static_image(gallery_vtksz) -> None:
     assert sizes == [tuple(pv.global_theme.window_size)]
 
 
-def test_vtksz_window_size_overrides_theme(gallery_vtksz, monkeypatch) -> None:
-    """Test that the option replaces the theme as the fallback size."""
-    _images, vtksz_file = gallery_vtksz
-    size = (640, 480)
-    monkeypatch.setattr(_DocVerifyImageCache, "window_size", size)
-
-    assert _default_window_size() == size
-    assert _vtksz_window_sizes([vtksz_file]) == [size]
-
-
-def test_vtksz_window_size_option(gallery_vtksz, monkeypatch) -> None:
-    """Test that the option pins the size and skips the static image lookup."""
-    _images, vtksz_file = gallery_vtksz
-    size = (400, 300)
-    monkeypatch.setattr(_DocVerifyImageCache, "window_size", size)
-
-    assert _vtksz_window_sizes([vtksz_file, vtksz_file]) == [size, size]
-
-
 @pytest.mark.parametrize("value", ["400", "400,300,200", "400,-300", "400,0", "400,three", ""])
 def test_parse_window_size_invalid(value) -> None:
-    """Test that a malformed window size option is rejected."""
+    """Test that a malformed window size is rejected."""
     with pytest.raises(ValueError, match="must be two positive integers"):
         _parse_window_size(value)
 
 
 def test_parse_window_size_valid() -> None:
-    """Test that surrounding whitespace in the window size option is ignored."""
+    """Test that surrounding whitespace in a window size is ignored."""
     assert _parse_window_size(" 400 , 300 ") == (400, 300)
-
-
-@pytest.mark.parametrize("pin_window_size", [True, False])
-def test_vtksz_window_size_end_to_end(*, pytester: pytest.Pytester, pin_window_size: bool) -> None:
-    """Test that the option sets the render size, else the theme does."""
-    images = "images"
-    cache = "cache"
-    make_cached_images(pytester.path, path=images, name="im.vtksz", color="blue")
-    make_cached_images(pytester.path, path=cache, name="im_vtksz.png", color="blue")
-
-    generated = "generated"
-    size = (400, 300)
-    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--generated_image_dir", generated, "--include_vtksz"]
-    if pin_window_size:
-        args.extend(["--window_size", f"{size[0]},{size[1]}"])
-    pytester.runpytest(*args)
-
-    expected = size if pin_window_size else tuple(pv.global_theme.window_size)
-    with Image.open(pytester.path / generated / "im_vtksz.png") as im:
-        assert im.size == expected
 
 
 def test_render_size_stamp_roundtrip(tmp_path) -> None:
@@ -824,9 +783,9 @@ def test_render_size_mismatch_fails(pytester: pytest.Pytester) -> None:
     cached = make_cached_images(pytester.path, path=cache, name="im_vtksz.png", color="blue")
     _write_render_size(cached, (800, 600))
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--include_vtksz", "--window_size", "400,300"]
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--include_vtksz"]
     result = pytester.runpytest(*args)
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines("E           Failed: The interactive plot was rendered at a different window size than its cached image:")
-    result.stdout.fnmatch_lines("E           Cached size is 800x600, but the plot was rendered at 400x300.")
+    result.stdout.fnmatch_lines("E           Cached size is 800x600, but the plot was rendered at 1024x768.")

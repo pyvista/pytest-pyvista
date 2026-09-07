@@ -1579,8 +1579,6 @@ def test_doc_mode_args_invalid_in_unit_test_mode(pytester, arg) -> None:
     args = [arg]
     if arg == "--max_vtksz_file_size":
         args.append("0")
-    elif arg == "--window_size":
-        args.append("400,300")
     elif arg == "--doc_images_dir":
         args.append("foo")
     result = pytester.runpytest(*args)
