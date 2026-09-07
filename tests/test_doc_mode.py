@@ -15,6 +15,7 @@ import pytest
 import pyvista as pv
 
 from pytest_pyvista import doc_mode
+from pytest_pyvista.doc_mode import _default_window_size
 from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _parse_window_size
@@ -390,7 +391,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
         # The vtksz files have no static image to take a size from
-        args.extend(["--include_vtksz", "--vtksz_window_size", "1024,768"])
+        args.extend(["--include_vtksz", "--window_size", "1024,768"])
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
 
@@ -724,7 +725,7 @@ def gallery_vtksz(tmp_path, monkeypatch) -> tuple[Path, Path]:
     (images / "sub").mkdir(parents=True)
     vtksz_file = make_cached_images(images, path="sub", name="im.vtksz")
     monkeypatch.setattr(_DocVerifyImageCache, "doc_images_dir", images, raising=False)
-    monkeypatch.setattr(_DocVerifyImageCache, "vtksz_window_size", None)
+    monkeypatch.setattr(_DocVerifyImageCache, "window_size", None)
     return images, vtksz_file
 
 
@@ -738,18 +739,29 @@ def test_vtksz_window_size_from_gif(gallery_vtksz) -> None:
 
 
 def test_vtksz_window_size_without_static_image(gallery_vtksz) -> None:
-    """Test that a vtksz file with no static image raises instead of guessing a size."""
+    """Test that a vtksz file with no static image warns and falls back to the theme."""
     _images, vtksz_file = gallery_vtksz
     match = "Interactive plot found without a corresponding static image"
-    with pytest.raises(RuntimeError, match=match):
-        _vtksz_window_sizes([vtksz_file])
+    with pytest.warns(UserWarning, match=match):
+        sizes = _vtksz_window_sizes([vtksz_file])
+    assert sizes == [tuple(pv.global_theme.window_size)]
+
+
+def test_vtksz_window_size_overrides_theme(gallery_vtksz, monkeypatch) -> None:
+    """Test that the option replaces the theme as the fallback size."""
+    _images, vtksz_file = gallery_vtksz
+    size = (640, 480)
+    monkeypatch.setattr(_DocVerifyImageCache, "window_size", size)
+
+    assert _default_window_size() == size
+    assert _vtksz_window_sizes([vtksz_file]) == [size]
 
 
 def test_vtksz_window_size_option(gallery_vtksz, monkeypatch) -> None:
     """Test that the option pins the size and skips the static image lookup."""
     _images, vtksz_file = gallery_vtksz
     size = (400, 300)
-    monkeypatch.setattr(_DocVerifyImageCache, "vtksz_window_size", size)
+    monkeypatch.setattr(_DocVerifyImageCache, "window_size", size)
 
     assert _vtksz_window_sizes([vtksz_file, vtksz_file]) == [size, size]
 
@@ -768,7 +780,7 @@ def test_parse_window_size_valid() -> None:
 
 @pytest.mark.parametrize("pin_window_size", [True, False])
 def test_vtksz_window_size_end_to_end(*, pytester: pytest.Pytester, pin_window_size: bool) -> None:
-    """Test that the option lets a vtksz file render without a static image."""
+    """Test that the option sets the render size, else the theme does."""
     images = "images"
     cache = "cache"
     make_cached_images(pytester.path, path=images, name="im.vtksz", color="blue")
@@ -778,13 +790,9 @@ def test_vtksz_window_size_end_to_end(*, pytester: pytest.Pytester, pin_window_s
     size = (400, 300)
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--generated_image_dir", generated, "--include_vtksz"]
     if pin_window_size:
-        args.extend(["--vtksz_window_size", f"{size[0]},{size[1]}"])
-    result = pytester.runpytest(*args)
+        args.extend(["--window_size", f"{size[0]},{size[1]}"])
+    pytester.runpytest(*args)
 
-    if not pin_window_size:
-        assert result.ret != pytest.ExitCode.OK
-        result.stdout.fnmatch_lines("*Interactive plot found without a corresponding static image:*")
-        return
-
+    expected = size if pin_window_size else tuple(pv.global_theme.window_size)
     with Image.open(pytester.path / generated / "im_vtksz.png") as im:
-        assert im.size == size
+        assert im.size == expected

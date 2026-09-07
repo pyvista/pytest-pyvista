@@ -66,7 +66,7 @@ class _DocVerifyImageCache:
     image_format: _AllowedImageFormats
     max_image_size: int | None = None
     include_vtksz: bool
-    vtksz_window_size: tuple[int, int] | None = None
+    window_size: tuple[int, int] | None = None
     _verbose: bool = False
     _terminalreporter: pytest.TerminalReporter = None
 
@@ -104,8 +104,8 @@ class _DocVerifyImageCache:
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
 
-        window_size = _get_option_from_config_or_ini(config, "vtksz_window_size")
-        cls.vtksz_window_size = None if window_size is None else _parse_window_size(window_size)
+        window_size = _get_option_from_config_or_ini(config, "window_size")
+        cls.window_size = None if window_size is None else _parse_window_size(window_size)
 
         cls._verbose = config.option.verbose
         cls._terminalreporter = config.pluginmanager.get_plugin("terminalreporter")
@@ -258,7 +258,7 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
 
 def _parse_window_size(value: object) -> tuple[int, int]:
     """Parse a ``'WIDTH,HEIGHT'`` window size option into a pair of positive integers."""
-    msg = f"'vtksz_window_size' must be two positive integers 'WIDTH,HEIGHT'. Got:\n{value}."
+    msg = f"'window_size' must be two positive integers 'WIDTH,HEIGHT'. Got:\n{value}."
     try:
         width, height = (int(part) for part in str(value).split(","))
     except ValueError:
@@ -270,7 +270,7 @@ def _parse_window_size(value: object) -> tuple[int, int]:
 
 def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
     """Get window sizes for rendering vtksz files from the option, else the corresponding static image."""
-    fixed_size = _DocVerifyImageCache.vtksz_window_size
+    fixed_size = _DocVerifyImageCache.window_size
     if fixed_size is not None:
         return [fixed_size] * len(vtksz_paths)
 
@@ -293,12 +293,9 @@ def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
             with Image.open(static_image_path) as im:
                 size = im.size
         else:
-            msg = (
-                f"Interactive plot found without a corresponding static image:\n  {path}\n"
-                "Its render window size cannot be determined. Set 'vtksz_window_size' to render "
-                "every interactive plot at a fixed size instead."
-            )
-            raise RuntimeError(msg)
+            msg = f"Interactive plot found without a corresponding static image:\n  {path}"
+            warnings.warn(msg, stacklevel=2)
+            size = _default_window_size()
 
         window_sizes.append(size)
 
@@ -323,8 +320,16 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
     return output_paths
 
 
+def _default_window_size() -> tuple[int, int]:
+    """Get the window size option, else the global theme's window size."""
+    if _DocVerifyImageCache.window_size is not None:
+        return _DocVerifyImageCache.window_size
+    return cast("tuple[int, int]", tuple(pv.global_theme.window_size))
+
+
 def _default_window_sizes(n_files: int) -> list[tuple[int, int]]:
-    return [cast("tuple[int, int]", tuple(pv.global_theme.window_size))] * n_files
+    """Get the default window size repeated once per file."""
+    return [_default_window_size()] * n_files
 
 
 def _html_screenshots(

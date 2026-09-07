@@ -365,17 +365,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:  # noqa: PLR0915
             help="Maximum size allowed for vtksz interactive plot files.",
         )
 
-        vtksz_window_size_help = "Window size 'WIDTH,HEIGHT' used to render every vtksz interactive plot."
+        window_size_help = "Window size 'WIDTH,HEIGHT' used to render plots, overriding the global theme."
         _add_doc_cli_option(
-            "--vtksz_window_size",
+            "--window_size",
             action="store",
             default=None,
-            help=vtksz_window_size_help,
+            help=window_size_help,
         )
         parser.addini(
-            "vtksz_window_size",
+            "window_size",
             default=None,
-            help=vtksz_window_size_help,
+            help=window_size_help,
         )
 
     group = parser.getgroup(PARSER_GROUP_NAME)
