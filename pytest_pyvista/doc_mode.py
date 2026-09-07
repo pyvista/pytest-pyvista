@@ -66,6 +66,7 @@ class _DocVerifyImageCache:
     image_format: _AllowedImageFormats
     max_image_size: int | None = None
     include_vtksz: bool
+    vtksz_window_size: tuple[int, int] | None = None
     _verbose: bool = False
     _terminalreporter: pytest.TerminalReporter = None
 
@@ -102,6 +103,9 @@ class _DocVerifyImageCache:
         cls.generate_subdirs = bool(_get_option_from_config_or_ini(config, "generate_subdirs"))
 
         cls.include_vtksz = bool(_get_option_from_config_or_ini(config, "include_vtksz"))
+
+        window_size = _get_option_from_config_or_ini(config, "vtksz_window_size")
+        cls.vtksz_window_size = None if window_size is None else _parse_window_size(window_size)
 
         cls._verbose = config.option.verbose
         cls._terminalreporter = config.pluginmanager.get_plugin("terminalreporter")
@@ -252,8 +256,24 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
         im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
 
 
+def _parse_window_size(value: object) -> tuple[int, int]:
+    """Parse a ``'WIDTH,HEIGHT'`` window size option into a pair of positive integers."""
+    msg = f"'vtksz_window_size' must be two positive integers 'WIDTH,HEIGHT'. Got:\n{value}."
+    try:
+        width, height = (int(part) for part in str(value).split(","))
+    except ValueError:
+        raise ValueError(msg) from None
+    if width <= 0 or height <= 0:
+        raise ValueError(msg)
+    return width, height
+
+
 def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
-    """Get window sizes for rendering vtksz files based on corresponding static image size."""
+    """Get window sizes for rendering vtksz files from the option, else the corresponding static image."""
+    fixed_size = _DocVerifyImageCache.vtksz_window_size
+    if fixed_size is not None:
+        return [fixed_size] * len(vtksz_paths)
+
     window_sizes = []
     for path in vtksz_paths:
         # Assume every vtksz file has a corresponding PNG or GIF static image
@@ -273,9 +293,12 @@ def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
             with Image.open(static_image_path) as im:
                 size = im.size
         else:
-            msg = f"Interactive plot found without a corresponding static image:\n  {path}"
-            warnings.warn(msg, stacklevel=2)
-            size = cast("tuple[int, int]", tuple(pv.global_theme.window_size))
+            msg = (
+                f"Interactive plot found without a corresponding static image:\n  {path}\n"
+                "Its render window size cannot be determined. Set 'vtksz_window_size' to render "
+                "every interactive plot at a fixed size instead."
+            )
+            raise RuntimeError(msg)
 
         window_sizes.append(size)
 
