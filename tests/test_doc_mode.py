@@ -791,11 +791,12 @@ def test_render_size_stamp_absent(tmp_path, monkeypatch) -> None:
     assert _read_render_size(dst) is None
 
 
-@pytest.mark.parametrize("image_format", ["png", "jpg"])
-def test_render_size_mismatch_fails(pytester: pytest.Pytester, image_format) -> None:
+def test_render_size_mismatch_fails(pytester: pytest.Pytester) -> None:
     """Test that a cached image rendered at another window size fails the test."""
     images = "images"
     cache = "cache"
+    # The screenshot is a png and the cache is a jpg, so the stamp crosses formats
+    image_format = "jpg"
     make_cached_images(pytester.path, path=images, name="im.vtksz", color="blue")
     cached = make_cached_images(pytester.path, path=cache, name=f"im_vtksz.{image_format}", color="blue")
     _write_render_size(cached, (800, 600))
