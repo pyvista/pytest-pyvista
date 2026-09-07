@@ -343,6 +343,12 @@ tests.
      This option is completely independent from the ``--include_vtksz`` option. File
      sizes may be tested without any additional installation.
 
+  .. note::
+
+     The window size used to render a ``vtksz`` file is stored in the generated image's
+     metadata. A test fails if it does not match the size stored in its cached image,
+     since interactive plots rendered at different window sizes do not scale uniformly.
+
 Conditional skip markers
 ------------------------
 The plugin registers five reusable markers so downstream PyVista projects do not
