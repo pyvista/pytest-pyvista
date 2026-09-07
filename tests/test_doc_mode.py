@@ -19,9 +19,12 @@ from pytest_pyvista.doc_mode import _default_window_size
 from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _parse_window_size
+from pytest_pyvista.doc_mode import _preprocess_image
+from pytest_pyvista.doc_mode import _read_render_size
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
 from pytest_pyvista.doc_mode import _vtksz_window_sizes
 from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
+from pytest_pyvista.doc_mode import _write_render_size
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
@@ -796,3 +799,34 @@ def test_vtksz_window_size_end_to_end(*, pytester: pytest.Pytester, pin_window_s
     expected = size if pin_window_size else tuple(pv.global_theme.window_size)
     with Image.open(pytester.path / generated / "im_vtksz.png") as im:
         assert im.size == expected
+
+
+def test_render_size_stamp_roundtrip(tmp_path) -> None:
+    """Test that a stamped size survives preprocessing and reads back."""
+    src = tmp_path / "im.png"
+    Image.new("RGB", (1024, 768), "red").save(src)
+    assert _read_render_size(src) is None
+
+    size = (1024, 768)
+    _write_render_size(src, size)
+    assert _read_render_size(src) == size
+
+    dst = tmp_path / "im.jpg"
+    _preprocess_image(src, dst)
+    assert _read_render_size(dst) == size
+
+
+def test_render_size_mismatch_fails(pytester: pytest.Pytester) -> None:
+    """Test that a cached image rendered at another window size fails the test."""
+    images = "images"
+    cache = "cache"
+    make_cached_images(pytester.path, path=images, name="im.vtksz", color="blue")
+    cached = make_cached_images(pytester.path, path=cache, name="im_vtksz.png", color="blue")
+    _write_render_size(cached, (800, 600))
+
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--include_vtksz", "--window_size", "400,300"]
+    result = pytester.runpytest(*args)
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines("E           Failed: The interactive plot was rendered at a different window size than its cached image:")
+    result.stdout.fnmatch_lines("E           Cached size is 800x600, but the plot was rendered at 400x300.")

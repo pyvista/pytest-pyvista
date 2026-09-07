@@ -352,7 +352,9 @@ tests.
   .. note::
 
      Interactive plots rendered at different window sizes do not scale uniformly, so
-     changing this value may require new cached images.
+     changing this value may require new cached images. The window size used to render
+     a ``vtksz`` file is stored in the generated image's metadata, and a test fails if
+     it does not match the size stored in its cached image.
 
 Conditional skip markers
 ------------------------
