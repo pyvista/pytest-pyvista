@@ -267,7 +267,7 @@ def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
             new_path = _DocVerifyImageCache.doc_images_dir / path.stem
             static_image_path = new_path.with_suffix(".png")
             if not static_image_path.is_file():
-                static_image_path = path.with_suffix(".gif")
+                static_image_path = new_path.with_suffix(".gif")
 
         if static_image_path.is_file():
             with Image.open(static_image_path) as im:

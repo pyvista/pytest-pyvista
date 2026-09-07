@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 
+from PIL import Image
 import pytest
 import pyvista as pv
 
@@ -17,6 +18,7 @@ from pytest_pyvista import doc_mode
 from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
+from pytest_pyvista.doc_mode import _vtksz_window_sizes
 from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _get_file_paths
@@ -711,3 +713,15 @@ def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) ->
     result.stdout.fnmatch_lines(f"E           	*images/{name_vtksz}")
     result.stdout.fnmatch_lines(f"E           Its size is 2.4 MB, but must be less than {max_size} MB.")
     result.stdout.fnmatch_lines("E           Consider reducing the complexity of the plot or forcing it to be static.")
+
+
+def test_vtksz_window_size_from_gif(tmp_path) -> None:
+    """Test that a gallery vtksz file resolves its size from a GIF in the root dir."""
+    images = tmp_path / "images"
+    (images / "sub").mkdir(parents=True)
+    vtksz_file = make_cached_images(images, path="sub", name="im.vtksz")
+    size = (321, 234)
+    Image.new("RGB", size).save(images / "im.gif")
+
+    _DocVerifyImageCache.doc_images_dir = images
+    assert _vtksz_window_sizes([vtksz_file]) == [size]
