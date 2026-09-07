@@ -760,30 +760,48 @@ def test_parse_window_size_valid() -> None:
     assert _parse_window_size(" 400 , 300 ") == (400, 300)
 
 
-def test_render_size_stamp_roundtrip(tmp_path) -> None:
-    """Test that a stamped size survives preprocessing and reads back."""
-    src = tmp_path / "im.png"
-    Image.new("RGB", (1024, 768), "red").save(src)
+@pytest.mark.parametrize("dst_ext", ["png", "jpg"])
+@pytest.mark.parametrize("src_ext", ["png", "jpg"])
+def test_render_size_stamp_roundtrip(tmp_path, monkeypatch, src_ext, dst_ext) -> None:
+    """Test that a stamped size survives preprocessing for every image format."""
+    monkeypatch.setattr(_DocVerifyImageCache, "max_image_size", 400)
+    size = (1024, 768)
+    src = tmp_path / f"im.{src_ext}"
+    Image.new("RGB", size, "red").save(src)
     assert _read_render_size(src) is None
 
-    size = (1024, 768)
     _write_render_size(src, size)
     assert _read_render_size(src) == size
 
-    dst = tmp_path / "im.jpg"
+    dst = tmp_path / f"out.{dst_ext}"
     _preprocess_image(src, dst)
     assert _read_render_size(dst) == size
+    with Image.open(dst) as im:
+        assert im.size == (400, 300)
 
 
-def test_render_size_mismatch_fails(pytester: pytest.Pytester) -> None:
+def test_render_size_stamp_absent(tmp_path, monkeypatch) -> None:
+    """Test that an unstamped image preprocesses without gaining a stamp."""
+    monkeypatch.setattr(_DocVerifyImageCache, "max_image_size", 400)
+    src = tmp_path / "im.png"
+    Image.new("RGB", (1024, 768), "red").save(src)
+
+    dst = tmp_path / "out.jpg"
+    _preprocess_image(src, dst)
+    assert _read_render_size(dst) is None
+
+
+@pytest.mark.parametrize("image_format", ["png", "jpg"])
+def test_render_size_mismatch_fails(pytester: pytest.Pytester, image_format) -> None:
     """Test that a cached image rendered at another window size fails the test."""
     images = "images"
     cache = "cache"
     make_cached_images(pytester.path, path=images, name="im.vtksz", color="blue")
-    cached = make_cached_images(pytester.path, path=cache, name="im_vtksz.png", color="blue")
+    cached = make_cached_images(pytester.path, path=cache, name=f"im_vtksz.{image_format}", color="blue")
     _write_render_size(cached, (800, 600))
+    assert _read_render_size(cached) == (800, 600)
 
-    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--include_vtksz"]
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--include_vtksz", "--image_format", image_format]
     result = pytester.runpytest(*args)
 
     result.assert_outcomes(failed=1)
