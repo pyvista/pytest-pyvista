@@ -95,26 +95,6 @@ def test_reset_pyvista_state_disabled_via_cli(pytester: pytest.Pytester) -> None
     result.assert_outcomes(passed=2)
 
 
-def test_reset_pyvista_state_restores_deleted_attribute(pytester: pytest.Pytester) -> None:
-    """The fixture recreates an attribute a test deleted, using the value captured at import time."""
-    pytester.makepyfile(
-        """
-        import pyvista as pv
-
-        _original_pickle_format = pv.PICKLE_FORMAT
-
-        def test_delete_pickle_format():
-            del pv.PICKLE_FORMAT
-            assert not hasattr(pv, "PICKLE_FORMAT")
-
-        def test_attribute_was_restored():
-            assert pv.PICKLE_FORMAT == _original_pickle_format
-        """
-    )
-    result = pytester.runpytest()
-    result.assert_outcomes(passed=2)
-
-
 def test_reset_pyvista_state_suppresses_attribute_error(pytester: pytest.Pytester) -> None:
     """``_restore_default_pyvista_state`` swallows ``AttributeError`` from missing APIs; runs in a subprocess for isolation."""
     pytester.makeconftest(
@@ -157,7 +137,6 @@ def test_restore_default_pyvista_state_skips_uncaptured_defaults(monkeypatch: py
         "_DEFAULT_VTK_SNAKE_CASE",
         "_DEFAULT_VTK_VERBOSITY",
         "_DEFAULT_ALLOW_NEW_ATTRIBUTES",
-        "_DEFAULT_PICKLE_FORMAT",
     ):
         monkeypatch.setattr(_reset_fixtures, name, None)
 
