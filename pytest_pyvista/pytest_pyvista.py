@@ -1305,6 +1305,12 @@ def _close_plotters_clear_trame_servers(pytestconfig: pytest.Config) -> Generato
 _APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
 
 if _APPLE_SILICON:
+    # Keep AppKit imported for the lifetime of the process. pyobjc registers
+    # Objective-C metadata globally and cannot re-register it: pytester's
+    # SysModulesSnapshot drops modules imported during an in-process
+    # runpytest(), so a later `from AppKit import ...` re-runs metadata
+    # generation and crashes with "already have registration for signature".
+    import AppKit  # noqa: F401
     from Foundation import NSAutoreleasePool
 
 
