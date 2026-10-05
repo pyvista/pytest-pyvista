@@ -26,7 +26,6 @@ def _capture_default(getter: Callable[[], Any]) -> Any | None:  # noqa: ANN401
 _DEFAULT_VTK_SNAKE_CASE = _capture_default(pyvista.vtk_snake_case)
 _DEFAULT_VTK_VERBOSITY = _capture_default(pyvista.vtk_verbosity)
 _DEFAULT_ALLOW_NEW_ATTRIBUTES = _capture_default(pyvista.allow_new_attributes)
-_DEFAULT_PICKLE_FORMAT = getattr(pyvista, "PICKLE_FORMAT", None)
 
 
 def _restore_default_pyvista_state() -> None:
@@ -40,8 +39,6 @@ def _restore_default_pyvista_state() -> None:
     if _DEFAULT_ALLOW_NEW_ATTRIBUTES is not None:
         with contextlib.suppress(AttributeError):
             pyvista.allow_new_attributes(_DEFAULT_ALLOW_NEW_ATTRIBUTES)
-    if _DEFAULT_PICKLE_FORMAT is not None:
-        pyvista.PICKLE_FORMAT = _DEFAULT_PICKLE_FORMAT
 
 
 @pytest.fixture(autouse=True)

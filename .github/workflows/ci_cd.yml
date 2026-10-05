@@ -149,7 +149,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up headless display
-        uses: pyvista/setup-headless-display-action@b0bf9f57d62d2b3fee9f1c0e0c7e390f05e97a4e
+        uses: pyvista/setup-headless-display-action@c103a2ff45650d38cb71684b5dc6cdfeb9442c79
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v7
