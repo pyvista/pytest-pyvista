@@ -13,6 +13,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   ALLOW_PLOTTING: true
   SHELLOPTS: "errexit:pipefail"
@@ -22,6 +25,8 @@ jobs:
   doc:
     name: Build Documentation
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write # required to deploy documentation to GitHub Pages
     steps:
       - uses: actions/checkout@v7
 
