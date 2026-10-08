@@ -29,7 +29,6 @@ from PIL import Image
 import pytest
 import pyvista
 from pyvista import Plotter
-import vtkmodules
 
 from pytest_pyvista import hooks
 from pytest_pyvista._markers import FLOOR_CONFIG_ATTR
@@ -83,7 +82,7 @@ class _EnvInfo:
         gpu = f"gpu-{_SYSTEM_PROPERTIES.gpu_vendor}" if self.gpu else ""
         python_version = f"py-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}" if self.python else ""
         pyvista_version = f"pyvista-{pyvista.__version__}" if self.pyvista else ""
-        vtk_version = f"vtk-{vtkmodules.__version__}" if self.vtk else ""
+        vtk_version = f"vtk-{'.'.join(str(part) for part in pyvista.vtk_version_info)}" if self.vtk else ""
         ci = f"{'' if os.environ.get('CI', None) else 'no-'}CI" if self.ci else ""
 
         values = [
