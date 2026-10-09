@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 import pytest
 import pyvista as pv
 from pyvista.plotting.themes import _TestingTheme
-import vtkmodules
 
 from pytest_pyvista.doc_mode import _preprocess_build_images
 from pytest_pyvista.pytest_pyvista import _DOC_MODE_CLI_ARGS
@@ -1294,17 +1293,19 @@ def test_multiple_cache_images_clean_match(pytester: pytest.Pytester, error_valu
 def test_env_info(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, on_ci: bool) -> None:  # noqa: FBT001
     """Test env info dataclass."""
     # Arrange
+    # mocked: Stable platform tags isolate formatting; VTK comes from the real backend.
     monkeypatch.setattr(_SYSTEM_PROPERTIES, "os_name", os_name := "os_name")
     monkeypatch.setattr(_SYSTEM_PROPERTIES, "os_version", os_version := "os_version")
     monkeypatch.setattr(_SYSTEM_PROPERTIES, "gpu_vendor", gpu_vendor := "vendor")
     monkeypatch.setattr(pv, "__version__", pv_version := "pv_version")
-    monkeypatch.setattr(vtkmodules, "__version__", vtk_version := "vtk_version")
+    vtk_version = ".".join(str(part) for part in pv.vtk_version_info)
 
     if not on_ci:
         monkeypatch.delenv("CI", raising=False)
     else:
         monkeypatch.setenv("CI", "1")
 
+    # mocked: Machine naming is unrelated to the selected backend version.
     m = mocker.patch.object(platform, "machine")
     m.return_value = (machine := "machine")
 
@@ -1324,6 +1325,15 @@ def test_env_info(mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch, on_ci:
         f"{'CI' if on_ci else 'no-CI'}",
     ]
     assert "_".join(val for val in values if val) == info
+
+
+def test_env_info_selected_backend_version() -> None:
+    """Use the actual wrapped backend version without consulting a stock provider."""
+    info = _EnvInfo(os=False, machine=False, python=False, pyvista=False, gpu=False, ci=False)
+    version = ".".join(str(part) for part in pv.vtk_version_info)
+    assert str(info) == f"vtk-{version}"
+    info.vtk = False
+    assert str(info) == ""
 
 
 @pytest.mark.parametrize(
