@@ -206,12 +206,13 @@ def test_skip_windows_skips_when_windows(pytester: pytest.Pytester) -> None:
 
 
 def test_skip_mac_skips_when_darwin(pytester: pytest.Pytester) -> None:
-    """skip_mac skips on Darwin, honoring the machine filter."""
+    """skip_mac skips on Darwin, honoring both machine and processor filters."""
     pytester.makepyfile(
         """
         import pytest
         from pytest_pyvista import _markers as plugin
 
+        # mocked: exercise Darwin marker conditions on every CI host.
         # pytest_runtest_setup runs before fixtures, so patch the plugin's
         # own `platform` reference at import time.
         class _FakePlatform:
@@ -222,6 +223,10 @@ def test_skip_mac_skips_when_darwin(pytester: pytest.Pytester) -> None:
             @staticmethod
             def machine():
                 return "arm64"
+
+            @staticmethod
+            def processor():
+                return "apple"
 
         plugin.platform = _FakePlatform()
 
@@ -236,10 +241,18 @@ def test_skip_mac_skips_when_darwin(pytester: pytest.Pytester) -> None:
         @pytest.mark.skip_mac(machine="x86_64")
         def test_mac_other_machine_runs():
             pass
+
+        @pytest.mark.skip_mac(processor="apple", machine="arm64")
+        def test_mac_matching_processor_skips():
+            pass
+
+        @pytest.mark.skip_mac(processor="intel", machine="arm64")
+        def test_mac_other_processor_runs():
+            pass
         """
     )
     result = pytester.runpytest("-v")
-    result.assert_outcomes(skipped=2, passed=1)
+    result.assert_outcomes(skipped=3, passed=2)
 
 
 def test_skip_linux_skips_when_linux(pytester: pytest.Pytester) -> None:

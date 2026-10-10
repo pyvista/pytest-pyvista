@@ -11,12 +11,12 @@ import pyvista
 _MARKER_DEFINITIONS = (
     ("skip_egl(reason=...)", "skip the test when running with a headless OSMesa/EGL VTK build."),
     (
-        "skip_linux(machine=None, reason=...)",
-        "skip the test on Linux; if machine is given (e.g. 'aarch64') only skip when platform.machine() matches.",
+        "skip_linux(machine=None, processor=None, reason=...)",
+        "skip the test on Linux only when any supplied machine and processor filters both match.",
     ),
     (
-        "skip_mac(machine=None, reason=...)",
-        "skip the test on macOS; if machine is given (e.g. 'arm64') only skip when platform.machine() matches.",
+        "skip_mac(machine=None, processor=None, reason=...)",
+        "skip the test on macOS only when any supplied machine and processor filters both match.",
     ),
     ("skip_windows(reason=...)", "skip the test on Windows."),
     (
@@ -136,6 +136,9 @@ def _platform_marker_skip_reason(item_mark: pytest.Mark, system_name: str, defau
     should_skip = platform.system() == system_name
     if machine is not None:
         should_skip = should_skip and machine == platform.machine()
+    processor = item_mark.kwargs.get("processor")
+    if processor is not None:
+        should_skip = should_skip and processor == platform.processor()
     return _marker_skip_reason(item_mark, default) if should_skip else None
 
 
