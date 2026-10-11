@@ -10,14 +10,20 @@ import re
 import subprocess
 import sys
 
+from PIL import Image
 import pytest
 import pyvista as pv
 
 from pytest_pyvista import doc_mode
 from pytest_pyvista.doc_mode import _DocVerifyImageCache
 from pytest_pyvista.doc_mode import _html_screenshots
+from pytest_pyvista.doc_mode import _parse_window_size
+from pytest_pyvista.doc_mode import _preprocess_image
+from pytest_pyvista.doc_mode import _read_render_size
 from pytest_pyvista.doc_mode import _vtksz_to_html_files
+from pytest_pyvista.doc_mode import _vtksz_window_sizes
 from pytest_pyvista.doc_mode import _VtkszFileSizeTestCase
+from pytest_pyvista.doc_mode import _write_render_size
 from pytest_pyvista.pytest_pyvista import _EnvInfo
 from pytest_pyvista.pytest_pyvista import _get_file_paths
 from tests.test_pyvista import file_has_changed
@@ -386,6 +392,7 @@ def test_multiple_cache_images_parallel(pytester: pytest.Pytester, include_vtksz
 
     args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "-n2", "-v"]
     if include_vtksz:
+        # The vtksz files have no static image to take a size from
         args.append("--include_vtksz")
     result = pytester.runpytest(*args)
     assert result.ret == pytest.ExitCode.OK
@@ -711,3 +718,93 @@ def test_max_vtksz_file_size(pytester: pytest.Pytester, max_size: int | None) ->
     result.stdout.fnmatch_lines(f"E           	*images/{name_vtksz}")
     result.stdout.fnmatch_lines(f"E           Its size is 2.4 MB, but must be less than {max_size} MB.")
     result.stdout.fnmatch_lines("E           Consider reducing the complexity of the plot or forcing it to be static.")
+
+
+@pytest.fixture
+def gallery_vtksz(tmp_path, monkeypatch) -> tuple[Path, Path]:
+    """Make a vtksz file in a sub-dir with its static image in the root dir."""
+    images = tmp_path / "images"
+    (images / "sub").mkdir(parents=True)
+    vtksz_file = make_cached_images(images, path="sub", name="im.vtksz")
+    monkeypatch.setattr(_DocVerifyImageCache, "doc_images_dir", images, raising=False)
+    return images, vtksz_file
+
+
+def test_vtksz_window_size_from_gif(gallery_vtksz) -> None:
+    """Test that a gallery vtksz file resolves its size from a GIF in the root dir."""
+    images, vtksz_file = gallery_vtksz
+    size = (321, 234)
+    Image.new("RGB", size).save(images / "im.gif")
+
+    assert _vtksz_window_sizes([vtksz_file]) == [size]
+
+
+def test_vtksz_window_size_without_static_image(gallery_vtksz) -> None:
+    """Test that a vtksz file with no static image warns and falls back to the theme."""
+    _images, vtksz_file = gallery_vtksz
+    match = "Interactive plot found without a corresponding static image"
+    with pytest.warns(UserWarning, match=match):
+        sizes = _vtksz_window_sizes([vtksz_file])
+    assert sizes == [tuple(pv.global_theme.window_size)]
+
+
+@pytest.mark.parametrize("value", ["400", "400,300,200", "400,-300", "400,0", "400,three", ""])
+def test_parse_window_size_invalid(value) -> None:
+    """Test that a malformed window size is rejected."""
+    with pytest.raises(ValueError, match="must be two positive integers"):
+        _parse_window_size(value)
+
+
+def test_parse_window_size_valid() -> None:
+    """Test that surrounding whitespace in a window size is ignored."""
+    assert _parse_window_size(" 400 , 300 ") == (400, 300)
+
+
+@pytest.mark.parametrize("dst_ext", ["png", "jpg"])
+@pytest.mark.parametrize("src_ext", ["png", "jpg"])
+def test_render_size_stamp_roundtrip(tmp_path, monkeypatch, src_ext, dst_ext) -> None:
+    """Test that a stamped size survives preprocessing for every image format."""
+    monkeypatch.setattr(_DocVerifyImageCache, "max_image_size", 400)
+    size = (1024, 768)
+    src = tmp_path / f"im.{src_ext}"
+    Image.new("RGB", size, "red").save(src)
+    assert _read_render_size(src) is None
+
+    _write_render_size(src, size)
+    assert _read_render_size(src) == size
+
+    dst = tmp_path / f"out.{dst_ext}"
+    _preprocess_image(src, dst)
+    assert _read_render_size(dst) == size
+    with Image.open(dst) as im:
+        assert im.size == (400, 300)
+
+
+def test_render_size_stamp_absent(tmp_path, monkeypatch) -> None:
+    """Test that an unstamped image preprocesses without gaining a stamp."""
+    monkeypatch.setattr(_DocVerifyImageCache, "max_image_size", 400)
+    src = tmp_path / "im.png"
+    Image.new("RGB", (1024, 768), "red").save(src)
+
+    dst = tmp_path / "out.jpg"
+    _preprocess_image(src, dst)
+    assert _read_render_size(dst) is None
+
+
+def test_render_size_mismatch_fails(pytester: pytest.Pytester) -> None:
+    """Test that a cached image rendered at another window size fails the test."""
+    images = "images"
+    cache = "cache"
+    # The screenshot is a png and the cache is a jpg, so the stamp crosses formats
+    image_format = "jpg"
+    make_cached_images(pytester.path, path=images, name="im.vtksz", color="blue")
+    cached = make_cached_images(pytester.path, path=cache, name=f"im_vtksz.{image_format}", color="blue")
+    _write_render_size(cached, (800, 600))
+    assert _read_render_size(cached) == (800, 600)
+
+    args = ["--doc_mode", "--doc_images_dir", images, "--image_cache_dir", cache, "--include_vtksz", "--image_format", image_format]
+    result = pytester.runpytest(*args)
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines("E           Failed: The interactive plot was rendered at a different window size than its cached image:")
+    result.stdout.fnmatch_lines("E           Cached size is 800x600, but the plot was rendered at 1024x768.")

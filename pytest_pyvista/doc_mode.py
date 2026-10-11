@@ -16,6 +16,7 @@ from typing import overload
 import warnings
 
 from PIL import Image
+from PIL import PngImagePlugin
 import pytest
 import pyvista as pv
 
@@ -247,9 +248,65 @@ def _preprocess_image(input_path: Path, output_path: Path) -> None:
     # Resize image and save to output
     with Image.open(input_path) as im:
         im = im.convert("RGB") if im.mode != "RGB" else im  # noqa: PLW2901
+        comment = _image_comment(im)
         max_image_size = _get_max_image_size()
         im.thumbnail(size=(max_image_size, max_image_size))
-        im.save(output_path, quality="keep") if im.format == "JPEG" else im.save(output_path)
+        kwargs = {"quality": "keep"} if im.format == "JPEG" else {}
+        _save_with_comment(im, output_path, comment, **kwargs)
+
+
+_RENDER_SIZE_PREFIX = "render_window_size="
+
+
+def _image_comment(im: Image.Image) -> str | None:
+    """Get an image's comment, whichever key its format stores it under."""
+    comment = im.info.get("comment") or im.info.get("Comment")
+    if comment is None:
+        return None
+    return comment.decode() if isinstance(comment, bytes) else str(comment)
+
+
+def _save_with_comment(im: Image.Image, path: Path, comment: str | None, **kwargs) -> None:  # noqa: ANN003
+    """Save an image, storing a comment in its format's own metadata container."""
+    if comment is None:
+        im.save(path, **kwargs)
+    elif path.suffix.lower() == ".png":
+        info = PngImagePlugin.PngInfo()
+        info.add_text("Comment", comment)
+        im.save(path, pnginfo=info, **kwargs)
+    else:
+        im.save(path, comment=comment.encode(), **kwargs)
+
+
+def _read_render_size(path: Path) -> tuple[int, int] | None:
+    """Read the render window size stamped into an image, if it has one."""
+    with Image.open(path) as im:
+        comment = _image_comment(im)
+    if comment is None or not comment.startswith(_RENDER_SIZE_PREFIX):
+        return None
+    try:
+        return _parse_window_size(comment.removeprefix(_RENDER_SIZE_PREFIX))
+    except ValueError:
+        return None
+
+
+def _write_render_size(path: Path, size: tuple[int, int]) -> None:
+    """Stamp the render window size into an image."""
+    with Image.open(path) as im:
+        im.load()
+        _save_with_comment(im, path, f"{_RENDER_SIZE_PREFIX}{size[0]},{size[1]}")
+
+
+def _parse_window_size(value: object) -> tuple[int, int]:
+    """Parse a ``'WIDTH,HEIGHT'`` window size into a pair of positive integers."""
+    msg = f"Window size must be two positive integers 'WIDTH,HEIGHT'. Got:\n{value}."
+    try:
+        width, height = (int(part) for part in str(value).split(","))
+    except ValueError:
+        raise ValueError(msg) from None
+    if width <= 0 or height <= 0:
+        raise ValueError(msg)
+    return width, height
 
 
 def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
@@ -267,7 +324,7 @@ def _vtksz_window_sizes(vtksz_paths: list[Path]) -> list[tuple[int, int]]:
             new_path = _DocVerifyImageCache.doc_images_dir / path.stem
             static_image_path = new_path.with_suffix(".png")
             if not static_image_path.is_file():
-                static_image_path = path.with_suffix(".gif")
+                static_image_path = new_path.with_suffix(".gif")
 
         if static_image_path.is_file():
             with Image.open(static_image_path) as im:
@@ -301,6 +358,7 @@ def _vtksz_to_html_files(vtksz_files: list[Path], output_dir: Path) -> list[Path
 
 
 def _default_window_sizes(n_files: int) -> list[tuple[int, int]]:
+    """Get the global theme's window size repeated once per file."""
     return [cast("tuple[int, int]", tuple(pv.global_theme.window_size))] * n_files
 
 
@@ -341,6 +399,7 @@ def _html_screenshots(
             page.set_viewport_size({"width": window_size[0], "height": window_size[1]})
             page.goto(f"file://{html_file}")
             page.screenshot(path=output_path)
+            _write_render_size(output_path, window_size)
             output_paths.append(output_path)
 
         browser.close()
@@ -542,6 +601,10 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
             test_image_path.rename(new_path)
             test_image_path = new_path
 
+    if size_msg := _test_render_sizes(test_case.test_name, test_image_path, cached_image_paths):
+        _save_failed_test_image(test_image_path, "errors")
+        pytest.fail(size_msg)
+
     warn_msg, fail_msg, current_cached_image_path = _test_compare_images(
         test_name=test_case.test_name,
         test_image=test_image_path,
@@ -562,6 +625,23 @@ def test_images(_pytest_pyvista_test_case: _DocVerifyImageCache, doc_verify_imag
         _save_failed_test_image(test_image_path, parent_dir)
         _save_failed_test_image(current_cached_image_path, parent_dir)
         warnings.warn(warn_msg, stacklevel=2)
+
+
+def _test_render_sizes(test_name: str, test_image: Path, cached_image_paths: list[Path]) -> str | None:
+    """Check the render window size stamped in the test image against the cached images."""
+    test_size = _read_render_size(test_image)
+    if test_size is None:
+        return None
+    cached_sizes = [size for path in cached_image_paths if (size := _read_render_size(path)) is not None]
+    if not cached_sizes or test_size in cached_sizes:
+        return None
+    cached = ", ".join(f"{width}x{height}" for width, height in cached_sizes)
+    return (
+        f"The interactive plot was rendered at a different window size than its cached image:\n"
+        f"\t{test_name}\n"
+        f"Cached size is {cached}, but the plot was rendered at {test_size[0]}x{test_size[1]}.\n"
+        "Render it at the cached size, or update the cached image."
+    )
 
 
 def _test_both_images_exist(filename: str, docs_image_path: Path | None, cached_image_path: Path | None) -> tuple[str | None, Path | None]:
