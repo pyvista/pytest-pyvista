@@ -343,6 +343,16 @@ tests.
      This option is completely independent from the ``--include_vtksz`` option. File
      sizes may be tested without any additional installation.
 
+* ``--doc_error_value <VALUE>`` and ``--doc_warning_value <VALUE>`` set the image
+  comparison error above which a documentation image test fails or warns. They default
+  to ``500`` and ``200``, and the warning value may not exceed the error value.
+
+  .. note::
+
+     Documentation images are resized to ``max_image_size`` before they are compared,
+     which lowers the error a given difference produces. Set these values relative to
+     the size the images are actually compared at.
+
 Conditional skip markers
 ------------------------
 The plugin registers five reusable markers so downstream PyVista projects do not
