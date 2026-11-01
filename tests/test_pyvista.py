@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from enum import StrEnum
 import filecmp
 from pathlib import Path
 import platform
@@ -905,17 +906,12 @@ def test_allow_useless_fixture(pytester: pytest.Pytester, call_show, allow_usele
         assert "ERROR" not in result.stdout.str()
 
 
-class LiteralStrEnum(str, Enum):  # noqa: D101
-    def __str__(self) -> str:  # noqa: D105
-        return str(self.value)
-
-
-class PytestMark(LiteralStrEnum):  # noqa: D101
+class PytestMark(StrEnum):  # noqa: D101
     NONE = ""
     SKIP = "@pytest.mark.skip"
 
 
-class SkipVerify(LiteralStrEnum):  # noqa: D101
+class SkipVerify(StrEnum):  # noqa: D101
     NONE = ""
     MACOS = "verify_image_cache.macos_skip_image_cache"
     WINDOWS = "verify_image_cache.windows_skip_image_cache"
@@ -923,7 +919,7 @@ class SkipVerify(LiteralStrEnum):  # noqa: D101
     SKIP = "verify_image_cache.skip"
 
 
-class MeshColor(LiteralStrEnum):  # noqa: D101
+class MeshColor(StrEnum):  # noqa: D101
     OK = "red"
     FAIL = "blue"
 
@@ -1053,7 +1049,6 @@ def test_disallow_unused_cache_name_mismatch(pytester: pytest.Pytester, disallow
         assert result.ret == pytest.ExitCode.OK
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="Needs contextlib.chdir")
 def test_cache_generated_dir_relative(pytester: pytest.Pytester) -> None:
     """
     Test that directories (cache and generated) are relative to test root
@@ -1085,7 +1080,6 @@ def test_cache_generated_dir_relative(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=1)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="Needs contextlib.chdir")
 def test_failed_dir_relative(pytester: pytest.Pytester) -> None:
     """
     Test that failed directory is relative to test root
@@ -1402,7 +1396,6 @@ def test_gpu_vendor_unknown(mocker: MockerFixture) -> None:
     assert _SystemProperties._gpu_vendor() == "unknown"  # noqa: SLF001
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason="Missing freedesktop_os_release")
 def test_os_linux_freedesktop(mocker: MockerFixture) -> None:
     """Test system properties for Linux."""
     mocker.patch("platform.system", return_value="Linux")
