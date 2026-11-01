@@ -9,10 +9,10 @@ classifiers = [
   "Framework :: Pytest",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Testing",
 ]
 dependencies = [
@@ -26,7 +26,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 name = "pytest_pyvista"
 readme = "README.rst"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 [project.urls]
 Home = "https://github.com/pyvista/pytest-pyvista"

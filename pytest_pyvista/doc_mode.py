@@ -322,7 +322,7 @@ def _html_screenshots(
         for t in ["firefox", "chromium"]:
             try:
                 return getattr(p, t).launch(headless=True)
-            except Error as e:  # noqa: PERF203
+            except Error as e:
                 error = e
 
         raise error  # type: ignore[misc]
