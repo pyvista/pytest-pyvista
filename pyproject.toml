@@ -50,7 +50,7 @@ tests = [
   "pytest-pyvista[vtksz]",
   "pytest-xdist==3.8.0",
   "pytest>=7.0.0",
-  "pytest_mock<3.17",
+  "pytest_mock<3.18",
   "pyvista[jupyter]>=0.37",
 ]
 
